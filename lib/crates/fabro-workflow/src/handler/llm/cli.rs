@@ -1,8 +1,13 @@
+//! CLI agent stages resolve workflow tool env once when launching the external
+//! CLI process. Long-running CLI stages do not observe later GitHub
+//! installation token refreshes until a future credential-helper integration
+//! moves token lookup inside the child process.
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use fabro_agent::{Sandbox, shell_quote};
+use fabro_agent::{Sandbox, StaticEnvProvider, ToolEnvProvider, shell_quote};
 use fabro_auth::{CliAgentKind, CredentialResolver, CredentialUsage, ResolvedCredential};
 use fabro_graphviz::graph::Node;
 use fabro_llm::types::TokenCounts;
@@ -36,7 +41,7 @@ fn cli_failure_detail(stdout: &str, stderr: &str, command: &str) -> String {
 use super::super::agent::{CodergenBackend, CodergenResult};
 use crate::context::Context;
 use crate::error::Error;
-use crate::event::{Emitter, Event, StageScope};
+use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel, StageScope};
 use crate::outcome::billed_model_usage_from_llm;
 
 /// Maps a provider to its corresponding CLI tool metadata.
@@ -395,11 +400,12 @@ pub fn parse_cli_response(provider: Provider, output: &str) -> Option<CliRespons
 /// CLI backend that invokes external CLI tools (claude, codex, gemini) via
 /// `exec_command()`.
 pub struct AgentCliBackend {
-    model:         String,
-    provider:      Provider,
-    env:           HashMap<String, String>,
+    model: String,
+    provider: Provider,
+    tool_env: Option<Arc<dyn ToolEnvProvider>>,
+    github_token_refresh_managed: bool,
     poll_interval: std::time::Duration,
-    resolver:      Option<CredentialResolver>,
+    resolver: Option<CredentialResolver>,
 }
 
 impl AgentCliBackend {
@@ -408,7 +414,8 @@ impl AgentCliBackend {
         Self {
             model,
             provider,
-            env: HashMap::new(),
+            tool_env: None,
+            github_token_refresh_managed: false,
             poll_interval: std::time::Duration::from_secs(5),
             resolver: Some(resolver),
         }
@@ -419,7 +426,8 @@ impl AgentCliBackend {
         Self {
             model,
             provider,
-            env: HashMap::new(),
+            tool_env: None,
+            github_token_refresh_managed: false,
             poll_interval: std::time::Duration::from_secs(5),
             resolver: None,
         }
@@ -427,7 +435,18 @@ impl AgentCliBackend {
 
     #[must_use]
     pub fn with_env(mut self, env: HashMap<String, String>) -> Self {
-        self.env = env;
+        self.tool_env = Some(Arc::new(StaticEnvProvider(env)));
+        self
+    }
+
+    #[must_use]
+    pub fn with_tool_env_provider(
+        mut self,
+        provider: Arc<dyn ToolEnvProvider>,
+        github_token_refresh_managed: bool,
+    ) -> Self {
+        self.tool_env = Some(provider);
+        self.github_token_refresh_managed = github_token_refresh_managed;
         self
     }
 
@@ -585,8 +604,21 @@ impl CodergenBackend for AgentCliBackend {
             }
             env
         };
-        for (name, val) in &self.env {
-            launch_env.insert(name.clone(), val.clone());
+        if let Some(provider) = &self.tool_env {
+            if self.github_token_refresh_managed {
+                emitter.notice(
+                    RunNoticeLevel::Info,
+                    RunNoticeCode::GithubTokenRefreshLimited,
+                    "CLI agent stages receive GitHub tokens at process launch; stages running \
+                     beyond token expiry may need to be retried.",
+                );
+            }
+            let tool_env = provider.resolve().await.map_err(|err| {
+                Error::handler_with_anyhow("Failed to resolve CLI agent env", &err)
+            })?;
+            for (name, val) in tool_env {
+                launch_env.insert(name, val);
+            }
         }
 
         // Write env file so the inner shell that runs the CLI command picks up

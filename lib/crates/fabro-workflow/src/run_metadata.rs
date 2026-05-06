@@ -646,8 +646,11 @@ mod tests {
             run_id:           fabro_types::fixtures::RUN_1,
             labels:           HashMap::new(),
             workflow_slug:    Some("metadata".to_string()),
-            github_app:       Some(fabro_github::GitHubCredentials::Token(
-                "ghs_token".to_string(),
+            github_app:       Some(fabro_github::GitHubCredentials::Installation(
+                fabro_github::InstallationToken {
+                    token:      "ghs_token".to_string(),
+                    expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
+                },
             )),
             pre_run_git:      Some(GitContext {
                 origin_url:   origin_url.to_string(),

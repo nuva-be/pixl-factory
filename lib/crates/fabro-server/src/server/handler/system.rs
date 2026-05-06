@@ -366,7 +366,16 @@ async fn get_github_repo(
         }
         GithubIntegrationStrategy::Token => {
             let token = match state.github_credentials(github_settings) {
-                Ok(Some(fabro_github::GitHubCredentials::Token(token))) => token,
+                Ok(Some(fabro_github::GitHubCredentials::Pat(token))) => token,
+                Ok(Some(fabro_github::GitHubCredentials::Installation(token))) => {
+                    match token.valid_token() {
+                        Ok(token) => token.to_string(),
+                        Err(err) => {
+                            return ApiError::new(StatusCode::SERVICE_UNAVAILABLE, err.to_string())
+                                .into_response();
+                        }
+                    }
+                }
                 Ok(Some(_)) => unreachable!("token strategy should not return app credentials"),
                 Ok(None) => {
                     return ApiError::new(

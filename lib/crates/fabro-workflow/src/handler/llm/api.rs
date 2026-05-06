@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use fabro_agent::subagent::{SessionFactory, SubAgentManager};
 use fabro_agent::{
     AgentEvent, AgentProfile, AnthropicProfile, CompletionCoordinator, GeminiProfile,
-    OpenAiProfile, Sandbox, Session, SessionControlHandle, SessionOptions, Turn,
+    OpenAiProfile, Sandbox, Session, SessionControlHandle, SessionOptions, StaticEnvProvider,
+    ToolEnvProvider, Turn,
 };
 use fabro_auth::{CredentialSource, EnvCredentialSource};
 use fabro_graphviz::graph::Node;
@@ -250,7 +251,7 @@ pub struct AgentApiBackend {
     provider:       Provider,
     fallback_chain: Vec<FallbackTarget>,
     sessions:       Mutex<HashMap<String, Session>>,
-    env:            HashMap<String, String>,
+    tool_env:       Option<Arc<dyn ToolEnvProvider>>,
     mcp_servers:    Vec<McpServerSettings>,
     source:         Arc<dyn CredentialSource>,
     steering_hub:   Arc<SteeringHub>,
@@ -270,7 +271,7 @@ impl AgentApiBackend {
             provider,
             fallback_chain,
             sessions: Mutex::new(HashMap::new()),
-            env: HashMap::new(),
+            tool_env: None,
             mcp_servers: Vec::new(),
             source,
             steering_hub,
@@ -295,7 +296,13 @@ impl AgentApiBackend {
 
     #[must_use]
     pub fn with_env(mut self, env: HashMap<String, String>) -> Self {
-        self.env = env;
+        self.tool_env = Some(Arc::new(StaticEnvProvider(env)));
+        self
+    }
+
+    #[must_use]
+    pub fn with_tool_env_provider(mut self, provider: Arc<dyn ToolEnvProvider>) -> Self {
+        self.tool_env = Some(provider);
         self
     }
 
@@ -322,7 +329,7 @@ impl AgentApiBackend {
             node,
             sandbox,
             self.source.as_ref(),
-            &self.env,
+            self.tool_env.as_ref(),
             tool_hooks,
             self.mcp_servers.clone(),
         )
@@ -335,7 +342,7 @@ impl AgentApiBackend {
         node: &Node,
         sandbox: &Arc<dyn Sandbox>,
         source: &dyn CredentialSource,
-        env: &HashMap<String, String>,
+        tool_env: Option<&Arc<dyn ToolEnvProvider>>,
         tool_hooks: Option<Arc<dyn fabro_agent::ToolHookCallback>>,
         mcp_servers: Vec<McpServerSettings>,
     ) -> Result<Session, Error> {
@@ -363,7 +370,7 @@ impl AgentApiBackend {
         let factory_client = client.clone();
         let factory_model = model.to_string();
         let factory_env = Arc::clone(sandbox);
-        let factory_tool_env = env.clone();
+        let factory_tool_env = tool_env.cloned();
         let factory: SessionFactory = Arc::new(move || {
             let child_profile: Arc<dyn AgentProfile> = match provider {
                 Provider::OpenAi => Arc::new(OpenAiProfile::new(&factory_model)),
@@ -384,8 +391,8 @@ impl AgentApiBackend {
                 SessionOptions::default(),
                 None,
             );
-            if !factory_tool_env.is_empty() {
-                session.set_tool_env(factory_tool_env.clone());
+            if let Some(provider) = &factory_tool_env {
+                session.set_tool_env_provider(Arc::clone(provider));
             }
             session
         });
@@ -400,8 +407,8 @@ impl AgentApiBackend {
             config,
             Some(manager_for_callback.clone()),
         );
-        if !env.is_empty() {
-            session.set_tool_env(env.clone());
+        if let Some(provider) = tool_env {
+            session.set_tool_env_provider(Arc::clone(provider));
         }
 
         // Wire subagent event callback to parent session's emitter
@@ -793,7 +800,7 @@ impl CodergenBackend for AgentApiBackend {
                             node,
                             sandbox,
                             self.source.as_ref(),
-                            &self.env,
+                            self.tool_env.as_ref(),
                             tool_hooks.clone(),
                             self.mcp_servers.clone(),
                         )

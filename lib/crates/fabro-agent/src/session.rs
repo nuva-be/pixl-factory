@@ -228,6 +228,20 @@ impl SessionControlHandle {
     }
 }
 
+#[async_trait::async_trait]
+pub trait ToolEnvProvider: Send + Sync {
+    async fn resolve(&self) -> anyhow::Result<HashMap<String, String>>;
+}
+
+pub struct StaticEnvProvider(pub HashMap<String, String>);
+
+#[async_trait::async_trait]
+impl ToolEnvProvider for StaticEnvProvider {
+    async fn resolve(&self) -> anyhow::Result<HashMap<String, String>> {
+        Ok(self.0.clone())
+    }
+}
+
 pub struct Session {
     id:                     String,
     config:                 SessionOptions,
@@ -248,7 +262,7 @@ pub struct Session {
     skills:                 Vec<Skill>,
     system_prompt:          String,
     file_tracker:           FileTracker,
-    tool_env:               Option<HashMap<String, String>>,
+    tool_env_provider:      Option<Arc<dyn ToolEnvProvider>>,
     subagent_manager:       Option<Arc<AsyncMutex<SubAgentManager>>>,
     completion_coordinator: Option<Arc<dyn CompletionCoordinator>>,
 }
@@ -282,7 +296,7 @@ impl Session {
             skills: Vec::new(),
             system_prompt: String::new(),
             file_tracker: FileTracker::default(),
-            tool_env: None,
+            tool_env_provider: None,
             subagent_manager,
             completion_coordinator: None,
         }
@@ -315,8 +329,12 @@ impl Session {
         ))
     }
 
+    pub fn set_tool_env_provider(&mut self, provider: Arc<dyn ToolEnvProvider>) {
+        self.tool_env_provider = Some(provider);
+    }
+
     pub fn set_tool_env(&mut self, env: HashMap<String, String>) {
-        self.tool_env = Some(env);
+        self.set_tool_env_provider(Arc::new(StaticEnvProvider(env)));
     }
 
     #[must_use]
@@ -1356,7 +1374,7 @@ impl Session {
                 &self.config,
                 &self.event_emitter,
                 &self.id,
-                self.tool_env.as_ref(),
+                self.tool_env_provider.as_ref(),
             )
             .await;
             composite_watcher.abort();
@@ -1545,6 +1563,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
+    use anyhow::Context as _;
     use fabro_llm::error::{ProviderErrorDetail, ProviderErrorKind};
     use fabro_llm::provider::{ProviderAdapter, StreamEventStream};
     use fabro_llm::types::{
@@ -1706,6 +1725,72 @@ mod tests {
             assert_eq!(results[0].tool_call_id, "call_1");
             assert!(!results[0].is_error);
         }
+    }
+
+    struct SequenceToolEnvProvider {
+        values: Mutex<VecDeque<HashMap<String, String>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ToolEnvProvider for SequenceToolEnvProvider {
+        async fn resolve(&self) -> anyhow::Result<HashMap<String, String>> {
+            self.values
+                .lock()
+                .unwrap()
+                .pop_front()
+                .context("env script exhausted")
+        }
+    }
+
+    #[tokio::test]
+    async fn session_passes_tool_env_provider_to_each_tool_round() {
+        let seen_tokens = Arc::new(Mutex::new(Vec::new()));
+        let seen_tokens_for_tool = Arc::clone(&seen_tokens);
+        let record_env_tool = RegisteredTool {
+            definition: ToolDefinition {
+                name:        "record_env".into(),
+                description: "Records resolved env".into(),
+                parameters:  serde_json::json!({"type": "object"}),
+            },
+            executor:   Arc::new(move |_args, ctx| {
+                let seen_tokens = Arc::clone(&seen_tokens_for_tool);
+                Box::pin(async move {
+                    let env = ctx
+                        .resolve_tool_env()
+                        .await
+                        .map_err(|err| format!("{err:#}"))?
+                        .unwrap_or_default();
+                    seen_tokens.lock().unwrap().push(
+                        env.get("GITHUB_TOKEN")
+                            .cloned()
+                            .unwrap_or_else(|| "<missing>".to_string()),
+                    );
+                    Ok("recorded".to_string())
+                })
+            }),
+        };
+
+        let mut registry = ToolRegistry::new();
+        registry.register(record_env_tool);
+        let responses = vec![
+            tool_call_response("record_env", "call_1", serde_json::json!({})),
+            tool_call_response("record_env", "call_2", serde_json::json!({})),
+            text_response("Done!"),
+        ];
+        let mut session = make_session_with_tools(responses, registry).await;
+        session.set_tool_env_provider(Arc::new(SequenceToolEnvProvider {
+            values: Mutex::new(VecDeque::from([
+                HashMap::from([("GITHUB_TOKEN".to_string(), "t1".to_string())]),
+                HashMap::from([("GITHUB_TOKEN".to_string(), "t2".to_string())]),
+            ])),
+        }));
+
+        session.process_input("Use tools").await.unwrap();
+
+        assert_eq!(seen_tokens.lock().unwrap().as_slice(), [
+            "t1".to_string(),
+            "t2".to_string()
+        ]);
     }
 
     #[tokio::test]

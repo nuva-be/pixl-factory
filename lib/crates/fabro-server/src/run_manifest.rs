@@ -1234,8 +1234,12 @@ async fn mint_github_token(
     origin_url: &str,
     permissions: &HashMap<String, String>,
 ) -> Result<String> {
-    if let fabro_github::GitHubCredentials::Token(token) = creds {
-        return Ok(token.clone());
+    match creds {
+        fabro_github::GitHubCredentials::Pat(token) => return Ok(token.clone()),
+        fabro_github::GitHubCredentials::Installation(token) => {
+            return token.valid_token().map(str::to_owned);
+        }
+        fabro_github::GitHubCredentials::App(_) => {}
     }
 
     let https_url = fabro_github::ssh_url_to_https(origin_url);

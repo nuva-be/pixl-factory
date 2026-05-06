@@ -798,7 +798,11 @@ impl AppState {
                     .filter(|token| !token.is_empty())
                     .map(str::to_string);
                 match token {
-                    Some(token) => Ok(Some(fabro_github::GitHubCredentials::Token(token))),
+                    Some(token) => {
+                        fabro_github::validate_static_github_token(&token)
+                            .map_err(|err| err.to_string())?;
+                        Ok(Some(fabro_github::GitHubCredentials::Pat(token)))
+                    }
                     None => Err(
                         "GITHUB_TOKEN not configured — run fabro install or set GITHUB_TOKEN"
                             .to_string(),

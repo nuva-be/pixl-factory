@@ -256,10 +256,21 @@ fn resolve_webhook_preconditions(
             )));
         }
     };
-    let Some(fabro_github::GitHubCredentials::App(github_app)) = github_app else {
-        return Ok(WebhookPreconditions::Skip(
-            "GITHUB_APP_PRIVATE_KEY is not available".to_string(),
-        ));
+    let github_app = match github_app {
+        Some(fabro_github::GitHubCredentials::App(github_app)) => github_app,
+        Some(
+            fabro_github::GitHubCredentials::Pat(_)
+            | fabro_github::GitHubCredentials::Installation(_),
+        ) => {
+            return Ok(WebhookPreconditions::Skip(
+                "GitHub webhooks require GitHub App credentials".to_string(),
+            ));
+        }
+        None => {
+            return Ok(WebhookPreconditions::Skip(
+                "GITHUB_APP_PRIVATE_KEY is not available".to_string(),
+            ));
+        }
     };
     Ok(WebhookPreconditions::Ready {
         app_id,

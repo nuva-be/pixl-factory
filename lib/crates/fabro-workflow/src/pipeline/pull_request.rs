@@ -1947,7 +1947,7 @@ mod tests {
                 },
             ));
 
-        let creds = fabro_github::GitHubCredentials::Token("test-token".to_string());
+        let creds = fabro_github::GitHubCredentials::Pat("test-token".to_string());
 
         let store = test_store();
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();

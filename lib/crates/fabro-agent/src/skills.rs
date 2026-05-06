@@ -581,7 +581,7 @@ name: trimmed
         let ctx = ToolContext {
             env,
             cancel: CancellationToken::new(),
-            tool_env: None,
+            tool_env_provider: None,
         };
         let result = (tool.executor)(args, ctx).await;
         assert_eq!(
@@ -600,7 +600,7 @@ name: trimmed
         let ctx = ToolContext {
             env,
             cancel: CancellationToken::new(),
-            tool_env: None,
+            tool_env_provider: None,
         };
         let result = (tool.executor)(args, ctx).await;
         assert!(result.is_err());
@@ -617,7 +617,7 @@ name: trimmed
         let ctx = ToolContext {
             env,
             cancel: CancellationToken::new(),
-            tool_env: None,
+            tool_env_provider: None,
         };
         let result = (tool.executor)(args, ctx).await;
         assert!(result.is_err());

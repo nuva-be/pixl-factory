@@ -27,17 +27,16 @@ use tokio::time::timeout as tokio_timeout;
 use super::types::{InitOptions, Initialized, LlmSpec, Persisted, SandboxEnvSpec};
 use crate::devcontainer_bridge::{devcontainer_to_snapshot_config, run_devcontainer_lifecycle};
 use crate::error::Error;
-use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel};
+use crate::event::{Event, RunNoticeCode, RunNoticeLevel};
 use crate::git::RUN_BRANCH_PREFIX;
+use crate::github_token_source::{AppIatMinter, GitHubTokenSource};
 use crate::handler::llm::{AgentApiBackend, AgentCliBackend, BackendRouter};
 use crate::handler::{HandlerRegistry, default_registry};
-use crate::run_metadata::{
-    RunMetadataRuntime, build_metadata_writer, metadata_branch_name, mint_token,
-};
+use crate::run_metadata::{RunMetadataRuntime, build_metadata_writer, metadata_branch_name};
 use crate::run_options::{GitCheckpointOptions, RunOptions};
 use crate::sandbox_git::GIT_REMOTE;
 use crate::sandbox_git_runtime::SandboxGitRuntime;
-use crate::services::{EngineServices, RunServices};
+use crate::services::{EngineServices, RunServices, WorkflowToolEnvProvider};
 use crate::steering_hub::SteeringHub;
 
 struct WorktreePlan {
@@ -46,6 +45,8 @@ struct WorktreePlan {
     worktree_path:        PathBuf,
     skip_branch_creation: bool,
 }
+
+type BuiltSandboxEnv = (HashMap<String, String>, Option<Arc<GitHubTokenSource>>);
 
 async fn resolve_worktree_base_sha(
     sandbox: &dyn Sandbox,
@@ -223,52 +224,62 @@ fn git_setup_intent(run_options: &RunOptions) -> GitSetupIntent {
     }
 }
 
-async fn mint_github_token(
-    creds: &fabro_github::GitHubCredentials,
-    origin_url: &str,
-    permissions: &HashMap<String, String>,
-) -> Result<String, Error> {
-    mint_token(creds, origin_url, permissions)
-        .await
-        .map_err(|err| Error::engine_with_anyhow("Failed to mint GitHub token", &err))
-}
-
-async fn build_sandbox_env(
+fn build_sandbox_env(
     spec: &SandboxEnvSpec,
     github_app: Option<&fabro_github::GitHubCredentials>,
-    emitter: &Emitter,
-) -> Result<HashMap<String, String>, Error> {
+) -> Result<BuiltSandboxEnv, Error> {
     let mut env = spec.devcontainer_env.clone();
     env.extend(spec.toml_env.clone());
 
-    if let Some(permissions) = spec.github_permissions.as_ref() {
-        if !permissions.is_empty() {
-            if let (Some(creds), Some(origin_url)) = (github_app, spec.origin_url.as_deref()) {
-                match mint_github_token(creds, origin_url, permissions).await {
-                    Ok(token) => {
-                        env.insert("GITHUB_TOKEN".to_string(), token);
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "Failed to mint GitHub token");
-                        emitter.notice(
-                            RunNoticeLevel::Warn,
-                            RunNoticeCode::GithubTokenFailed,
-                            format!("Failed to mint GitHub token: {e}"),
-                        );
-                    }
-                }
-            }
-        }
-    }
+    let Some(permissions) = spec.github_permissions.as_ref().filter(|p| !p.is_empty()) else {
+        return Ok((env, None));
+    };
+    let Some(creds) = github_app else {
+        return Ok((env, None));
+    };
 
-    Ok(env)
+    let source = match creds {
+        fabro_github::GitHubCredentials::Pat(token) => {
+            Some(Arc::new(GitHubTokenSource::pat(token.clone())))
+        }
+        fabro_github::GitHubCredentials::Installation(token) => {
+            Some(Arc::new(GitHubTokenSource::static_iat(token.clone())))
+        }
+        fabro_github::GitHubCredentials::App(app) => {
+            let Some(origin_url) = spec.origin_url.as_deref() else {
+                return Ok((env, None));
+            };
+            let https_url = fabro_github::ssh_url_to_https(origin_url);
+            let (owner, repo) = fabro_github::parse_github_owner_repo(&https_url)
+                .map_err(|err| Error::engine_with_anyhow("Failed to parse GitHub origin", &err))?;
+            let permissions = serde_json::to_value(permissions).map_err(|err| {
+                Error::engine_with_source("Failed to serialize GitHub permissions", &err)
+            })?;
+            let http = fabro_http::http_client()
+                .map_err(|err| Error::engine_with_source("Failed to build HTTP client", &err))?;
+            let install_url = app.installation_url(&owner);
+            let minter = AppIatMinter::new(
+                app.clone(),
+                http,
+                owner,
+                repo,
+                fabro_github::github_api_base_url(),
+                install_url,
+                permissions,
+            );
+            Some(Arc::new(GitHubTokenSource::mintable(Arc::new(minter))))
+        }
+    };
+
+    Ok((env, source))
 }
 
 async fn build_registry(
     spec: &LlmSpec,
     interviewer: Arc<dyn fabro_interview::Interviewer>,
     steering_hub: Arc<SteeringHub>,
-    sandbox_env: &HashMap<String, String>,
+    tool_env_provider: Arc<WorkflowToolEnvProvider>,
+    github_token_refresh_managed: bool,
     graph: &graph::Graph,
     llm_source: Arc<dyn CredentialSource>,
     cli_resolver: Option<CredentialResolver>,
@@ -306,14 +317,15 @@ async fn build_registry(
             Ok((build_no_backend(), false))
         }
         Ok(_result) => {
-            let env = sandbox_env.clone();
             let model = spec.model.clone();
             let provider = spec.provider;
             let fallback_chain = spec.fallback_chain.clone();
             let mcp_servers = spec.mcp_servers.clone();
             let llm_source_for_api = Arc::clone(&llm_source);
             let steering_hub_for_api = Arc::clone(&steering_hub);
+            let tool_env_provider_for_backend = Arc::clone(&tool_env_provider);
             let registry = Arc::new(default_registry(interviewer, move || {
+                let tool_env_provider = Arc::clone(&tool_env_provider_for_backend);
                 let api = AgentApiBackend::new(
                     model.clone(),
                     provider,
@@ -321,7 +333,7 @@ async fn build_registry(
                     Arc::clone(&llm_source_for_api),
                     Arc::clone(&steering_hub_for_api),
                 )
-                .with_env(env.clone())
+                .with_tool_env_provider(tool_env_provider.clone())
                 .with_mcp_servers(mcp_servers.clone());
                 let cli = cli_resolver
                     .clone()
@@ -329,7 +341,7 @@ async fn build_registry(
                         || AgentCliBackend::new_from_env(model.clone(), provider),
                         |resolver| AgentCliBackend::new(model.clone(), provider, resolver),
                     )
-                    .with_env(env.clone());
+                    .with_tool_env_provider(tool_env_provider, github_token_refresh_managed);
                 Some(Box::new(BackendRouter::new(Box::new(api), cli)))
             }));
             Ok((registry, false))
@@ -580,12 +592,17 @@ pub async fn initialize(
         clone_branch:      sandbox_record.clone_branch.clone(),
     });
 
-    let env = build_sandbox_env(
+    let (base_env, github_token) = build_sandbox_env(
         &options.sandbox_env,
         options.run_options.github_app.as_ref(),
-        &options.emitter,
-    )
-    .await?;
+    )?;
+    let tool_env_provider = Arc::new(WorkflowToolEnvProvider {
+        base_env:     base_env.clone(),
+        github_token: github_token.clone(),
+    });
+    let github_token_refresh_managed = github_token
+        .as_deref()
+        .is_some_and(GitHubTokenSource::is_refreshable);
     let (registry, effective_dry_run) = if let Some(registry) = options.registry_override.clone() {
         // A caller-supplied registry owns execution behavior for its handlers.
         (registry, options.dry_run)
@@ -594,7 +611,8 @@ pub async fn initialize(
             &options.llm,
             Arc::clone(&options.interviewer),
             Arc::clone(&options.steering_hub),
-            &env,
+            Arc::clone(&tool_env_provider),
+            github_token_refresh_managed,
             &graph,
             Arc::clone(&llm_source),
             cli_resolver,
@@ -757,7 +775,8 @@ pub async fn initialize(
         run: Arc::clone(&run_services),
         registry,
         git_state: std::sync::RwLock::new(None),
-        env,
+        base_env,
+        github_token,
         inputs: options.run_options.settings.run.inputs.clone(),
         dry_run: options.dry_run,
         workflow_path: options.workflow_path.clone(),
@@ -1117,7 +1136,11 @@ mod tests {
         assert_eq!(initialized.source, source);
         assert!(initialized.engine.run.hook_runner.is_none());
         assert_eq!(
-            initialized.engine.env.get("TEST_KEY").map(String::as_str),
+            initialized
+                .engine
+                .base_env
+                .get("TEST_KEY")
+                .map(String::as_str),
             Some("value")
         );
         assert!(initialized.engine.dry_run);
@@ -1161,6 +1184,10 @@ mod tests {
         let vault = Arc::new(AsyncRwLock::new(vault));
 
         let test_emitter = Arc::new(crate::event::Emitter::new(test_run_id()));
+        let tool_env_provider = Arc::new(WorkflowToolEnvProvider {
+            base_env:     HashMap::new(),
+            github_token: None,
+        });
         let (_registry, effective_dry_run) = build_registry(
             &LlmSpec {
                 model:          "claude-opus-4-6".to_string(),
@@ -1171,7 +1198,8 @@ mod tests {
             },
             Arc::new(AutoApproveInterviewer::engine()),
             Arc::new(crate::steering_hub::SteeringHub::new(test_emitter)),
-            &HashMap::new(),
+            tool_env_provider,
+            false,
             &graph,
             Arc::new(VaultCredentialSource::new(Arc::clone(&vault))),
             Some(CredentialResolver::new(vault)),

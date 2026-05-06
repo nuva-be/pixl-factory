@@ -104,11 +104,11 @@ impl Handler for CommandHandler {
         );
 
         let timeout_ms = node.timeout().map_or(600_000, crate::millis_u64);
-        let env_vars = if services.env.is_empty() {
-            None
-        } else {
-            Some(&services.env)
-        };
+        let env = services
+            .env_for_stage()
+            .await
+            .map_err(|err| Error::handler_with_anyhow("Failed to resolve stage env", &err))?;
+        let env_vars = if env.is_empty() { None } else { Some(&env) };
         let cancel_token = services.run.cancel_token().child_token();
         let stage_id = stage_scope.stage_id();
         let recorder = CommandLogRecorder::create(run_dir, &stage_id).await?;
@@ -984,6 +984,21 @@ mod tests {
         services
     }
 
+    struct RefreshingMinter {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::github_token_source::IatMinter for RefreshingMinter {
+        async fn mint(&self) -> anyhow::Result<fabro_github::InstallationToken> {
+            let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            Ok(fabro_github::InstallationToken {
+                token:      format!("ghs_{call}"),
+                expires_at: chrono::Utc::now() + chrono::Duration::minutes(10),
+            })
+        }
+    }
+
     #[tokio::test]
     async fn executes_script_via_sandbox() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
@@ -1087,7 +1102,7 @@ mod tests {
 
         let mut services = make_spy_services(spy.clone());
         services
-            .env
+            .base_env
             .insert("MY_VAR".to_string(), "my_value".to_string());
 
         handler
@@ -1100,6 +1115,61 @@ mod tests {
             captured_env.get("MY_VAR").map(String::as_str),
             Some("my_value")
         );
+    }
+
+    #[tokio::test]
+    async fn refreshes_github_token_for_each_command_stage_when_near_expiry() {
+        let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
+            stdout:      String::new(),
+            stderr:      String::new(),
+            exit_code:   Some(0),
+            termination: CommandTermination::Exited,
+            duration_ms: 5,
+        }));
+        let minter = std::sync::Arc::new(RefreshingMinter {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        });
+        let mut services = make_spy_services(spy.clone());
+        services.github_token = Some(std::sync::Arc::new(
+            crate::github_token_source::GitHubTokenSource::mintable(minter.clone()),
+        ));
+
+        let handler = CommandHandler;
+        let mut node = Node::new("script_node");
+        node.attrs
+            .insert("script".to_string(), AttrValue::String("true".to_string()));
+        let context = Context::new();
+        let graph = Graph::new("test");
+        let run_dir = tempfile::tempdir().unwrap();
+
+        handler
+            .execute(&node, &context, &graph, run_dir.path(), &services)
+            .await
+            .unwrap();
+        assert_eq!(
+            spy.captured_env_vars
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|env| env.get("GITHUB_TOKEN"))
+                .map(String::as_str),
+            Some("ghs_1")
+        );
+
+        handler
+            .execute(&node, &context, &graph, run_dir.path(), &services)
+            .await
+            .unwrap();
+        assert_eq!(
+            spy.captured_env_vars
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|env| env.get("GITHUB_TOKEN"))
+                .map(String::as_str),
+            Some("ghs_2")
+        );
+        assert_eq!(minter.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
