@@ -216,7 +216,7 @@
   "status_updated_at": "2026-05-06T17:18:10.317929Z",
   "pending_control": null,
   "checkpoint": {
-    "timestamp": "2026-05-06T17:18:49.702471Z",
+    "timestamp": "2026-05-06T17:19:10.445559Z",
     "current_node": "greet",
     "completed_nodes": [
       "start",
@@ -224,29 +224,25 @@
     ],
     "node_retries": {},
     "context_values": {
-      "internal.retry_count.greet": 0,
-      "failure_signature": "",
-      "thread.start.current_node": "greet",
-      "last_response": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs kee",
+      "outcome": "succeeded",
+      "failure_class": "",
       "internal.retry_count.start": 0,
       "internal.work_dir": "/home/daytona/workspace",
-      "current_node": "greet",
-      "internal.fidelity": "compact",
-      "internal.thread_id": "start",
-      "internal.run_id": "01KQZ4Q8JAV9JXH6KE6WTFRR74",
-      "graph.rankdir": "LR",
-      "outcome": "succeeded",
-      "response.greet": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs keeping agents on track, humans intervening only at the right moments — in the traditional 5-7-5 syllable form.",
-      "last_stage": "greet",
       "internal.node_visit_count": 1,
+      "failure_signature": "",
+      "last_stage": "greet",
       "graph.goal": "Say hello and demonstrate a basic Fabro workflow",
-      "failure_class": ""
+      "internal.fidelity": "compact",
+      "response.greet": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs keeping agents on track, humans intervening only at the right moments — in the traditional 5-7-5 syllable form.",
+      "thread.start.current_node": "greet",
+      "last_response": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs kee",
+      "graph.rankdir": "LR",
+      "current_node": "greet",
+      "internal.retry_count.greet": 0,
+      "internal.run_id": "01KQZ4Q8JAV9JXH6KE6WTFRR74",
+      "internal.thread_id": "start"
     },
     "node_outcomes": {
-      "start": {
-        "status": "succeeded",
-        "usage": null
-      },
       "greet": {
         "status": "succeeded",
         "context_updates": {
@@ -281,12 +277,17 @@
         "files_touched": [
           "/home/daytona/workspace/README.md"
         ]
+      },
+      "start": {
+        "status": "succeeded",
+        "usage": null
       }
     },
     "next_node_id": "exit",
+    "git_commit_sha": "ac4686235cd8acfd58dbecd401527dc581c1ead5",
     "node_visits": {
-      "start": 1,
-      "greet": 1
+      "greet": 1,
+      "start": 1
     }
   },
   "checkpoints": [
@@ -324,9 +325,117 @@
           "start": 1
         }
       }
+    ],
+    [
+      42,
+      {
+        "timestamp": "2026-05-06T17:19:10.445559Z",
+        "current_node": "greet",
+        "completed_nodes": [
+          "start",
+          "greet"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "outcome": "succeeded",
+          "failure_class": "",
+          "internal.retry_count.start": 0,
+          "internal.work_dir": "/home/daytona/workspace",
+          "internal.node_visit_count": 1,
+          "failure_signature": "",
+          "last_stage": "greet",
+          "graph.goal": "Say hello and demonstrate a basic Fabro workflow",
+          "internal.fidelity": "compact",
+          "response.greet": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs keeping agents on track, humans intervening only at the right moments — in the traditional 5-7-5 syllable form.",
+          "thread.start.current_node": "greet",
+          "last_response": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs kee",
+          "graph.rankdir": "LR",
+          "current_node": "greet",
+          "internal.retry_count.greet": 0,
+          "internal.run_id": "01KQZ4Q8JAV9JXH6KE6WTFRR74",
+          "internal.thread_id": "start"
+        },
+        "node_outcomes": {
+          "greet": {
+            "status": "succeeded",
+            "context_updates": {
+              "response.greet": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs keeping agents on track, humans intervening only at the right moments — in the traditional 5-7-5 syllable form.",
+              "last_response": "Done! A haiku now lives right below the project tagline:\n\n```\ngraph guides the agent\nhuman steps in where it counts\ncode ships, trust remains\n```\n\nIt captures Fabro's core idea — workflow graphs kee",
+              "last_stage": "greet"
+            },
+            "notes": "Stage completed: greet",
+            "usage": {
+              "input": {
+                "usage": {
+                  "model": {
+                    "provider": "anthropic",
+                    "model_id": "claude-sonnet-4-6"
+                  },
+                  "tokens": {
+                    "input_tokens": 4803,
+                    "output_tokens": 545,
+                    "reasoning_tokens": 0,
+                    "cache_read_tokens": 25155,
+                    "cache_write_tokens": 12468
+                  }
+                },
+                "facts": {
+                  "provider": "anthropic",
+                  "cache_write_5m_tokens": 12468,
+                  "cache_write_1h_tokens": 0
+                }
+              },
+              "total_usd_micros": 76885
+            },
+            "files_touched": [
+              "/home/daytona/workspace/README.md"
+            ]
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          }
+        },
+        "next_node_id": "exit",
+        "git_commit_sha": "ac4686235cd8acfd58dbecd401527dc581c1ead5",
+        "node_visits": {
+          "greet": 1,
+          "start": 1
+        }
+      }
     ]
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-06T17:19:10.468650Z",
+    "status": "succeeded",
+    "duration_ms": 60128,
+    "final_git_commit_sha": "ac4686235cd8acfd58dbecd401527dc581c1ead5",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "duration_ms": 0,
+        "retries": 0
+      },
+      {
+        "stage_id": "greet",
+        "stage_label": "greet",
+        "duration_ms": 28541,
+        "billing_usd_micros": 76885,
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 4803,
+      "output_tokens": 545,
+      "total_tokens": 42971,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 25155,
+      "cache_write_tokens": 12468,
+      "total_usd_micros": 76885
+    },
+    "total_retries": 0
+  },
   "retro": null,
   "retro_prompt": null,
   "retro_response": null,
@@ -347,7 +456,12 @@
       "first_event_seq": 20,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Stage completed: greet",
+        "failure_reason": null,
+        "timestamp": "2026-05-06T17:18:49.702376Z"
+      },
       "provider_used": {
         "mode": "agent",
         "provider": "anthropic",
@@ -360,7 +474,29 @@
       "stdout": null,
       "stderr": null,
       "started_at": "2026-05-06T17:18:21.160792Z",
-      "state": "running"
+      "duration_ms": 28541,
+      "state": "succeeded"
+    },
+    "exit@1": {
+      "first_event_seq": 45,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-06T17:19:10.445918Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "stdout": null,
+      "stderr": null,
+      "started_at": "2026-05-06T17:19:10.445902Z",
+      "duration_ms": 0,
+      "state": "succeeded"
     },
     "start@1": {
       "first_event_seq": 16,
