@@ -14,7 +14,7 @@ use fabro_install::{OBJECT_STORE_ACCESS_KEY_ID_ENV, OBJECT_STORE_SECRET_ACCESS_K
 use fabro_sandbox::SandboxProvider;
 use fabro_static::EnvVars;
 use fabro_types::ServerSettings;
-use fabro_types::settings::server::{GithubIntegrationStrategy, WebhookStrategy};
+use fabro_types::settings::server::{GithubIntegrationStrategy, LogDestination, WebhookStrategy};
 use fabro_types::settings::{
     GithubIntegrationSettings, InterpString, ObjectStoreSettings, ServerListenSettings,
     ServerNamespace,
@@ -500,6 +500,15 @@ pub fn resolve_runtime_server_settings_for_start(
     Ok(resolved.server_settings.server)
 }
 
+fn apply_effective_log_destination(
+    settings: &mut ServerSettings,
+    destination: Option<LogDestination>,
+) {
+    if let Some(destination) = destination {
+        settings.server.logging.destination = destination;
+    }
+}
+
 pub fn resolve_bind_request_from_server_settings(
     settings: &ServerSettings,
     explicit_bind: Option<&str>,
@@ -603,6 +612,7 @@ pub async fn serve_command<F>(
     args: ServeArgs,
     styles: &'static Styles,
     storage_dir_override: Option<PathBuf>,
+    effective_log_destination: Option<LogDestination>,
     mut on_ready: F,
 ) -> anyhow::Result<()>
 where
@@ -632,6 +642,10 @@ where
     runtime_settings.server_settings = runtime_settings
         .server_settings
         .with_storage_override(&data_dir);
+    apply_effective_log_destination(
+        &mut runtime_settings.server_settings,
+        effective_log_destination,
+    );
     let resolved_app_settings = ResolvedAppStateSettings {
         server_settings:       runtime_settings.server_settings,
         manifest_run_defaults: runtime_settings.manifest_run_defaults,
@@ -1114,15 +1128,16 @@ mod tests {
     use fabro_config::{RunSettingsBuilder, ServerSettingsBuilder};
     use fabro_types::ServerSettings;
     use fabro_types::settings::interp::InterpString;
-    use fabro_types::settings::server::ObjectStoreSettings;
+    use fabro_types::settings::server::{LogDestination, ObjectStoreSettings};
     use fabro_util::Home;
 
     use super::{
-        GitHubMetaResolver, ServeArgs, ServerTitlePhase, bind_tcp_host_with_fallback,
-        build_local_object_store_with_preference, build_object_store_from_settings_with_lookup,
-        build_slatedb_store, resolve_bind_request_from_server_settings,
-        resolve_github_webhook_ip_allowlist, resolve_startup_github_webhook_ip_allowlist,
-        serve_overrides, server_bind_title, server_title,
+        GitHubMetaResolver, ServeArgs, ServerTitlePhase, apply_effective_log_destination,
+        bind_tcp_host_with_fallback, build_local_object_store_with_preference,
+        build_object_store_from_settings_with_lookup, build_slatedb_store,
+        resolve_bind_request_from_server_settings, resolve_github_webhook_ip_allowlist,
+        resolve_startup_github_webhook_ip_allowlist, serve_overrides, server_bind_title,
+        server_title,
     };
     use crate::server::ResolvedAppStateSettings;
 
@@ -1215,6 +1230,22 @@ root = "/srv/from-disk"
             fabro_config::RunLayer::default(),
             "manifest defaults should stay free of server-only overrides"
         );
+    }
+
+    #[test]
+    fn effective_log_destination_overrides_resolved_server_settings() {
+        let mut settings = server_settings(
+            r#"
+_version = 1
+
+[server.logging]
+destination = "file"
+"#,
+        );
+
+        apply_effective_log_destination(&mut settings, Some(LogDestination::Stdout));
+
+        assert_eq!(settings.server.logging.destination, LogDestination::Stdout);
     }
 
     #[test]
