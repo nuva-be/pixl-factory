@@ -13,9 +13,9 @@ use fabro_util::run_log::BufferedFileAppender;
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
 use tracing_appender::rolling;
-use tracing_subscriber::fmt::FmtContext;
 use tracing_subscriber::fmt::format::{FormatEvent, FormatFields, Writer};
 use tracing_subscriber::fmt::writer::MakeWriter;
+use tracing_subscriber::fmt::{FmtContext, FormattedFields};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -122,7 +122,7 @@ where
 {
     fn format_event(
         &self,
-        _ctx: &FmtContext<'_, S, N>,
+        ctx: &FmtContext<'_, S, N>,
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> std::fmt::Result {
@@ -131,6 +131,11 @@ where
         let metadata = event.metadata();
         let mut fields = EventFieldVisitor::default();
         event.record(&mut fields);
+        if !fields.has_field("run_id") {
+            if let Some(run_id) = run_span_id(ctx) {
+                fields.prepend_field("run_id", run_id);
+            }
+        }
 
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
         write!(
@@ -186,6 +191,40 @@ impl TtyLogFormat {
     }
 }
 
+fn run_span_id<S, N>(ctx: &FmtContext<'_, S, N>) -> Option<String>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    let mut run_id = None;
+    let Some(scope) = ctx.event_scope() else {
+        return None;
+    };
+
+    for span in scope.from_root() {
+        if span.metadata().name() != "run" {
+            continue;
+        }
+
+        let extensions = span.extensions();
+        if let Some(fields) = extensions.get::<FormattedFields<N>>() {
+            if let Some(id) = formatted_field_value(&fields.fields, "id") {
+                run_id = Some(id);
+            }
+        }
+    }
+
+    run_id
+}
+
+fn formatted_field_value(formatted_fields: &str, field_name: &str) -> Option<String> {
+    let prefix = format!("{field_name}=");
+    formatted_fields
+        .split_whitespace()
+        .find_map(|field| field.strip_prefix(&prefix))
+        .map(ToOwned::to_owned)
+}
+
 #[derive(Default)]
 struct EventFieldVisitor {
     message: Option<String>,
@@ -193,6 +232,14 @@ struct EventFieldVisitor {
 }
 
 impl EventFieldVisitor {
+    fn prepend_field(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        self.fields.insert(0, (name.into(), value.into()));
+    }
+
+    fn has_field(&self, name: &str) -> bool {
+        self.fields.iter().any(|(field_name, _)| field_name == name)
+    }
+
     fn record_value(&mut self, field: &Field, value: String) {
         if field.name() == "message" {
             self.message = Some(value);
@@ -445,6 +492,45 @@ mod tests {
     }
 
     #[test]
+    fn tty_format_includes_run_id_from_run_span() {
+        let output = render_tty_event(false, || {
+            let span = tracing::info_span!("run", id = %"01HV6D7S5YF4Z4B2M7K4N0Q6T9");
+            let _guard = span.enter();
+            let name = "fabro-v8";
+            tracing::info!(name, duration_ms = 2610_u64, "Snapshot ready");
+        });
+
+        assert!(output.contains("Snapshot ready"));
+        assert!(output.contains("run_id=01HV6D7S5YF4Z4B2M7K4N0Q6T9"));
+        assert!(output.contains("name=\"fabro-v8\""));
+        assert!(output.contains("duration_ms=2610"));
+    }
+
+    #[test]
+    fn tty_format_does_not_duplicate_event_run_id() {
+        let output = render_tty_event(false, || {
+            let span = tracing::info_span!("run", id = %"01HV6D7S5YF4Z4B2M7K4N0Q6T9");
+            let _guard = span.enter();
+            tracing::info!(run_id = %"event-run", "Run-specific event");
+        });
+
+        assert_eq!(output.matches("run_id=").count(), 1);
+        assert!(output.contains("run_id=event-run"));
+    }
+
+    #[test]
+    fn plain_format_includes_compact_run_span_id() {
+        let output = render_plain_event(|| {
+            let span = tracing::info_span!("run", id = %"01HV6D7S5YF4Z4B2M7K4N0Q6T9");
+            let _guard = span.enter();
+            tracing::info!("Creating Daytona sandbox");
+        });
+
+        assert!(output.contains("run{id=01HV6D7S5YF4Z4B2M7K4N0Q6T9}:"));
+        assert!(output.contains("Creating Daytona sandbox"));
+    }
+
+    #[test]
     fn tty_format_with_color_contains_ansi_sequences() {
         let output = render_tty_event(true, || {
             tracing::warn!(attempt = 2, "LLM request failed, retrying");
@@ -474,6 +560,20 @@ mod tests {
             tracing_fmt::layer()
                 .with_writer(output.clone())
                 .event_format(TtyLogFormat::new(ansi)),
+        );
+
+        subscriber::with_default(subscriber, emit);
+
+        output.captured_output()
+    }
+
+    fn render_plain_event(emit: impl FnOnce()) -> String {
+        let output = CapturedTrace::default();
+        let subscriber = registry().with(
+            tracing_fmt::layer()
+                .with_writer(output.clone())
+                .with_target(true)
+                .with_ansi(false),
         );
 
         subscriber::with_default(subscriber, emit);
