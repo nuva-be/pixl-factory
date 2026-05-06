@@ -154,6 +154,28 @@ async function pruneOldBuilds(currentId: string) {
   }
 }
 
+// Coalesce rapid filesystem events. macOS recursive `fs.watch` fires several
+// events per logical save (atomic-write produces create + write + rename) and
+// can emit spurious bubble events; without a quiet window the watcher thrashes.
+const REBUILD_DEBOUNCE_MS = 75;
+
+// Only file kinds the bundle actually consumes can change what gets built.
+// Filtering noise (editor swap files, OS metadata, .tsbuildinfo, lock files)
+// keeps the watcher quiet for events that can't change output.
+const REBUILD_RELEVANT_EXTS = new Set([
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+  ".css", ".html", ".json",
+  ".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".avif",
+  ".woff", ".woff2", ".ttf", ".otf",
+]);
+
+function rebuildRelevant(filename: string | null | undefined): boolean {
+  if (!filename) return true;
+  const dot = filename.lastIndexOf(".");
+  if (dot < 0) return false;
+  return REBUILD_RELEVANT_EXTS.has(filename.slice(dot).toLowerCase());
+}
+
 async function main() {
   if (!watch) {
     await buildOnce();
@@ -163,6 +185,8 @@ async function main() {
   await buildOnce();
   let building = false;
   let rebuildQueued = false;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const debug = !!process.env.FABRO_BUILD_DEBUG;
 
   async function rebuild() {
     if (building) {
@@ -182,13 +206,27 @@ async function main() {
     building = false;
   }
 
+  function scheduleRebuild(eventType: string, filename: string | null) {
+    if (!rebuildRelevant(filename)) {
+      if (debug) console.log(`[watch] skip ${eventType} ${filename}`);
+      return;
+    }
+    if (debug) console.log(`[watch] queue ${eventType} ${filename}`);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      void rebuild();
+    }, REBUILD_DEBOUNCE_MS);
+  }
+
   const watchers = [
-    fsWatch(join(rootPath, "app"), { recursive: true }, rebuild),
-    fsWatch(publicDir, { recursive: true }, rebuild),
-    fsWatch(templatePath, rebuild),
+    fsWatch(join(rootPath, "app"), { recursive: true }, scheduleRebuild),
+    fsWatch(publicDir, { recursive: true }, scheduleRebuild),
+    fsWatch(templatePath, scheduleRebuild),
   ];
 
   process.on("SIGINT", () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
     for (const watcher of watchers) {
       watcher.close();
     }
