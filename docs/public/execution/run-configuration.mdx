@@ -75,6 +75,10 @@ dockerfile = "FROM node:20-slim\nRUN apt-get update && apt-get install -y git"
 API_KEY = "{{ env.MY_API_KEY }}"
 NODE_ENV = "production"
 
+[run.integrations.github.permissions]
+contents = "write"
+pull_requests = "write"
+
 [run.checkpoint]
 exclude_globs = ["**/node_modules/**", "**/.cache/**"]
 
@@ -259,6 +263,21 @@ SERVICE_URL = "https://api.{{ env.REGION }}.example.com"
 | `"prefix-{{ env.X }}-suffix"` | Substring interpolation; multiple tokens per string are supported |
 
 Missing host variables produce a hard error pointing at the specific field and unresolved token. `run.sandbox.env` is a sticky merge-by-key map: entries from all layers combine, with higher-precedence layers overriding individual keys.
+
+### `[run.integrations.github.permissions]`
+
+Request a scoped GitHub App token for workflow stages that need `GITHUB_TOKEN` inside the sandbox. Values map directly to GitHub App permission names and access levels.
+
+```toml title="run.toml"
+[run.integrations.github.permissions]
+contents = "write"
+pull_requests = "write"
+issues = "read"
+```
+
+Only requested permissions are included. The upper bound is the permission set granted to the installed GitHub App, and Fabro logs a warning and continues without `GITHUB_TOKEN` if the app is not configured or is not installed on the repository.
+
+This table follows the normal settings precedence order. A higher-precedence layer can set `permissions = {}` to clear inherited permissions and run without a GitHub token.
 
 ### `[run.checkpoint]`
 
