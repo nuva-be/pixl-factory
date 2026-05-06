@@ -256,6 +256,55 @@ fn detach_uses_configured_server_target_without_server_flag() {
 }
 
 #[test]
+fn run_create_failure_shows_action_context_and_response_body() {
+    let context = test_context!();
+    let server = MockServer::start();
+    let create_mock = server.mock(|when, then| {
+        when.method("POST").path("/api/v1/runs");
+        then.status(422)
+            .header("Content-Type", "text/plain")
+            .body("Failed to deserialize request: missing field `dirty` at line 1 column 2834");
+    });
+
+    let workflow = context.install_fixture("simple.fabro");
+    let output = context
+        .run_cmd()
+        .args([
+            "--server",
+            &format!("{}/api/v1", server.base_url()),
+            "--detach",
+            "--dry-run",
+            "--auto-approve",
+            workflow.to_str().unwrap(),
+        ])
+        .output()
+        .expect("command should execute");
+
+    assert!(
+        !output.status.success(),
+        "create failure should fail:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    create_mock.assert();
+
+    let stderr = output_stderr(&output);
+    assert!(stderr.contains("could not create run"), "{stderr}");
+    assert!(stderr.contains("missing field `dirty`"), "{stderr}");
+    assert!(
+        stderr.contains("422 Unprocessable Entity"),
+        "status should remain visible for plain-text API failures:\n{stderr}"
+    );
+    assert!(
+        !stderr.lines().any(|line| {
+            line.trim_end()
+                .ends_with("request failed with status 422 Unprocessable Entity")
+        }),
+        "stderr should not collapse to status-only output:\n{stderr}"
+    );
+}
+
+#[test]
 fn run_uses_vault_credentials_for_worker_execution() {
     let mut context = test_context!();
     context.write_home(

@@ -4,6 +4,10 @@ use fabro_test::{fabro_snapshot, test_context};
 
 use super::support::{output_stderr, setup_seeded_completed_dry_run};
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "CLI integration test seeds a deterministic runtime log fixture with synchronous fs writes."
+)]
 fn seed_run_log(run_dir: &Path, contents: &[u8]) {
     // Raw logs are the CLI surface for this runtime-owned file; no public
     // command creates deterministic contents suitable for exact assertions.

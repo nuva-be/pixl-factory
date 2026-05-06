@@ -26,7 +26,7 @@ use tokio_util::io::ReaderStream;
 use crate::credential::Credential;
 use crate::error::{
     ApiError, ApiFailure, api_failure_for, classify_api_error, classify_http_response,
-    convert_type, is_not_found_error, map_api_error, raw_response_failure_error,
+    convert_type, is_not_found_error, raw_response_failure_error,
 };
 use crate::session::OAuthSession;
 use crate::target::ServerTarget;
@@ -359,10 +359,13 @@ impl Client {
                     if let Some(failed_token) = state.bearer_token.as_deref() {
                         self.refresh_access_token(failed_token).await?;
                         let state = self.current_state();
-                        return self
+                        let retry_response = self
                             .with_request_timeout(Box::pin(request(state.client.clone())))
-                            .await?
-                            .map_err(map_api_error);
+                            .await?;
+                        return match retry_response {
+                            Ok(response) => Ok(response),
+                            Err(err) => Err(classify_api_error(err).await.error),
+                        };
                     }
                 }
                 Err(mapped.error)
@@ -995,7 +998,7 @@ impl Client {
                 Ok(Some(bytes))
             }
             Err(err) => {
-                let err = map_api_error(err);
+                let err = classify_api_error(err).await.error;
                 if is_not_found_error(&err) {
                     Ok(None)
                 } else {
@@ -1234,7 +1237,7 @@ impl Client {
                 Ok(Some(Bytes::from(bytes)))
             }
             Err(err) => {
-                let err = map_api_error(err);
+                let err = classify_api_error(err).await.error;
                 if is_not_found_error(&err) {
                     Ok(None)
                 } else {

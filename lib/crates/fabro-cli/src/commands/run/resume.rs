@@ -40,8 +40,13 @@ pub(crate) async fn resume_command(
         ))
         .await?;
         if !json {
-            super::output::print_run_summary_with_client(client.as_ref(), &run_id, styles, printer)
-                .await?;
+            Box::pin(super::output::print_run_summary_with_client(
+                client.as_ref(),
+                &run_id,
+                styles,
+                printer,
+            ))
+            .await?;
         }
         if exit_code != std::process::ExitCode::SUCCESS {
             std::process::exit(1);

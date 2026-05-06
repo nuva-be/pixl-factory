@@ -65,7 +65,10 @@ pub(crate) async fn create_run(
     }
 
     let client = ctx.server().await?;
-    let created_run_id = client.create_run_from_manifest(built.manifest).await?;
+    let created_run_id = client
+        .create_run_from_manifest(built.manifest)
+        .await
+        .context("could not create run")?;
 
     Ok(CreatedRun {
         run_id: created_run_id,
