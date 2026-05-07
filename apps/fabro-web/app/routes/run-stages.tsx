@@ -1,69 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
-import { Marked } from "marked";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 
-const SAFE_HTTP_URL_RE = /^https?:\/\//i;
-const SAFE_MAILTO_URL_RE = /^mailto:/i;
-
-export function isSafeMarkdownHref(href: string): boolean {
-  return (
-    SAFE_HTTP_URL_RE.test(href) ||
-    SAFE_MAILTO_URL_RE.test(href) ||
-    href.startsWith("#") ||
-    (href.startsWith("/") && !href.startsWith("//"))
-  );
-}
-
-const markedSafe = new Marked();
-markedSafe.use({
-  async: false,
-  walkTokens(token) {
-    if (
-      (token.type === "link" || token.type === "image") &&
-      typeof token.href === "string" &&
-      !isSafeMarkdownHref(token.href)
-    ) {
-      token.href = "";
-    }
-  },
-  renderer: {
-    html() {
-      return "";
-    },
-  },
-});
-import { CommandLineIcon, ChatBubbleLeftIcon, PlayIcon } from "@heroicons/react/24/outline";
-import { ToolBlock } from "../components/tool-use";
-import type { ToolUse } from "../components/tool-use";
 import { StageSidebar } from "../components/stage-sidebar";
 import type { Stage } from "../components/stage-sidebar";
 import { EmptyState } from "../components/state";
-import { CopyButton } from "../components/ui";
-import { fetchRunCommandLog, useRunStageEvents, useRunStages } from "../lib/queries";
+import { useRun, useRunStageEvents, useRunStages } from "../lib/queries";
 import { STAGE_ACTIVITY_EVENT_TYPES, type StageActivityEventType } from "../lib/run-events";
 import { mapRunStagesToSidebarStages } from "../lib/stage-sidebar";
 import { getNumber, getString, type UnknownRecord } from "../lib/unknown";
-import {
-  CommandOutputStream,
-  CommandTermination,
-  type EventEnvelope,
-} from "@qltysh/fabro-api-client";
+import type { EventEnvelope } from "@qltysh/fabro-api-client";
 
 export const handle = { wide: true, fullHeight: true };
 
 type TurnType =
-  | { kind: "system"; content: string }
-  | { kind: "assistant"; content: string }
-  | { kind: "tool"; tools: ToolUse[] }
-  | { kind: "command"; stageId: string; script: string; language: string; stdout?: string; stderr?: string; exitCode?: number | null; durationMs?: number; termination?: CommandTermination; running: boolean };
-
-function readTermination(props: UnknownRecord): CommandTermination {
-  const v = props.termination;
-  if (v === CommandTermination.EXITED || v === CommandTermination.TIMED_OUT || v === CommandTermination.CANCELLED) {
-    return v;
-  }
-  return CommandTermination.EXITED;
-}
+  | { kind: "system"; ts: string; content: string }
+  | { kind: "assistant"; ts: string; content: string }
+  | { kind: "tool"; ts: string; toolName: string; input: string; result: string; isError: boolean }
+  | { kind: "command"; ts: string; script: string; running: boolean; exitCode: number | null; durationMs: number };
 
 const STAGE_ACTIVITY_EVENT_SET = new Set<string>(STAGE_ACTIVITY_EVENT_TYPES);
 
@@ -77,12 +31,21 @@ function activityEventStageId(event: EventEnvelope): string | undefined {
   return getString(event.properties ?? {}, "node_id");
 }
 
+interface PendingTool {
+  ts: string;
+  toolName: string;
+  input: string;
+}
+
+interface PendingCommand {
+  ts: string;
+  script: string;
+}
+
 export function eventsToActivity(events: EventEnvelope[], stageId: string): TurnType[] {
   const turns: TurnType[] = [];
-  // Collect tool pairs: started → completed
-  const pendingTools = new Map<string, { toolName: string; input: string }>();
-  // Track pending command for pairing started → completed
-  let pendingCommand: { stageId: string; script: string; language: string } | undefined;
+  const pendingTools = new Map<string, PendingTool>();
+  let pendingCommand: PendingCommand | undefined;
 
   for (const e of events) {
     const eventName = e.event;
@@ -93,24 +56,22 @@ export function eventsToActivity(events: EventEnvelope[], stageId: string): Turn
     ) {
       continue;
     }
-    // Exhaustive switch over StageActivityEventType: adding a new variant to
-    // STAGE_ACTIVITY_EVENT_TYPES forces a TS error here until the case is
-    // handled, keeping the SWR invalidation set and the reducer in sync.
     const eventType = eventName as StageActivityEventType;
-    const props = e.properties ?? {};
+    const props: UnknownRecord = e.properties ?? {};
     switch (eventType) {
       case "stage.prompt":
-        turns.push({ kind: "system", content: getString(props, "text") ?? e.text ?? "" });
+        turns.push({ kind: "system", ts: e.ts, content: getString(props, "text") ?? e.text ?? "" });
         break;
       case "agent.message": {
         const msg = getString(props, "text") ?? e.text ?? "";
-        if (msg) turns.push({ kind: "assistant", content: msg });
+        if (msg) turns.push({ kind: "assistant", ts: e.ts, content: msg });
         break;
       }
       case "agent.tool.started": {
         const callId = getString(props, "tool_call_id") ?? e.tool_call_id ?? "";
         const args = props.arguments ?? e.arguments;
         pendingTools.set(callId, {
+          ts: e.ts,
           toolName: getString(props, "tool_name") ?? e.tool_name ?? "",
           input: typeof args === "string" ? args : JSON.stringify(args ?? ""),
         });
@@ -119,39 +80,34 @@ export function eventsToActivity(events: EventEnvelope[], stageId: string): Turn
       case "agent.tool.completed": {
         const callId = getString(props, "tool_call_id") ?? e.tool_call_id ?? "";
         const started = pendingTools.get(callId);
+        pendingTools.delete(callId);
         const output = props.output ?? e.output ?? "";
-        const result = typeof output === "string" ? output : JSON.stringify(output);
-        const tool: ToolUse = {
-          id: callId,
+        const result = typeof output === "string" ? output : JSON.stringify(output, null, 2);
+        turns.push({
+          kind: "tool",
+          ts: started?.ts ?? e.ts,
           toolName: started?.toolName ?? getString(props, "tool_name") ?? e.tool_name ?? "",
           input: started?.input ?? "",
           result,
           isError: (props.is_error ?? e.is_error) === true,
-        };
-        pendingTools.delete(callId);
-        turns.push({ kind: "tool", tools: [tool] });
+        });
         break;
       }
       case "command.started": {
         pendingCommand = {
-          stageId,
+          ts: e.ts,
           script: getString(props, "script") ?? "",
-          language: getString(props, "language") ?? "shell",
         };
         break;
       }
       case "command.completed": {
         turns.push({
           kind: "command",
-          stageId: pendingCommand?.stageId ?? stageId,
+          ts: pendingCommand?.ts ?? e.ts,
           script: pendingCommand?.script ?? "",
-          language: pendingCommand?.language ?? "shell",
-          stdout: getString(props, "stdout") ?? "",
-          stderr: getString(props, "stderr") ?? "",
+          running: false,
           exitCode: getNumber(props, "exit_code") ?? null,
           durationMs: getNumber(props, "duration_ms") ?? 0,
-          termination: readTermination(props),
-          running: false,
         });
         pendingCommand = undefined;
         break;
@@ -161,392 +117,268 @@ export function eventsToActivity(events: EventEnvelope[], stageId: string): Turn
     }
   }
 
-  // If command.started was seen but no command.completed, it's still running
   if (pendingCommand) {
     turns.push({
       kind: "command",
-      stageId: pendingCommand.stageId,
+      ts: pendingCommand.ts,
       script: pendingCommand.script,
-      language: pendingCommand.language,
       running: true,
+      exitCode: null,
+      durationMs: 0,
     });
   }
 
   return turns;
 }
 
-function Markdown({ content }: { content: string }) {
-  const html = useMemo(() => markedSafe.parse(content, { async: false }) as string, [content]);
-  return (
-    <div
-      className="prose prose-sm max-w-none text-fg-3 prose-headings:text-fg-2 prose-strong:text-fg-2 prose-code:rounded prose-code:bg-overlay-strong prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.8em] prose-code:font-mono prose-code:text-fg-3 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-overlay-strong prose-pre:text-fg-3 prose-a:text-teal-500"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+function turnLabel(turn: TurnType): string {
+  switch (turn.kind) {
+    case "system":
+      return "System";
+    case "assistant":
+      return "Agent";
+    case "tool":
+      return "Tool";
+    case "command":
+      return "Command";
+  }
 }
 
-function SystemBlock({ content }: { content: string }) {
-  return (
-    <section className="group relative border-l-2 border-amber/50 pl-4">
-      <header className="mb-1.5 flex items-center gap-2">
-        <CommandLineIcon className="size-4 shrink-0 text-amber" />
-        <span className="text-xs font-medium text-fg-3">System prompt</span>
-        <div className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <CopyButton value={content} label="Copy system prompt" />
-        </div>
-      </header>
-      <Markdown content={content} />
-    </section>
-  );
+function turnTone(turn: TurnType): string {
+  if (turn.kind === "tool" && turn.isError) {
+    return "bg-coral/15 text-coral";
+  }
+  switch (turn.kind) {
+    case "system":
+      return "bg-amber/15 text-amber";
+    case "assistant":
+      return "bg-teal-500/15 text-teal-500";
+    case "tool":
+    case "command":
+      return "bg-mint/15 text-mint";
+  }
 }
 
-function AssistantBlock({ content }: { content: string }) {
-  return (
-    <section className="group relative border-l-2 border-teal-500/50 pl-4">
-      <header className="mb-1.5 flex items-center gap-2">
-        <ChatBubbleLeftIcon className="size-4 shrink-0 text-teal-500" />
-        <span className="text-xs font-medium text-fg-3">Assistant</span>
-        <div className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <CopyButton value={content} label="Copy assistant message" />
-        </div>
-      </header>
-      <Markdown content={content} />
-    </section>
-  );
+const SUMMARY_MAX_CHARS = 80;
+
+function oneLine(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= SUMMARY_MAX_CHARS) return collapsed;
+  return `${collapsed.slice(0, SUMMARY_MAX_CHARS - 1)}…`;
 }
 
-function StatusPill({
-  tone,
-  children,
+const TOOL_NAME_DISPLAY: Record<string, string> = {
+  read_file: "Read",
+  write_file: "Write",
+  edit_file: "Edit",
+  shell: "Bash",
+  grep: "Grep",
+  glob: "Glob",
+  read_many_files: "Read Many",
+  list_dir: "List Dir",
+  web_search: "Web Search",
+  web_fetch: "Web Fetch",
+};
+
+export function humanizeToolName(raw: string): string {
+  if (!raw) return "tool";
+  if (TOOL_NAME_DISPLAY[raw]) return TOOL_NAME_DISPLAY[raw];
+  // MCP tools are namespaced like `mcp__<server>__<tool>`; display the trailing segment.
+  const lastSegment = raw.split("__").pop() ?? raw;
+  return lastSegment
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function turnSummary(turn: TurnType): string {
+  switch (turn.kind) {
+    case "system":
+    case "assistant":
+      return oneLine(turn.content);
+    case "tool":
+      return humanizeToolName(turn.toolName);
+    case "command":
+      return oneLine(turn.script) || (turn.running ? "running…" : "");
+  }
+}
+
+export function formatElapsed(eventTs: string, runStart: string | undefined): string {
+  if (!runStart) return "";
+  const startMs = Date.parse(runStart);
+  const eventMs = Date.parse(eventTs);
+  if (Number.isNaN(startMs) || Number.isNaN(eventMs)) return "";
+  const delta = Math.max(0, Math.floor((eventMs - startMs) / 1000));
+  const hours = Math.floor(delta / 3600);
+  const minutes = Math.floor((delta % 3600) / 60);
+  const seconds = delta % 60;
+  return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function EventRow({
+  turn,
+  runStart,
+  selected,
+  onSelect,
 }: {
-  tone: "running" | "failed" | "success" | "neutral";
-  children: React.ReactNode;
+  turn: TurnType;
+  runStart: string | undefined;
+  selected: boolean;
+  onSelect: () => void;
 }) {
-  const toneClass = {
-    running: "bg-teal-500/15 text-teal-500",
-    failed: "bg-coral/15 text-coral",
-    success: "bg-mint/15 text-mint",
-    neutral: "bg-overlay text-fg-3",
-  }[tone];
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${toneClass}`}>
-      {children}
-    </span>
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`grid w-full grid-cols-[5rem_1fr_auto] items-center gap-4 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 ${
+        selected ? "bg-overlay" : ""
+      }`}
+    >
+      <span
+        className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${turnTone(turn)}`}
+      >
+        {turnLabel(turn)}
+      </span>
+      <span className="min-w-0 truncate text-sm text-fg-3">
+        {turnSummary(turn)}
+      </span>
+      <span className="font-mono text-xs tabular-nums text-fg-muted">
+        {formatElapsed(turn.ts, runStart)}
+      </span>
+    </button>
   );
 }
 
-const COLLAPSE_AFTER_LINES = 20;
-const LOG_POLL_INTERVAL_MS = 1000;
-const LOG_FETCH_LIMIT_BYTES = 65_536;
-const LOG_MEMORY_CAP_BYTES = 5 * 1024 * 1024;
-
-function StreamLabel({ label }: { label: string }) {
-  return (
-    <div className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
-      {label}
-    </div>
-  );
-}
-
-interface CommandLogState {
-  text: string;
-  eof: boolean;
-  loading: boolean;
-  error: boolean;
-  truncated: boolean;
-  casRef: string | null;
-  liveStreaming: boolean;
-  totalBytes: number;
-}
-
-function decodeBase64Bytes(value: string): Uint8Array {
-  if (!value) return new Uint8Array();
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function trimTextToBytes(text: string, maxBytes: number) {
-  // Each UTF-16 code unit encodes to at most 3 bytes in UTF-8 (4-byte encodings
-  // come from surrogate pairs counted as 2 units). Skip the full encode when
-  // the upper bound is already under the cap.
-  if (text.length * 3 <= maxBytes) {
-    return { text, truncated: false };
-  }
-  const encoded = new TextEncoder().encode(text);
-  if (encoded.byteLength <= maxBytes) {
-    return { text, truncated: false };
-  }
-  const start = encoded.byteLength - maxBytes;
-  const trimmed = new TextDecoder().decode(encoded.slice(start));
-  return { text: trimmed.replace(/^\uFFFD/, ""), truncated: true };
-}
-
-function useCommandLog(
-  runId: string | undefined,
-  stageId: string | undefined,
-  stream: CommandOutputStream,
-  running: boolean,
-): CommandLogState {
-  const [state, setState] = useState<CommandLogState>({
-    text: "",
-    eof: false,
-    loading: true,
-    error: false,
-    truncated: false,
-    casRef: null,
-    liveStreaming: false,
-    totalBytes: 0,
-  });
-  const offsetRef = useRef(0);
-  const finalPollDoneRef = useRef(false);
-  const decoderRef = useRef(new TextDecoder());
-
-  useEffect(() => {
-    offsetRef.current = 0;
-    finalPollDoneRef.current = false;
-    decoderRef.current = new TextDecoder();
-    setState({
-      text: "",
-      eof: false,
-      loading: true,
-      error: false,
-      truncated: false,
-      casRef: null,
-      liveStreaming: false,
-      totalBytes: 0,
-    });
-  }, [runId, stageId, stream]);
-
-  useEffect(() => {
-    if (!runId || !stageId) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    async function poll() {
-      try {
-        const chunk = await fetchRunCommandLog(
-          runId,
-          stageId,
-          stream,
-          offsetRef.current,
-          LOG_FETCH_LIMIT_BYTES,
-        );
-        if (cancelled) return;
-
-        offsetRef.current = chunk.next_offset;
-        const bytes = decodeBase64Bytes(chunk.bytes_base64);
-        const decoded = decoderRef.current.decode(bytes, { stream: !chunk.eof });
-        finalPollDoneRef.current = chunk.eof;
-        setState((current) => {
-          if (
-            decoded.length === 0 &&
-            current.eof === chunk.eof &&
-            current.totalBytes === chunk.total_bytes &&
-            current.casRef === chunk.cas_ref &&
-            current.liveStreaming === chunk.live_streaming &&
-            !current.loading &&
-            !current.error
-          ) {
-            return current;
-          }
-          const next = trimTextToBytes(current.text + decoded, LOG_MEMORY_CAP_BYTES);
-          return {
-            text: next.text,
-            eof: chunk.eof,
-            loading: false,
-            error: false,
-            truncated: current.truncated || next.truncated,
-            casRef: chunk.cas_ref,
-            liveStreaming: chunk.live_streaming,
-            totalBytes: chunk.total_bytes,
-          };
-        });
-      } catch {
-        if (!cancelled) {
-          setState((current) => ({ ...current, loading: false, error: true }));
-        }
-      }
-
-      if (!cancelled && (running || !finalPollDoneRef.current)) {
-        timer = setTimeout(poll, LOG_POLL_INTERVAL_MS);
-      }
-    }
-
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [runId, running, stageId, stream]);
-
-  return state;
-}
-
-function streamStatus(state: CommandLogState, hasContent: boolean): string {
-  if (state.error) return "Failed to load";
-  if (state.loading) return "Waiting";
-  if (hasContent) {
-    if (state.eof) return state.casRef ? "Stored" : "Complete";
-    return state.liveStreaming ? "Streaming" : "Running";
-  }
-  return state.eof ? "No output" : "Waiting";
-}
-
-function OutputStream({
+function DetailField({
   label,
-  state,
-  tone = "normal",
-  forceExpanded = false,
+  children,
+  mono = false,
 }: {
   label: string;
-  state: CommandLogState;
-  tone?: "normal" | "error";
-  forceExpanded?: boolean;
+  children: React.ReactNode;
+  mono?: boolean;
 }) {
-  const content = state.text;
-  const lines = content.split("\n");
-  const isLong = lines.length > COLLAPSE_AFTER_LINES;
-  const [expanded, setExpanded] = useState(forceExpanded);
-  const scrollRef = useRef<HTMLPreElement>(null);
-  const followTailRef = useRef(true);
-  const visible = isLong && !expanded
-    ? lines.slice(-COLLAPSE_AFTER_LINES).join("\n")
-    : content;
-  const hiddenLines = isLong && !expanded ? lines.length - COLLAPSE_AFTER_LINES : 0;
-  const preClass =
-    tone === "error"
-      ? "whitespace-pre-wrap font-mono text-sm leading-relaxed text-coral sm:text-xs"
-      : "whitespace-pre-wrap font-mono text-sm leading-relaxed text-fg-3 sm:text-xs";
-  const status = streamStatus(state, content.length > 0);
-
-  useEffect(() => {
-    if (!forceExpanded) return;
-    setExpanded(true);
-  }, [forceExpanded]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && followTailRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [visible]);
-
   return (
     <div>
-      <div className="mb-1 flex items-center gap-2">
-        <StreamLabel label={label} />
-        <span className="text-[11px] text-fg-muted">{status}</span>
-        {state.truncated ? (
-          <span className="text-[11px] text-amber">Last 5 MiB</span>
-        ) : null}
-        <CopyButton
-          value={visible}
-          label={`Copy ${label}`}
-          className="-my-1"
-        />
+      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-fg-muted">
+        {label}
       </div>
-      {isLong && !expanded ? (
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="mb-2 text-[11px] font-medium text-teal-500 hover:text-teal-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 rounded"
-        >
-          Show {hiddenLines} earlier lines
-        </button>
-      ) : null}
-      {content.length === 0 ? (
-        <div className="font-mono text-sm text-fg-muted sm:text-xs">
-          {state.error ? "Unable to fetch this stream." : "No bytes received yet."}
-        </div>
-      ) : (
-        <pre
-          ref={scrollRef}
-          onScroll={(event) => {
-            const el = event.currentTarget;
-            followTailRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-          }}
-          className={`${preClass} max-h-96 overflow-auto`}
-        >
-          {visible}
-        </pre>
+      <div className={mono ? "font-mono text-sm text-fg-3" : "text-sm text-fg-3"}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CodeBlock({ children }: { children: string }) {
+  return (
+    <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-overlay-strong p-3 font-mono text-xs leading-relaxed text-fg-3">
+      {children || <span className="text-fg-muted">empty</span>}
+    </pre>
+  );
+}
+
+function EventDetails({ turn, runStart }: { turn: TurnType; runStart: string | undefined }) {
+  const elapsed = formatElapsed(turn.ts, runStart);
+  const absolute = (() => {
+    const ms = Date.parse(turn.ts);
+    if (Number.isNaN(ms)) return turn.ts;
+    return new Date(ms).toLocaleString();
+  })();
+
+  return (
+    <div className="space-y-5">
+      <DetailField label="When" mono>
+        {elapsed ? `${elapsed} · ${absolute}` : absolute}
+      </DetailField>
+
+      {(turn.kind === "system" || turn.kind === "assistant") && (
+        <DetailField label="Content">
+          <CodeBlock>{turn.content}</CodeBlock>
+        </DetailField>
+      )}
+
+      {turn.kind === "tool" && (
+        <>
+          <DetailField label="Tool" mono>
+            {humanizeToolName(turn.toolName)}{" "}
+            <span className="text-fg-muted">({turn.toolName})</span>
+          </DetailField>
+          <DetailField label="Input">
+            <CodeBlock>{turn.input}</CodeBlock>
+          </DetailField>
+          <DetailField label={turn.isError ? "Error" : "Result"}>
+            <CodeBlock>{turn.result}</CodeBlock>
+          </DetailField>
+        </>
+      )}
+
+      {turn.kind === "command" && (
+        <>
+          <DetailField label="Status" mono>
+            {turn.running
+              ? "Running…"
+              : `exit ${turn.exitCode ?? "?"}${
+                  turn.durationMs
+                    ? ` · ${
+                        turn.durationMs < 1000
+                          ? `${turn.durationMs}ms`
+                          : `${(turn.durationMs / 1000).toFixed(1)}s`
+                      }`
+                    : ""
+                }`}
+          </DetailField>
+          <DetailField label="Script">
+            <CodeBlock>{turn.script}</CodeBlock>
+          </DetailField>
+        </>
       )}
     </div>
   );
 }
 
-function CommandBlock({
-  runId,
+function EventDetailsPanel({
   turn,
+  runStart,
+  onClose,
 }: {
-  runId: string | undefined;
-  turn: Extract<TurnType, { kind: "command" }>;
+  turn: TurnType | null;
+  runStart: string | undefined;
+  onClose: () => void;
 }) {
-  const failed = !turn.running && (turn.termination !== CommandTermination.EXITED || turn.exitCode !== 0);
-  const stdout = useCommandLog(runId, turn.stageId, CommandOutputStream.STDOUT, turn.running);
-  const stderr = useCommandLog(runId, turn.stageId, CommandOutputStream.STDERR, turn.running);
-  const borderColor = turn.running ? "border-teal-500/20" : failed ? "border-coral/15" : "border-mint/15";
-  const bgColor = turn.running ? "bg-teal-500/5" : failed ? "bg-coral/5" : "bg-mint/5";
+  useEffect(() => {
+    if (!turn) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [turn, onClose]);
 
   return (
-    <div className={`group rounded-md border ${borderColor} ${bgColor} overflow-hidden`}>
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2">
-        <PlayIcon className={`size-4 shrink-0 ${turn.running ? "text-teal-500 animate-pulse" : failed ? "text-coral" : "text-mint"}`} />
-        <span className="text-xs font-medium text-fg-3">
-          {turn.language === "python" ? "Python" : "Shell"}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          {turn.running ? (
-            <StatusPill tone="running">Running…</StatusPill>
-          ) : turn.termination === CommandTermination.TIMED_OUT ? (
-            <StatusPill tone="failed">Timed out</StatusPill>
-          ) : turn.termination === CommandTermination.CANCELLED ? (
-            <StatusPill tone="failed">Cancelled</StatusPill>
-          ) : (
-            <>
-              <StatusPill tone={failed ? "failed" : "success"}>
-                exit {turn.exitCode ?? "?"}
-              </StatusPill>
-              {turn.durationMs != null && (
-                <StatusPill tone="neutral">
-                  {turn.durationMs < 1000
-                    ? `${turn.durationMs}ms`
-                    : `${(turn.durationMs / 1000).toFixed(1)}s`}
-                </StatusPill>
-              )}
-            </>
-          )}
-          {turn.script ? (
-            <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-              <CopyButton value={turn.script} label="Copy script" />
-            </div>
-          ) : null}
-        </div>
+    <div
+      className={`fixed inset-y-0 right-0 z-30 flex w-full max-w-xl flex-col bg-panel shadow-2xl transition-transform duration-200 ease-out ${
+        turn ? "translate-x-0" : "translate-x-full"
+      }`}
+      aria-hidden={turn ? undefined : true}
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4">
+        <h2 className="text-sm font-medium text-fg">
+          {turn ? `${turnLabel(turn)} event` : ""}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close details"
+          className="rounded-md p-1 text-fg-muted transition-colors hover:bg-overlay hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
+        >
+          <XMarkIcon className="size-5" />
+        </button>
       </div>
-
-      {/* Script */}
-      {turn.script && (
-        <div className="border-t border-line px-3 py-2.5">
-          <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-fg-3 sm:text-xs">{turn.script}</pre>
-        </div>
-      )}
-
-      <div className="grid border-t border-line md:grid-cols-2">
-        <div className="border-line px-3 py-2.5 md:border-r">
-          <OutputStream label="stdout" state={stdout} />
-        </div>
-        <div className="border-t border-line px-3 py-2.5 md:border-t-0">
-          <OutputStream
-            label="stderr"
-            state={stderr}
-            tone="error"
-            forceExpanded={failed || stderr.text.length > 0}
-          />
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        {turn ? <EventDetails turn={turn} runStart={runStart} /> : null}
       </div>
     </div>
   );
@@ -554,6 +386,7 @@ function CommandBlock({
 
 export default function RunStages() {
   const { id, stageId } = useParams();
+  const runQuery = useRun(id);
   const stagesQuery = useRunStages(id);
   const stages = useMemo(
     () => mapRunStagesToSidebarStages(stagesQuery.data),
@@ -571,6 +404,12 @@ export default function RunStages() {
     [stageEventsQuery.data, selectedStageId],
   );
 
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  useEffect(() => {
+    setOpenIndex(null);
+  }, [selectedStageId]);
+  const openTurn = openIndex != null ? turns[openIndex] ?? null : null;
+
   if (!id || !stages.length) {
     return (
       <div className="py-12">
@@ -582,28 +421,38 @@ export default function RunStages() {
     );
   }
 
+  const runStart = runQuery.data?.created_at;
+
   return (
-    <div className="-mt-6 -mb-6 flex h-[calc(100%+3rem)] min-h-0">
+    <div className="-mt-6 flex h-full min-h-0">
       <div className="shrink-0 pb-6 pr-3 pt-6">
         <StageSidebar stages={stages} runId={id} selectedStageId={selectedStage.id} />
       </div>
 
-      <div className="w-px shrink-0 bg-line" aria-hidden="true" />
-
-      <div className="min-w-0 flex-1 space-y-3 overflow-y-auto pb-6 pl-3 pt-6">
-        {turns.map((turn: TurnType, i: number) => {
-          switch (turn.kind) {
-            case "system":
-              return <SystemBlock key={`turn-${i}`} content={turn.content} />;
-            case "assistant":
-              return <AssistantBlock key={`turn-${i}`} content={turn.content} />;
-            case "tool":
-              return <ToolBlock key={`turn-${i}`} tools={turn.tools} />;
-            case "command":
-              return <CommandBlock key={`turn-${i}`} runId={id} turn={turn} />;
-          }
-        })}
+      <div className="relative w-px shrink-0">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 -bottom-6 bg-line"
+        />
       </div>
+
+      <div className="min-w-0 flex-1 overflow-y-auto pb-6 pl-3 pt-6">
+        {turns.map((turn: TurnType, i: number) => (
+          <EventRow
+            key={`turn-${i}`}
+            turn={turn}
+            runStart={runStart}
+            selected={openIndex === i}
+            onSelect={() => setOpenIndex(i)}
+          />
+        ))}
+      </div>
+
+      <EventDetailsPanel
+        turn={openTurn}
+        runStart={runStart}
+        onClose={() => setOpenIndex(null)}
+      />
     </div>
   );
 }
