@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router";
-import { ChevronDownIcon, ChevronRightIcon, CommandLineIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, CommandLineIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { EllipsisVerticalIcon } from "@heroicons/react/20/solid";
+import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
+import { useSWRConfig } from "swr";
 import {
   DndContext,
   closestCenter,
@@ -22,8 +25,11 @@ import { ciConfig, columnStatusDisplay, columnStatuses, deriveCiStatus, mapRunLi
 import type { CiStatus, CheckRun, CheckStatus, RunItem, RunWithStatus, ColumnStatus } from "../data/runs";
 import { EmptyState } from "../components/state";
 import { SteerComposer } from "../components/steer-composer";
+import { useToast } from "../components/toast";
 import { shouldRefreshBoardForEvent, useBoardEvents } from "../lib/board-events";
 import { useAuthConfig, useBoardsRuns, useSystemInfo } from "../lib/queries";
+import { queryKeys } from "../lib/query-keys";
+import { archiveRun, canArchive } from "../lib/run-actions";
 import type { PaginatedBoardRunList } from "@qltysh/fabro-api-client";
 
 export { shouldRefreshBoardForEvent };
@@ -461,6 +467,84 @@ function SortablePrCard({
   );
 }
 
+function archivableItems(items: RunItem[]): RunItem[] {
+  return items.filter((item) => canArchive(item.lifecycleStatus));
+}
+
+function ColumnActionsMenu({ column }: { column: Column }) {
+  const archivable = archivableItems(column.items);
+  const [pending, setPending] = useState(false);
+  const { mutate } = useSWRConfig();
+  const { push } = useToast();
+
+  if (archivable.length === 0) return null;
+
+  async function handleArchiveAll() {
+    if (pending) return;
+    setPending(true);
+    const total = archivable.length;
+    try {
+      const results = await Promise.allSettled(
+        archivable.map((item) => archiveRun(item.id)),
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = total - succeeded;
+      const runWord = (n: number) => (n === 1 ? "run" : "runs");
+      if (failed === 0) {
+        push({ message: `Archived ${total} ${runWord(total)}.` });
+      } else if (succeeded === 0) {
+        push({
+          message: `Couldn't archive ${total} ${runWord(total)}. Try again.`,
+          tone: "error",
+        });
+      } else {
+        push({
+          message: `Archived ${succeeded} of ${total} runs. ${failed} failed.`,
+          tone: "error",
+        });
+      }
+    } finally {
+      setPending(false);
+      void mutate(queryKeys.boards.runs());
+    }
+  }
+
+  const label = pending
+    ? `Archiving ${archivable.length}…`
+    : `Archive all`;
+
+  return (
+    <Menu as="div" className="relative ml-auto">
+      <MenuButton
+        type="button"
+        disabled={pending}
+        title={`Actions for ${column.name}`}
+        aria-label={`Actions for ${column.name}`}
+        className="flex size-6 shrink-0 items-center justify-center rounded text-fg-muted transition-colors hover:bg-overlay hover:text-fg-3 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <EllipsisVerticalIcon className="size-4" aria-hidden="true" />
+      </MenuButton>
+      <MenuItems
+        transition
+        anchor={{ to: "bottom end", gap: 4 }}
+        className="z-20 w-44 origin-top-right rounded-md bg-panel py-1 outline-1 -outline-offset-1 outline-line-strong transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+      >
+        <MenuItem>
+          <button
+            type="button"
+            onClick={handleArchiveAll}
+            disabled={pending}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-fg-3 transition-colors data-focus:bg-overlay data-focus:text-fg data-focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span>{label}</span>
+            <span className="font-mono text-xs text-fg-muted">{archivable.length}</span>
+          </button>
+        </MenuItem>
+      </MenuItems>
+    </Menu>
+  );
+}
+
 function BoardColumn({ column }: { column: Column }) {
   const Icon = iconMap[column.iconType];
   const actions = column.actions;
@@ -474,6 +558,7 @@ function BoardColumn({ column }: { column: Column }) {
         <span className="rounded-full bg-overlay px-2 py-0.5 font-mono text-xs text-fg-muted">
           {column.items.length}
         </span>
+        <ColumnActionsMenu column={column} />
       </div>
 
       <SortableContext items={column.items.map((pr) => pr.id)} strategy={verticalListSortingStrategy}>
@@ -497,9 +582,15 @@ type ViewMode = "columns" | "list";
 
 function RunRow({ run }: { run: RunWithStatus }) {
   const lifecycleLabel = listLifecycleStatusLabel(run);
+  const statusDisplay = columnStatusDisplay[run.status];
 
   return (
     <Link to={`/runs/${run.id}`} className="grid items-center rounded-md border border-line bg-panel/80 px-4 py-3 transition-all duration-200 hover:border-line-strong hover:bg-panel" style={{ gridColumn: "1 / -1", gridTemplateColumns: "subgrid" }}>
+      <span className="flex items-center gap-2 pr-2">
+        <span className={`size-1.5 shrink-0 rounded-full ${statusDisplay.dot}`} aria-hidden="true" />
+        <span className={`font-mono text-xs ${statusDisplay.text}`}>{run.statusLabel}</span>
+      </span>
+
       <span className="font-mono text-xs pr-2 text-fg-muted">
         {run.elapsed}
       </span>
@@ -537,39 +628,6 @@ function RunRow({ run }: { run: RunWithStatus }) {
         )}
       </span>
     </Link>
-  );
-}
-
-function SortableRunRow({ run }: { run: RunWithStatus }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: run.id });
-  const wasDragging = useRef(false);
-  if (isDragging) wasDragging.current = true;
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : undefined,
-    position: "relative" as const,
-    zIndex: isDragging ? 10 : undefined,
-    gridColumn: "1 / -1",
-    display: "grid",
-    gridTemplateColumns: "subgrid",
-  };
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClickCapture={(e) => {
-        if (wasDragging.current) {
-          e.preventDefault();
-          e.stopPropagation();
-          wasDragging.current = false;
-        }
-      }}
-    >
-      <RunRow run={run} />
-    </div>
   );
 }
 
@@ -713,7 +771,6 @@ export default function Runs() {
   const [query, setQuery] = useState("");
   const [repoFilter, setRepoFilter] = useState("all");
   const [view, setView] = useState<ViewMode>("columns");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [columns, setColumns] = useState(initialColumns);
   const lowerQuery = query.toLowerCase();
   useBoardEvents();
@@ -845,45 +902,15 @@ export default function Runs() {
           </>
         ) : (
           <>
-            <div className="space-y-4">
-              {visibleColumns.map((col) => {
-                const isCollapsed = collapsed.has(col.id);
-                return (
-                  <div key={col.id}>
-                    <button
-                      type="button"
-                      onClick={() => setCollapsed((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(col.id)) next.delete(col.id);
-                        else next.add(col.id);
-                        return next;
-                      })}
-                      className="mb-3 flex w-full items-center gap-2 text-left"
-                    >
-                      {isCollapsed
-                        ? <ChevronRightIcon className="size-3.5 text-fg-muted" />
-                        : <ChevronDownIcon className="size-3.5 text-fg-muted" />}
-                      <div className={`h-2.5 w-2.5 rounded-full ${col.dot}`} />
-                      <h3 className="text-sm font-semibold tracking-wide text-fg-2">{col.name}</h3>
-                      <span className="rounded-full bg-overlay px-2 py-0.5 font-mono text-xs text-fg-muted">
-                        {col.items.length}
-                      </span>
-                    </button>
-                    {!isCollapsed && (col.items.length > 0 ? (
-                      <SortableContext items={col.items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                        <div className="grid gap-2" style={{ gridTemplateColumns: "5rem 1fr 8rem auto" }}>
-                          {col.items.map((item) => (
-                            <SortableRunRow key={item.id} run={{ ...item, status: col.id, statusLabel: col.name }} />
-                          ))}
-                        </div>
-                      </SortableContext>
-                    ) : (
-                      <p className="py-4 text-center text-sm text-fg-muted">No runs</p>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
+            {filteredRuns > 0 && (
+              <div className="grid gap-2" style={{ gridTemplateColumns: "auto 5rem 1fr 8rem auto" }}>
+                {visibleColumns.flatMap((col) =>
+                  col.items.map((item) => (
+                    <RunRow key={item.id} run={{ ...item, status: col.id, statusLabel: col.name }} />
+                  )),
+                )}
+              </div>
+            )}
             {isLandingReady && totalRuns === 0 ? (
               <RunsLandingEmpty
                 hasGitHubAuth={hasGitHubAuth}
