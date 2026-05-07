@@ -890,13 +890,6 @@ provider = "invalid-provider"
     );
 }
 
-#[test]
-fn clone_sandbox_credentials_are_available_for_clone_based_providers() {
-    assert!(clone_sandbox_can_use_github_credentials("docker"));
-    assert!(clone_sandbox_can_use_github_credentials("daytona"));
-    assert!(!clone_sandbox_can_use_github_credentials("local"));
-}
-
 #[tokio::test]
 async fn create_secret_stores_file_secret_and_excludes_it_from_snapshot() {
     let state = test_app_state();

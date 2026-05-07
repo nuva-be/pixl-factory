@@ -15,6 +15,7 @@ use fabro_config::{ServerSettingsBuilder, Storage};
 use fabro_interview::{
     AnswerSubmission, ControlInterviewer, WorkerControlEnvelope, WorkerControlMessage,
 };
+use fabro_sandbox::SandboxProvider;
 use fabro_store::{EventEnvelope, RunProjection, RunProjectionReducer};
 use fabro_types::settings::InterpString;
 use fabro_types::settings::run::{RunMode, RunNamespace};
@@ -588,12 +589,13 @@ fn requires_github_credentials(run: &RunNamespace) -> bool {
     if run.integrations.github.is_token_requested() {
         return true;
     }
-    run.execution.mode != RunMode::DryRun
-        && clone_sandbox_requires_github_credentials(&run.sandbox.provider)
-}
-
-fn clone_sandbox_requires_github_credentials(provider: &str) -> bool {
-    matches!(provider, "docker" | "daytona")
+    if run.execution.mode == RunMode::DryRun {
+        return false;
+    }
+    run.sandbox
+        .provider
+        .parse::<SandboxProvider>()
+        .is_ok_and(|p| p.is_clone_based())
 }
 
 fn install_signal_handlers(
@@ -672,13 +674,6 @@ mod tests {
     fn test_steering_hub() -> Arc<fabro_workflow::SteeringHub> {
         let emitter = Arc::new(fabro_workflow::event::Emitter::new(fixtures::RUN_1));
         Arc::new(fabro_workflow::SteeringHub::new(emitter))
-    }
-
-    #[test]
-    fn clone_sandbox_credentials_are_required_for_clone_based_providers() {
-        assert!(super::clone_sandbox_requires_github_credentials("docker"));
-        assert!(super::clone_sandbox_requires_github_credentials("daytona"));
-        assert!(!super::clone_sandbox_requires_github_credentials("local"));
     }
 
     fn test_user_principal(login: &str) -> Principal {

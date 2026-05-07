@@ -9,7 +9,6 @@ use fabro_types::settings::run::{
 use fabro_types::settings::{Duration, InterpString, ModelRef, Size};
 use serde::{Deserialize, Serialize};
 
-use super::combine::Combine;
 use super::maps::{MergeMap, ReplaceMap, StickyMap};
 use super::splice_array::SPLICE_MARKER;
 
@@ -66,30 +65,18 @@ pub struct RunIntegrationsLayer {
 
 /// `[run.integrations.github]` — runtime GitHub token shape.
 ///
-/// `Combine` is hand-rolled (not derived) for two reasons:
-/// 1. `HashMap<String, InterpString>: Combine` is not implemented in this
-///    crate, so `#[derive(Combine)]` would not even compile.
-/// 2. The `ReplaceMap` "empty inherits from below" semantics (`maps.rs:76-80`)
-///    are the wrong fit: we want `Some({})` from a higher layer to be honored
-///    as an explicit clear (no token requested) rather than fall through to a
-///    lower layer's permissions.
-///
-/// Note: this diverges from sibling map fields like `RunLayer::metadata`
-/// (`ReplaceMap`), where empty-table-means-inherit. Document the
-/// difference for workflow authors reading the schema by analogy.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+/// The `permissions` field is `Option<HashMap<...>>` so a higher layer that
+/// sets `permissions = {}` is honored as an explicit clear (no token
+/// requested) rather than falling through to a lower layer. `Combine` for
+/// `Option<HashMap<...>>` uses `or` semantics (defined in `combine.rs`), so
+/// any `Some(_)` (including `Some({})`) wins over the fallback layer. This
+/// diverges from sibling map fields like `RunLayer::metadata` (`ReplaceMap`),
+/// where an empty table means inherit.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
 #[serde(deny_unknown_fields)]
 pub struct RunIntegrationsGithubLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions: Option<HashMap<String, InterpString>>,
-}
-
-impl Combine for RunIntegrationsGithubLayer {
-    fn combine(self, other: Self) -> Self {
-        Self {
-            permissions: self.permissions.or(other.permissions),
-        }
-    }
 }
 
 /// The source of a run's goal, either inline literal text or a reference to
