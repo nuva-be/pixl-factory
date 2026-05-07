@@ -204,14 +204,128 @@
     "in_place": false
   },
   "graph_source": "digraph Hello {\n    graph [goal=\"Say hello and demonstrate a basic Fabro workflow\"]\n    rankdir=LR\n\n    start [shape=Mdiamond, label=\"Start\"]\n    exit  [shape=Msquare, label=\"Exit\"]\n\n    greet [label=\"Greet\", prompt=\"Add a haiku to the README\"]\n\n    start -> greet -> exit\n}\n",
-  "start": null,
-  "status": {
-    "kind": "starting"
+  "start": {
+    "run_id": "01KR1E7QG3S0YMX1GD0S6DSBBQ",
+    "start_time": "2026-05-07T14:42:43.070562Z",
+    "run_branch": "fabro/run/01KR1E7QG3S0YMX1GD0S6DSBBQ",
+    "base_sha": "5334278074034de2fc4e35b777679ede55488567"
   },
-  "status_updated_at": "2026-05-07T14:42:28.526154Z",
+  "status": {
+    "kind": "running"
+  },
+  "status_updated_at": "2026-05-07T14:42:43.070748Z",
   "pending_control": null,
-  "checkpoint": null,
-  "checkpoints": [],
+  "checkpoint": {
+    "timestamp": "2026-05-07T14:42:59.743566Z",
+    "current_node": "greet",
+    "completed_nodes": [
+      "start",
+      "greet"
+    ],
+    "node_retries": {},
+    "context_values": {
+      "internal.fidelity": "compact",
+      "failure_signature": "",
+      "internal.retry_count.greet": 0,
+      "internal.retry_count.start": 0,
+      "graph.rankdir": "LR",
+      "last_stage": "greet",
+      "internal.thread_id": "start",
+      "graph.goal": "Say hello and demonstrate a basic Fabro workflow",
+      "outcome": "succeeded",
+      "current_node": "greet",
+      "response.greet": "Done! Here's the haiku that was added, just beneath the tagline:\n\n```\nAgents weave the graph —\neach node a step, each edge a choice —\nyou review, not toil.\n```\n\nIt captures the three core ideas of Fabro in classic 5-7-5 form:\n- **Line 1** — agents executing a workflow graph\n- **Line 2** — the DOT-language structure of nodes and edges\n- **Line 3** — the user's role: reviewing results rather than babysitting every step",
+      "internal.node_visit_count": 1,
+      "failure_class": "",
+      "internal.work_dir": "/home/daytona/workspace",
+      "internal.run_id": "01KR1E7QG3S0YMX1GD0S6DSBBQ",
+      "last_response": "Done! Here's the haiku that was added, just beneath the tagline:\n\n```\nAgents weave the graph —\neach node a step, each edge a choice —\nyou review, not toil.\n```\n\nIt captures the three core ideas of",
+      "thread.start.current_node": "greet"
+    },
+    "node_outcomes": {
+      "greet": {
+        "status": "succeeded",
+        "context_updates": {
+          "last_response": "Done! Here's the haiku that was added, just beneath the tagline:\n\n```\nAgents weave the graph —\neach node a step, each edge a choice —\nyou review, not toil.\n```\n\nIt captures the three core ideas of",
+          "last_stage": "greet",
+          "response.greet": "Done! Here's the haiku that was added, just beneath the tagline:\n\n```\nAgents weave the graph —\neach node a step, each edge a choice —\nyou review, not toil.\n```\n\nIt captures the three core ideas of Fabro in classic 5-7-5 form:\n- **Line 1** — agents executing a workflow graph\n- **Line 2** — the DOT-language structure of nodes and edges\n- **Line 3** — the user's role: reviewing results rather than babysitting every step"
+        },
+        "notes": "Stage completed: greet",
+        "usage": {
+          "input": {
+            "usage": {
+              "model": {
+                "provider": "anthropic",
+                "model_id": "claude-sonnet-4-6"
+              },
+              "tokens": {
+                "input_tokens": 4683,
+                "output_tokens": 472,
+                "reasoning_tokens": 0,
+                "cache_read_tokens": 25098,
+                "cache_write_tokens": 12447
+              }
+            },
+            "facts": {
+              "provider": "anthropic",
+              "cache_write_5m_tokens": 12447,
+              "cache_write_1h_tokens": 0
+            }
+          },
+          "total_usd_micros": 75334
+        },
+        "files_touched": [
+          "/home/daytona/workspace/README.md"
+        ]
+      },
+      "start": {
+        "status": "succeeded",
+        "usage": null
+      }
+    },
+    "next_node_id": "exit",
+    "node_visits": {
+      "start": 1,
+      "greet": 1
+    }
+  },
+  "checkpoints": [
+    [
+      18,
+      {
+        "timestamp": "2026-05-07T14:42:46.331846Z",
+        "current_node": "start",
+        "completed_nodes": [
+          "start"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "graph.rankdir": "LR",
+          "internal.node_visit_count": 1,
+          "internal.thread_id": null,
+          "internal.run_id": "01KR1E7QG3S0YMX1GD0S6DSBBQ",
+          "outcome": "succeeded",
+          "graph.goal": "Say hello and demonstrate a basic Fabro workflow",
+          "failure_class": "",
+          "current_node": "start",
+          "internal.work_dir": "/home/daytona/workspace",
+          "internal.fidelity": "compact",
+          "failure_signature": "",
+          "internal.retry_count.start": 0
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          }
+        },
+        "next_node_id": "greet",
+        "node_visits": {
+          "start": 1
+        }
+      }
+    ]
+  ],
   "conclusion": null,
   "retro": null,
   "retro_prompt": null,
@@ -228,5 +342,46 @@
   "pull_request": null,
   "superseded_by": null,
   "pending_interviews": {},
-  "stages": {}
+  "stages": {
+    "greet@1": {
+      "first_event_seq": 19,
+      "prompt": null,
+      "response": null,
+      "completion": null,
+      "provider_used": {
+        "mode": "agent",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-6"
+      },
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "stdout": null,
+      "stderr": null,
+      "started_at": "2026-05-07T14:42:46.331911Z",
+      "state": "running"
+    },
+    "start@1": {
+      "first_event_seq": 15,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-07T14:42:46.331678Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "stdout": null,
+      "stderr": null,
+      "started_at": "2026-05-07T14:42:46.330926Z",
+      "duration_ms": 0,
+      "state": "succeeded"
+    }
+  }
 }
