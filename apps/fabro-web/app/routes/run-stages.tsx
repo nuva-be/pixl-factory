@@ -993,15 +993,10 @@ function ToolGroupChildRow({
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className={`grid w-full grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-overlay focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-500 ${
+      className={`grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-overlay focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-500 ${
         expanded ? "bg-overlay" : ""
       }`}
     >
-      <span
-        className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${TOOL_GROUP_TONE}`}
-      >
-        {humanizeToolName(turn.toolName)}
-      </span>
       <span className="min-w-0 truncate font-mono text-xs text-fg-3">
         {toolInputPreview(turn)}
       </span>
@@ -1035,11 +1030,6 @@ function ToolGroupDetails({
   return (
     <div className="-mx-5 -mt-4">
       <div className="flex items-baseline gap-3 border-b border-line px-5 py-3">
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${TOOL_GROUP_TONE}`}
-        >
-          Tool
-        </span>
         <span className="text-sm font-medium text-fg">
           {humanizeToolName(group.toolName)}{" "}
           <span className="text-fg-muted">x{group.children.length}</span>
