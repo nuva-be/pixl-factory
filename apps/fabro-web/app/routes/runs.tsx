@@ -25,7 +25,6 @@ import { ciConfig, columnStatusDisplay, columnStatuses, deriveCiStatus, mapRunLi
 import type { CiStatus, CheckRun, CheckStatus, RunItem, RunWithStatus, ColumnStatus } from "../data/runs";
 import { formatRelativeTime } from "../lib/format";
 import { EmptyState } from "../components/state";
-import { SteerComposer } from "../components/steer-composer";
 import { useToast } from "../components/toast";
 import { shouldRefreshBoardForEvent, useBoardEvents } from "../lib/board-events";
 import { useAuthConfig, useBoardsRuns, useSystemInfo } from "../lib/queries";
@@ -47,7 +46,7 @@ interface ColumnStyle {
 const columnStyles: Record<ColumnStatus, ColumnStyle> = {
   queued:       { iconType: "branch", actions: [] },
   initializing: { iconType: "branch", actions: [] },
-  running:      { iconType: "branch", actions: ["Watch", "Steer"] },
+  running:      { iconType: "branch", actions: [] },
   blocked:      { iconType: "branch", actions: ["Answer Question"] },
   succeeded:    { iconType: "pr",     actions: [] },
   failed:       { iconType: "branch", actions: [] },
@@ -308,15 +307,8 @@ function PrCard({
   actions?: string[];
 }) {
   const lifecycleLabel = boardLifecycleStatusLabel(pr);
-  const [steerOpen, setSteerOpen] = useState(false);
 
   return (
-    <>
-    <SteerComposer
-      runId={pr.id}
-      open={steerOpen}
-      onClose={() => setSteerOpen(false)}
-    />
     <Link to={`/runs/${pr.id}`} className="group block rounded-md border border-line bg-panel p-4 transition-all duration-200 hover:border-line-strong hover:shadow-lg hover:shadow-black/20">
       <div className="mb-2 flex items-center gap-1.5">
         <Icon className={`size-3.5 shrink-0 ${iconColor}`} />
@@ -379,13 +371,6 @@ function PrCard({
               key={label}
               type="button"
               disabled={pr.actionDisabled}
-              onClick={(e) => {
-                if (label === "Steer") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSteerOpen(true);
-                }
-              }}
               className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:text-fg-muted disabled:border-line ${
                 label === "Merge"
                   ? "border-mint/20 text-mint hover:border-mint/50 hover:text-fg"
@@ -396,16 +381,6 @@ function PrCard({
                       : "border-line-strong text-fg-3 hover:border-teal-500/40 hover:text-fg"
               }`}
             >
-              {label === "Watch" && (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="size-3" aria-hidden="true">
-                  <path d="M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 0 1 0 1.798c-.45.678-1.367 1.932-2.637 3.023C11.67 13.008 9.981 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10.831.88 9.577.43 8.899a1.62 1.62 0 0 1 0-1.798c.45-.678 1.367-1.932 2.637-3.023C4.33 2.992 6.019 2 8 2ZM1.679 7.932a.12.12 0 0 0 0 .136c.411.622 1.241 1.75 2.366 2.717C5.176 11.758 6.527 12.5 8 12.5c1.473 0 2.825-.742 3.955-1.715 1.124-.967 1.954-2.096 2.366-2.717a.12.12 0 0 0 0-.136c-.412-.621-1.242-1.75-2.366-2.717C10.824 4.242 9.473 3.5 8 3.5c-1.473 0-2.824.742-3.955 1.715-1.124.967-1.954 2.096-2.366 2.717ZM8 10a2 2 0 1 1-.001-3.999A2 2 0 0 1 8 10Z" />
-                </svg>
-              )}
-              {label === "Steer" && (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="size-3" aria-hidden="true">
-                  <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7.25-4.5a.75.75 0 0 0-1.5 0v.582a2.75 2.75 0 0 0-2.168 2.168H4.5a.75.75 0 0 0 0 1.5h.582a2.75 2.75 0 0 0 2.168 2.168v.582a.75.75 0 0 0 1.5 0v-.582a2.75 2.75 0 0 0 2.168-2.168h.582a.75.75 0 0 0 0-1.5h-.582A2.75 2.75 0 0 0 8.75 4.082ZM8 6.75a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z" />
-                </svg>
-              )}
               {label === "Answer Question" && (
                 <svg viewBox="0 0 16 16" fill="currentColor" className="size-3" aria-hidden="true">
                   <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
@@ -427,7 +402,6 @@ function PrCard({
         </div>
       )}
     </Link>
-    </>
   );
 }
 
