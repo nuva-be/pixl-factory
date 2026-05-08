@@ -220,10 +220,10 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-08T14:45:45.733742Z",
-  "last_event_at": "2026-05-08T14:50:54.211330Z",
+  "last_event_at": "2026-05-08T14:51:00.415487Z",
   "pending_control": null,
   "checkpoint": {
-    "timestamp": "2026-05-08T14:50:54.533068Z",
+    "timestamp": "2026-05-08T14:51:00.411516Z",
     "current_node": "nap",
     "completed_nodes": [
       "start",
@@ -231,25 +231,29 @@
     ],
     "node_retries": {},
     "context_values": {
-      "internal.run_id": "01KR40SZ9J36K6BGCAN7T4B6BA",
-      "failure_class": "",
-      "graph.rankdir": "LR",
-      "internal.retry_count.start": 0,
-      "failure_signature": "",
-      "thread.start.current_node": "nap",
-      "outcome": "succeeded",
-      "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
       "internal.work_dir": "/home/daytona/workspace",
-      "last_stage": "nap",
       "internal.fidelity": "compact",
-      "response.nap": "done",
-      "internal.retry_count.nap": 0,
+      "internal.thread_id": "start",
+      "thread.start.current_node": "nap",
+      "graph.rankdir": "LR",
+      "outcome": "succeeded",
       "last_response": "done",
+      "failure_signature": "",
       "internal.node_visit_count": 1,
+      "last_stage": "nap",
+      "internal.retry_count.nap": 0,
+      "internal.retry_count.start": 0,
+      "internal.run_id": "01KR40SZ9J36K6BGCAN7T4B6BA",
+      "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
       "current_node": "nap",
-      "internal.thread_id": "start"
+      "failure_class": "",
+      "response.nap": "done"
     },
     "node_outcomes": {
+      "start": {
+        "status": "succeeded",
+        "usage": null
+      },
       "nap": {
         "status": "succeeded",
         "context_updates": {
@@ -281,16 +285,13 @@
           },
           "total_usd_micros": 36785
         }
-      },
-      "start": {
-        "status": "succeeded",
-        "usage": null
       }
     },
     "next_node_id": "exit",
+    "git_commit_sha": "bbff9583c12fc4486914aa8c268740ff150db57e",
     "node_visits": {
-      "nap": 1,
-      "start": 1
+      "start": 1,
+      "nap": 1
     }
   },
   "checkpoints": [
@@ -328,9 +329,114 @@
           "start": 1
         }
       }
+    ],
+    [
+      36,
+      {
+        "timestamp": "2026-05-08T14:51:00.411516Z",
+        "current_node": "nap",
+        "completed_nodes": [
+          "start",
+          "nap"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "internal.work_dir": "/home/daytona/workspace",
+          "internal.fidelity": "compact",
+          "internal.thread_id": "start",
+          "thread.start.current_node": "nap",
+          "graph.rankdir": "LR",
+          "outcome": "succeeded",
+          "last_response": "done",
+          "failure_signature": "",
+          "internal.node_visit_count": 1,
+          "last_stage": "nap",
+          "internal.retry_count.nap": 0,
+          "internal.retry_count.start": 0,
+          "internal.run_id": "01KR40SZ9J36K6BGCAN7T4B6BA",
+          "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
+          "current_node": "nap",
+          "failure_class": "",
+          "response.nap": "done"
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "nap": {
+            "status": "succeeded",
+            "context_updates": {
+              "last_stage": "nap",
+              "last_response": "done",
+              "response.nap": "done"
+            },
+            "notes": "Stage completed: nap",
+            "usage": {
+              "input": {
+                "usage": {
+                  "model": {
+                    "provider": "anthropic",
+                    "model_id": "claude-sonnet-4-6"
+                  },
+                  "tokens": {
+                    "input_tokens": 517,
+                    "output_tokens": 78,
+                    "reasoning_tokens": 0,
+                    "cache_read_tokens": 8026,
+                    "cache_write_tokens": 8442
+                  }
+                },
+                "facts": {
+                  "provider": "anthropic",
+                  "cache_write_5m_tokens": 8442,
+                  "cache_write_1h_tokens": 0
+                }
+              },
+              "total_usd_micros": 36785
+            }
+          }
+        },
+        "next_node_id": "exit",
+        "git_commit_sha": "bbff9583c12fc4486914aa8c268740ff150db57e",
+        "node_visits": {
+          "start": 1,
+          "nap": 1
+        }
+      }
     ]
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-08T14:51:00.441830Z",
+    "status": "succeeded",
+    "duration_ms": 199375,
+    "final_git_commit_sha": "bbff9583c12fc4486914aa8c268740ff150db57e",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "duration_ms": 0,
+        "retries": 0
+      },
+      {
+        "stage_id": "nap",
+        "stage_label": "nap",
+        "duration_ms": 190521,
+        "billing_usd_micros": 36785,
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 517,
+      "output_tokens": 78,
+      "total_tokens": 17063,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 8026,
+      "cache_write_tokens": 8442,
+      "total_usd_micros": 36785
+    },
+    "total_retries": 0
+  },
   "retro": null,
   "retro_prompt": null,
   "retro_response": null,
@@ -343,6 +449,11 @@
     "clone_branch": "main"
   },
   "final_patch": null,
+  "diff_summary": {
+    "files_changed": 0,
+    "additions": 0,
+    "deletions": 0
+  },
   "pull_request": null,
   "superseded_by": null,
   "pending_interviews": {},
@@ -351,7 +462,12 @@
       "first_event_seq": 20,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Stage completed: nap",
+        "failure_reason": null,
+        "timestamp": "2026-05-08T14:50:54.532731Z"
+      },
       "provider_used": {
         "mode": "agent",
         "provider": "anthropic",
@@ -363,7 +479,28 @@
       "parallel_results": null,
       "output": null,
       "started_at": "2026-05-08T14:45:48.703551Z",
-      "state": "running"
+      "duration_ms": 190521,
+      "state": "succeeded"
+    },
+    "exit@1": {
+      "first_event_seq": 39,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-08T14:51:00.415487Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-08T14:51:00.415430Z",
+      "duration_ms": 0,
+      "state": "succeeded"
     },
     "start@1": {
       "first_event_seq": 16,
