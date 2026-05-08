@@ -433,8 +433,8 @@ function formatDurationMs(ms: number): string {
 
 function formatTokenCount(n: number): string {
   if (n < 1000) return `${n}`;
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
-  return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${Math.round(n / 1_000_000)}M`;
 }
 
 export function turnMetric(turn: TurnType): string | null {
@@ -488,6 +488,17 @@ function EventRow({
 }) {
   const metric = turnMetric(turn);
   const MetricIcon = metric == null ? null : turn.kind === "assistant" ? CircleStackIcon : ClockIcon;
+  const metricSpan = (
+    <span className="inline-flex items-center justify-end gap-1.5 font-mono text-xs tabular-nums text-fg-muted">
+      {turn.kind === "tool" && turn.isError && (
+        <span className="rounded bg-coral/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-coral">
+          Error
+        </span>
+      )}
+      {MetricIcon && <MetricIcon className="size-3" aria-hidden="true" />}
+      {metric ?? ""}
+    </span>
+  );
   return (
     <button
       type="button"
@@ -505,15 +516,31 @@ function EventRow({
       <span className="min-w-0 truncate text-sm text-fg-3">
         {turnSummary(turn)}
       </span>
-      <span className="inline-flex items-center justify-end gap-1.5 font-mono text-xs tabular-nums text-fg-muted">
-        {turn.kind === "tool" && turn.isError && (
-          <span className="rounded bg-coral/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-coral">
-            Error
-          </span>
-        )}
-        {MetricIcon && <MetricIcon className="size-3" aria-hidden="true" />}
-        {metric ?? ""}
-      </span>
+      {turn.kind === "assistant" && metric != null ? (
+        <Tooltip
+          label={
+            <div className="px-1 py-1">
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                Tokens in / out
+              </div>
+              <div className="grid grid-cols-[auto_auto] items-baseline gap-x-3 gap-y-1 tabular-nums">
+                <span className="text-right font-medium text-fg">
+                  {formatTokenCount(turn.inputTokens)}
+                </span>
+                <span className="text-fg-3">input</span>
+                <span className="text-right font-medium text-fg">
+                  {formatTokenCount(turn.outputTokens)}
+                </span>
+                <span className="text-fg-3">output</span>
+              </div>
+            </div>
+          }
+        >
+          {metricSpan}
+        </Tooltip>
+      ) : (
+        metricSpan
+      )}
       <Tooltip label={formatAbsoluteTs(turn.ts)}>
         <span className="pl-3 font-mono text-xs tabular-nums text-fg-muted">
           {formatElapsed(turn.ts, runStart)}

@@ -68,7 +68,7 @@ export function Tooltip({
   label,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -92,7 +92,7 @@ export function Tooltip({
       </span>
       {rect && portalTarget
         ? createPortal(
-            <span
+            <div
               role="tooltip"
               id={id}
               style={{
@@ -102,7 +102,7 @@ export function Tooltip({
               className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-panel px-2 py-1 text-xs text-fg-2 shadow-lg outline-1 -outline-offset-1 outline-line-strong"
             >
               {label}
-            </span>,
+            </div>,
             portalTarget,
           )
         : null}
