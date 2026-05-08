@@ -407,44 +407,50 @@
     "kind": "blocked",
     "blocked_reason": "human_input_required"
   },
-  "status_updated_at": "2026-05-08T18:41:49.497173Z",
-  "last_event_at": "2026-05-08T18:41:49.497173Z",
+  "status_updated_at": "2026-05-08T18:42:10.075132Z",
+  "last_event_at": "2026-05-08T18:42:10.075132Z",
   "pending_control": null,
   "checkpoint": {
-    "timestamp": "2026-05-08T18:42:03.222788Z",
-    "current_node": "confirmation",
+    "timestamp": "2026-05-08T18:42:22.160803Z",
+    "current_node": "multiple_choice",
     "completed_nodes": [
       "start",
       "yes_no",
-      "confirmation"
+      "confirmation",
+      "multiple_choice"
     ],
     "node_retries": {},
     "context_values": {
       "internal.fidelity": "compact",
+      "human.gate.label": "[G] Goals",
+      "human.gate.multiple_choice.label": "[G] Goals",
+      "human.gate.yes_no.label": "[Y] Yes",
+      "thread.confirmation.current_node": "multiple_choice",
+      "current_node": "multiple_choice",
+      "thread.start.current_node": "yes_no",
+      "human.gate.selected": "G",
+      "preferred_label": "[G] Goals",
+      "thread.yes_no.current_node": "confirmation",
+      "human.gate.multiple_choice.answer": "G",
+      "internal.retry_count.confirmation": 0,
       "failure_signature": "",
       "internal.run_id": "01KR4E6RHFVXY0CT4QEGET0Z93",
-      "internal.thread_id": "yes_no",
+      "internal.thread_id": "confirmation",
       "internal.work_dir": "/home/daytona/workspace",
       "internal.node_visit_count": 1,
       "graph.rankdir": "LR",
       "internal.retry_count.start": 0,
-      "human.gate.label": "[Y] Continue",
       "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
-      "failure_class": "",
-      "human.gate.yes_no.label": "[Y] Yes",
-      "current_node": "confirmation",
-      "thread.start.current_node": "yes_no",
-      "human.gate.yes_no.answer": "yes",
-      "human.gate.selected": "Y",
-      "internal.retry_count.yes_no": 0,
       "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
-      "preferred_label": "[Y] Continue",
+      "failure_class": "",
+      "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+      "internal.retry_count.multiple_choice": 0,
+      "human.gate.yes_no.answer": "yes",
+      "internal.retry_count.yes_no": 0,
       "human.gate.confirmation.label": "[Y] Continue",
       "graph.goal": "Run a progressive human interview and summarize the answers",
       "outcome": "succeeded",
-      "thread.yes_no.current_node": "confirmation",
-      "human.gate.confirmation.answer": "yes",
-      "internal.retry_count.confirmation": 0
+      "human.gate.confirmation.answer": "yes"
     },
     "node_outcomes": {
       "start": {
@@ -466,6 +472,21 @@
         },
         "usage": null
       },
+      "multiple_choice": {
+        "status": "succeeded",
+        "preferred_label": "[G] Goals",
+        "suggested_next_ids": [
+          "multi_select"
+        ],
+        "context_updates": {
+          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+          "human.gate.selected": "G",
+          "human.gate.multiple_choice.label": "[G] Goals",
+          "human.gate.multiple_choice.answer": "G",
+          "human.gate.label": "[G] Goals"
+        },
+        "usage": null
+      },
       "yes_no": {
         "status": "succeeded",
         "preferred_label": "[Y] Yes",
@@ -482,9 +503,10 @@
         "usage": null
       }
     },
-    "next_node_id": "multiple_choice",
+    "next_node_id": "multi_select",
     "node_visits": {
       "start": 1,
+      "multiple_choice": 1,
       "yes_no": 1,
       "confirmation": 1
     }
@@ -585,6 +607,89 @@
           "yes_no": 1
         }
       }
+    ],
+    [
+      40,
+      {
+        "timestamp": "2026-05-08T18:42:10.074407Z",
+        "current_node": "confirmation",
+        "completed_nodes": [
+          "start",
+          "yes_no",
+          "confirmation"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "outcome": "succeeded",
+          "internal.retry_count.start": 0,
+          "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+          "internal.fidelity": "compact",
+          "current_node": "confirmation",
+          "internal.run_id": "01KR4E6RHFVXY0CT4QEGET0Z93",
+          "human.gate.confirmation.answer": "yes",
+          "internal.thread_id": "yes_no",
+          "internal.node_visit_count": 1,
+          "human.gate.selected": "Y",
+          "human.gate.confirmation.label": "[Y] Continue",
+          "preferred_label": "[Y] Continue",
+          "thread.start.current_node": "yes_no",
+          "thread.yes_no.current_node": "confirmation",
+          "internal.work_dir": "/home/daytona/workspace",
+          "failure_signature": "",
+          "failure_class": "",
+          "internal.retry_count.yes_no": 0,
+          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+          "internal.retry_count.confirmation": 0,
+          "human.gate.yes_no.answer": "yes",
+          "graph.goal": "Run a progressive human interview and summarize the answers",
+          "graph.rankdir": "LR",
+          "human.gate.label": "[Y] Continue",
+          "human.gate.yes_no.label": "[Y] Yes"
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "confirmation": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Continue",
+            "suggested_next_ids": [
+              "multiple_choice"
+            ],
+            "context_updates": {
+              "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+              "human.gate.confirmation.label": "[Y] Continue",
+              "human.gate.label": "[Y] Continue",
+              "human.gate.confirmation.answer": "yes",
+              "human.gate.selected": "Y"
+            },
+            "usage": null
+          },
+          "yes_no": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Yes",
+            "suggested_next_ids": [
+              "confirmation"
+            ],
+            "context_updates": {
+              "human.gate.selected": "Y",
+              "human.gate.label": "[Y] Yes",
+              "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+              "human.gate.yes_no.answer": "yes",
+              "human.gate.yes_no.label": "[Y] Yes"
+            },
+            "usage": null
+          }
+        },
+        "next_node_id": "multiple_choice",
+        "git_commit_sha": "b4ff214b9e5bef2aa6f73e94a4259296ae77ce22",
+        "node_visits": {
+          "confirmation": 1,
+          "start": 1,
+          "yes_no": 1
+        }
+      }
     ]
   ],
   "conclusion": null,
@@ -608,30 +713,58 @@
   "pull_request": null,
   "superseded_by": null,
   "pending_interviews": {
-    "01KR4EAPXSHMVWR49GSVX7PEHA": {
+    "01KR4EBB0VT30N76H3AMBA5DMY": {
       "question": {
-        "id": "01KR4EAPXSHMVWR49GSVX7PEHA",
-        "text": "Confirm that you want to continue into more structured questions.",
-        "stage": "confirmation",
-        "question_type": "confirmation",
+        "id": "01KR4EBB0VT30N76H3AMBA5DMY",
+        "text": "Which theme should be the center of the final summary?",
+        "stage": "multiple_choice",
+        "question_type": "multiple_choice",
         "options": [
           {
-            "key": "Y",
-            "label": "[Y] Continue"
+            "key": "G",
+            "label": "[G] Goals"
           },
           {
-            "key": "N",
-            "label": "[N] Stop after this, but still summarize"
+            "key": "R",
+            "label": "[R] Risks"
+          },
+          {
+            "key": "T",
+            "label": "[T] Tradeoffs"
+          },
+          {
+            "key": "Q",
+            "label": "[Q] Open questions"
           }
         ],
         "allow_freeform": false
       },
-      "started_at": "2026-05-08T18:41:49.497125Z"
+      "started_at": "2026-05-08T18:42:10.075061Z"
     }
   },
   "stages": {
     "confirmation@1": {
       "first_event_seq": 31,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-08T18:42:03.222492Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-08T18:41:49.497025Z",
+      "duration_ms": 13721,
+      "state": "succeeded"
+    },
+    "multiple_choice@1": {
+      "first_event_seq": 43,
       "prompt": null,
       "response": null,
       "completion": null,
@@ -641,7 +774,7 @@
       "script_timing": null,
       "parallel_results": null,
       "output": null,
-      "started_at": "2026-05-08T18:41:49.497025Z",
+      "started_at": "2026-05-08T18:42:10.074942Z",
       "state": "running"
     },
     "yes_no@1": {
