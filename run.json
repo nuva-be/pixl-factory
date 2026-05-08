@@ -409,10 +409,10 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-08T16:17:10.535618Z",
-  "last_event_at": "2026-05-08T16:17:16.239Z",
+  "last_event_at": "2026-05-08T16:17:32.151025Z",
   "pending_control": null,
   "checkpoint": {
-    "timestamp": "2026-05-08T16:17:26.539008Z",
+    "timestamp": "2026-05-08T16:17:32.146952Z",
     "current_node": "summarize",
     "completed_nodes": [
       "start",
@@ -425,53 +425,83 @@
     ],
     "node_retries": {},
     "context_values": {
+      "human.gate.text": "Be sure to talk about birds!",
+      "thread.multi_select.current_node": "freeform",
       "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
-      "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
-      "internal.retry_count.freeform": 0,
-      "internal.retry_count.multi_select": 0,
+      "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+      "internal.retry_count.summarize": 0,
+      "thread.confirmation.current_node": "multiple_choice",
+      "human.gate.multi_select.label": "[B] Blockers, [D] Decisions needed",
+      "thread.start.current_node": "yes_no",
+      "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+      "last_response": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to c",
+      "graph.goal": "Run a progressive human interview and summarize the answers",
       "human.gate.label": "Be sure to talk about birds!",
-      "last_stage": "summarize",
-      "outcome": "succeeded",
-      "response.summarize": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to continue into more structured questions.\n**A:** **Yes** — the user confirmed they wanted to proceed.\n\n---\n\n### 3. Multiple Choice\n**Q:** Which theme should be the center of the final summary?\n**A:** **[G] Goals**\n\n---\n\n### 4. Multi-Select\n**Q:** Which supporting areas should the final summary emphasize?\n**A:** **[B] Blockers** and **[D] Decisions needed**\n\n---\n\n### 5. Freeform\n**Q:** Add any final context, constraints, or nuance for the summary.\n**A:** **\"Be sure to talk about birds!\"**\n\n---\n\n## Synthesis\n\n### User's Priorities\n- The user wants the summary to be **Goals-centered** — the primary lens should be what is being aimed for or accomplished.\n- Supporting emphasis should be placed on **Blockers** (what is getting in the way) and **Decisions needed** (open choices that require resolution), framing goals in the context of what obstacles and decision points surround them.\n\n### Constraints\n- The user explicitly requests that **birds be discussed** in the summary. This is a hard constraint called out in the freeform step — it should not be overlooked.\n\n### Open Questions / Notes\n- No answers were withheld or skipped; all five stages were completed successfully.\n- The user found the workflow easy to follow (Stage 1), suggesting no UX friction was encountered.\n- The specific subject matter of the interview (beyond workflow meta-questions) was not elaborated upon — the summary structure is clear, but the **domain content** would need to come from a prior or parallel context not captured in these gate answers.\n\n### 🐦 A Note on Birds\nPer the user's explicit instruction: any downstream summary, report, or artifact produced from this interview should incorporate birds — whether as a metaphor, a thematic thread, or direct reference. Don't forget the birds.",
-      "internal.retry_count.confirmation": 0,
+      "thread.freeform.current_node": "summarize",
+      "human.gate.selected": "freeform",
+      "human.gate.multiple_choice.answer": "G",
+      "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
       "internal.node_visit_count": 1,
       "human.gate.confirmation.label": "[Y] Continue",
-      "human.gate.confirmation.answer": "yes",
-      "thread.multiple_choice.current_node": "multi_select",
-      "thread.start.current_node": "yes_no",
-      "internal.run_id": "01KR45XFAK1EBJH26VMZ9C0DDG",
-      "human.gate.yes_no.label": "[Y] Yes",
-      "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
-      "graph.goal": "Run a progressive human interview and summarize the answers",
-      "human.gate.freeform.answer": "Be sure to talk about birds!",
-      "human.gate.multiple_choice.label": "[G] Goals",
-      "internal.retry_count.summarize": 0,
-      "thread.multi_select.current_node": "freeform",
-      "thread.freeform.current_node": "summarize",
-      "internal.retry_count.yes_no": 0,
-      "last_response": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to c",
+      "internal.retry_count.freeform": 0,
       "failure_class": "",
-      "internal.thread_id": "freeform",
-      "internal.retry_count.multiple_choice": 0,
-      "human.gate.text": "Be sure to talk about birds!",
-      "graph.rankdir": "LR",
-      "internal.retry_count.start": 0,
-      "thread.confirmation.current_node": "multiple_choice",
-      "human.gate.yes_no.answer": "yes",
-      "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+      "internal.retry_count.multi_select": 0,
       "current_node": "summarize",
+      "human.gate.multi_select.answer": "B, D",
+      "human.gate.yes_no.answer": "yes",
+      "failure_signature": "",
+      "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
+      "internal.retry_count.multiple_choice": 0,
+      "internal.retry_count.yes_no": 0,
+      "last_stage": "summarize",
+      "thread.multiple_choice.current_node": "multi_select",
       "thread.yes_no.current_node": "confirmation",
       "internal.work_dir": "/home/daytona/workspace",
-      "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
-      "human.gate.multiple_choice.answer": "G",
-      "human.gate.multi_select.answer": "B, D",
-      "failure_signature": "",
+      "internal.run_id": "01KR45XFAK1EBJH26VMZ9C0DDG",
+      "outcome": "succeeded",
+      "internal.retry_count.start": 0,
+      "graph.rankdir": "LR",
+      "human.gate.yes_no.label": "[Y] Yes",
       "internal.fidelity": "summary:high",
+      "human.gate.freeform.answer": "Be sure to talk about birds!",
+      "human.gate.confirmation.answer": "yes",
+      "human.gate.multiple_choice.label": "[G] Goals",
+      "internal.retry_count.confirmation": 0,
+      "internal.thread_id": "freeform",
       "preferred_label": "[B] Blockers, [D] Decisions needed",
-      "human.gate.multi_select.label": "[B] Blockers, [D] Decisions needed",
-      "human.gate.selected": "freeform"
+      "response.summarize": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to continue into more structured questions.\n**A:** **Yes** — the user confirmed they wanted to proceed.\n\n---\n\n### 3. Multiple Choice\n**Q:** Which theme should be the center of the final summary?\n**A:** **[G] Goals**\n\n---\n\n### 4. Multi-Select\n**Q:** Which supporting areas should the final summary emphasize?\n**A:** **[B] Blockers** and **[D] Decisions needed**\n\n---\n\n### 5. Freeform\n**Q:** Add any final context, constraints, or nuance for the summary.\n**A:** **\"Be sure to talk about birds!\"**\n\n---\n\n## Synthesis\n\n### User's Priorities\n- The user wants the summary to be **Goals-centered** — the primary lens should be what is being aimed for or accomplished.\n- Supporting emphasis should be placed on **Blockers** (what is getting in the way) and **Decisions needed** (open choices that require resolution), framing goals in the context of what obstacles and decision points surround them.\n\n### Constraints\n- The user explicitly requests that **birds be discussed** in the summary. This is a hard constraint called out in the freeform step — it should not be overlooked.\n\n### Open Questions / Notes\n- No answers were withheld or skipped; all five stages were completed successfully.\n- The user found the workflow easy to follow (Stage 1), suggesting no UX friction was encountered.\n- The specific subject matter of the interview (beyond workflow meta-questions) was not elaborated upon — the summary structure is clear, but the **domain content** would need to come from a prior or parallel context not captured in these gate answers.\n\n### 🐦 A Note on Birds\nPer the user's explicit instruction: any downstream summary, report, or artifact produced from this interview should incorporate birds — whether as a metaphor, a thematic thread, or direct reference. Don't forget the birds."
     },
     "node_outcomes": {
+      "multiple_choice": {
+        "status": "succeeded",
+        "preferred_label": "[G] Goals",
+        "suggested_next_ids": [
+          "multi_select"
+        ],
+        "context_updates": {
+          "human.gate.multiple_choice.label": "[G] Goals",
+          "human.gate.label": "[G] Goals",
+          "human.gate.selected": "G",
+          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+          "human.gate.multiple_choice.answer": "G"
+        },
+        "usage": null
+      },
+      "yes_no": {
+        "status": "succeeded",
+        "preferred_label": "[Y] Yes",
+        "suggested_next_ids": [
+          "confirmation"
+        ],
+        "context_updates": {
+          "human.gate.selected": "Y",
+          "human.gate.label": "[Y] Yes",
+          "human.gate.yes_no.answer": "yes",
+          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+          "human.gate.yes_no.label": "[Y] Yes"
+        },
+        "usage": null
+      },
       "start": {
         "status": "succeeded",
         "usage": null
@@ -520,36 +550,6 @@
         },
         "usage": null
       },
-      "yes_no": {
-        "status": "succeeded",
-        "preferred_label": "[Y] Yes",
-        "suggested_next_ids": [
-          "confirmation"
-        ],
-        "context_updates": {
-          "human.gate.selected": "Y",
-          "human.gate.label": "[Y] Yes",
-          "human.gate.yes_no.answer": "yes",
-          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
-          "human.gate.yes_no.label": "[Y] Yes"
-        },
-        "usage": null
-      },
-      "multiple_choice": {
-        "status": "succeeded",
-        "preferred_label": "[G] Goals",
-        "suggested_next_ids": [
-          "multi_select"
-        ],
-        "context_updates": {
-          "human.gate.multiple_choice.label": "[G] Goals",
-          "human.gate.label": "[G] Goals",
-          "human.gate.selected": "G",
-          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
-          "human.gate.multiple_choice.answer": "G"
-        },
-        "usage": null
-      },
       "summarize": {
         "status": "succeeded",
         "context_updates": {
@@ -584,14 +584,15 @@
       }
     },
     "next_node_id": "exit",
+    "git_commit_sha": "7a43fe335457ce832cae8ff2fe19f3d033fcf2a0",
     "node_visits": {
+      "start": 1,
       "confirmation": 1,
-      "freeform": 1,
       "summarize": 1,
-      "multi_select": 1,
-      "multiple_choice": 1,
       "yes_no": 1,
-      "start": 1
+      "freeform": 1,
+      "multi_select": 1,
+      "multiple_choice": 1
     }
   },
   "checkpoints": [
@@ -1153,9 +1154,256 @@
           "yes_no": 1
         }
       }
+    ],
+    [
+      87,
+      {
+        "timestamp": "2026-05-08T16:17:32.146952Z",
+        "current_node": "summarize",
+        "completed_nodes": [
+          "start",
+          "yes_no",
+          "confirmation",
+          "multiple_choice",
+          "multi_select",
+          "freeform",
+          "summarize"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "human.gate.text": "Be sure to talk about birds!",
+          "thread.multi_select.current_node": "freeform",
+          "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
+          "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+          "internal.retry_count.summarize": 0,
+          "thread.confirmation.current_node": "multiple_choice",
+          "human.gate.multi_select.label": "[B] Blockers, [D] Decisions needed",
+          "thread.start.current_node": "yes_no",
+          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+          "last_response": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to c",
+          "graph.goal": "Run a progressive human interview and summarize the answers",
+          "human.gate.label": "Be sure to talk about birds!",
+          "thread.freeform.current_node": "summarize",
+          "human.gate.selected": "freeform",
+          "human.gate.multiple_choice.answer": "G",
+          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+          "internal.node_visit_count": 1,
+          "human.gate.confirmation.label": "[Y] Continue",
+          "internal.retry_count.freeform": 0,
+          "failure_class": "",
+          "internal.retry_count.multi_select": 0,
+          "current_node": "summarize",
+          "human.gate.multi_select.answer": "B, D",
+          "human.gate.yes_no.answer": "yes",
+          "failure_signature": "",
+          "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
+          "internal.retry_count.multiple_choice": 0,
+          "internal.retry_count.yes_no": 0,
+          "last_stage": "summarize",
+          "thread.multiple_choice.current_node": "multi_select",
+          "thread.yes_no.current_node": "confirmation",
+          "internal.work_dir": "/home/daytona/workspace",
+          "internal.run_id": "01KR45XFAK1EBJH26VMZ9C0DDG",
+          "outcome": "succeeded",
+          "internal.retry_count.start": 0,
+          "graph.rankdir": "LR",
+          "human.gate.yes_no.label": "[Y] Yes",
+          "internal.fidelity": "summary:high",
+          "human.gate.freeform.answer": "Be sure to talk about birds!",
+          "human.gate.confirmation.answer": "yes",
+          "human.gate.multiple_choice.label": "[G] Goals",
+          "internal.retry_count.confirmation": 0,
+          "internal.thread_id": "freeform",
+          "preferred_label": "[B] Blockers, [D] Decisions needed",
+          "response.summarize": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to continue into more structured questions.\n**A:** **Yes** — the user confirmed they wanted to proceed.\n\n---\n\n### 3. Multiple Choice\n**Q:** Which theme should be the center of the final summary?\n**A:** **[G] Goals**\n\n---\n\n### 4. Multi-Select\n**Q:** Which supporting areas should the final summary emphasize?\n**A:** **[B] Blockers** and **[D] Decisions needed**\n\n---\n\n### 5. Freeform\n**Q:** Add any final context, constraints, or nuance for the summary.\n**A:** **\"Be sure to talk about birds!\"**\n\n---\n\n## Synthesis\n\n### User's Priorities\n- The user wants the summary to be **Goals-centered** — the primary lens should be what is being aimed for or accomplished.\n- Supporting emphasis should be placed on **Blockers** (what is getting in the way) and **Decisions needed** (open choices that require resolution), framing goals in the context of what obstacles and decision points surround them.\n\n### Constraints\n- The user explicitly requests that **birds be discussed** in the summary. This is a hard constraint called out in the freeform step — it should not be overlooked.\n\n### Open Questions / Notes\n- No answers were withheld or skipped; all five stages were completed successfully.\n- The user found the workflow easy to follow (Stage 1), suggesting no UX friction was encountered.\n- The specific subject matter of the interview (beyond workflow meta-questions) was not elaborated upon — the summary structure is clear, but the **domain content** would need to come from a prior or parallel context not captured in these gate answers.\n\n### 🐦 A Note on Birds\nPer the user's explicit instruction: any downstream summary, report, or artifact produced from this interview should incorporate birds — whether as a metaphor, a thematic thread, or direct reference. Don't forget the birds."
+        },
+        "node_outcomes": {
+          "multiple_choice": {
+            "status": "succeeded",
+            "preferred_label": "[G] Goals",
+            "suggested_next_ids": [
+              "multi_select"
+            ],
+            "context_updates": {
+              "human.gate.multiple_choice.label": "[G] Goals",
+              "human.gate.label": "[G] Goals",
+              "human.gate.selected": "G",
+              "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+              "human.gate.multiple_choice.answer": "G"
+            },
+            "usage": null
+          },
+          "yes_no": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Yes",
+            "suggested_next_ids": [
+              "confirmation"
+            ],
+            "context_updates": {
+              "human.gate.selected": "Y",
+              "human.gate.label": "[Y] Yes",
+              "human.gate.yes_no.answer": "yes",
+              "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+              "human.gate.yes_no.label": "[Y] Yes"
+            },
+            "usage": null
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "confirmation": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Continue",
+            "suggested_next_ids": [
+              "multiple_choice"
+            ],
+            "context_updates": {
+              "human.gate.confirmation.answer": "yes",
+              "human.gate.selected": "Y",
+              "human.gate.confirmation.label": "[Y] Continue",
+              "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+              "human.gate.label": "[Y] Continue"
+            },
+            "usage": null
+          },
+          "freeform": {
+            "status": "succeeded",
+            "suggested_next_ids": [
+              "summarize"
+            ],
+            "context_updates": {
+              "human.gate.label": "Be sure to talk about birds!",
+              "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
+              "human.gate.freeform.answer": "Be sure to talk about birds!",
+              "human.gate.selected": "freeform",
+              "human.gate.text": "Be sure to talk about birds!"
+            },
+            "usage": null
+          },
+          "multi_select": {
+            "status": "succeeded",
+            "preferred_label": "[B] Blockers, [D] Decisions needed",
+            "suggested_next_ids": [
+              "freeform"
+            ],
+            "context_updates": {
+              "human.gate.multi_select.answer": "B, D",
+              "human.gate.multi_select.label": "[B] Blockers, [D] Decisions needed",
+              "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
+              "human.gate.selected": "B,D",
+              "human.gate.label": "[B] Blockers, [D] Decisions needed"
+            },
+            "usage": null
+          },
+          "summarize": {
+            "status": "succeeded",
+            "context_updates": {
+              "last_stage": "summarize",
+              "last_response": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to c",
+              "response.summarize": "# Interview Summary\n\n## Interview Transcript\n\n### 1. Yes/No Question\n**Q:** Is this interview workflow easy to follow so far?\n**A:** **Yes**\n\n---\n\n### 2. Confirmation\n**Q:** Confirm that you want to continue into more structured questions.\n**A:** **Yes** — the user confirmed they wanted to proceed.\n\n---\n\n### 3. Multiple Choice\n**Q:** Which theme should be the center of the final summary?\n**A:** **[G] Goals**\n\n---\n\n### 4. Multi-Select\n**Q:** Which supporting areas should the final summary emphasize?\n**A:** **[B] Blockers** and **[D] Decisions needed**\n\n---\n\n### 5. Freeform\n**Q:** Add any final context, constraints, or nuance for the summary.\n**A:** **\"Be sure to talk about birds!\"**\n\n---\n\n## Synthesis\n\n### User's Priorities\n- The user wants the summary to be **Goals-centered** — the primary lens should be what is being aimed for or accomplished.\n- Supporting emphasis should be placed on **Blockers** (what is getting in the way) and **Decisions needed** (open choices that require resolution), framing goals in the context of what obstacles and decision points surround them.\n\n### Constraints\n- The user explicitly requests that **birds be discussed** in the summary. This is a hard constraint called out in the freeform step — it should not be overlooked.\n\n### Open Questions / Notes\n- No answers were withheld or skipped; all five stages were completed successfully.\n- The user found the workflow easy to follow (Stage 1), suggesting no UX friction was encountered.\n- The specific subject matter of the interview (beyond workflow meta-questions) was not elaborated upon — the summary structure is clear, but the **domain content** would need to come from a prior or parallel context not captured in these gate answers.\n\n### 🐦 A Note on Birds\nPer the user's explicit instruction: any downstream summary, report, or artifact produced from this interview should incorporate birds — whether as a metaphor, a thematic thread, or direct reference. Don't forget the birds."
+            },
+            "notes": "Stage completed: summarize",
+            "usage": {
+              "input": {
+                "usage": {
+                  "model": {
+                    "provider": "anthropic",
+                    "model_id": "claude-sonnet-4-6"
+                  },
+                  "tokens": {
+                    "input_tokens": 530,
+                    "output_tokens": 490,
+                    "reasoning_tokens": 0,
+                    "cache_read_tokens": 0,
+                    "cache_write_tokens": 5376
+                  }
+                },
+                "facts": {
+                  "provider": "anthropic",
+                  "cache_write_5m_tokens": 5376,
+                  "cache_write_1h_tokens": 0
+                }
+              },
+              "total_usd_micros": 29100
+            }
+          }
+        },
+        "next_node_id": "exit",
+        "git_commit_sha": "7a43fe335457ce832cae8ff2fe19f3d033fcf2a0",
+        "node_visits": {
+          "start": 1,
+          "confirmation": 1,
+          "summarize": 1,
+          "yes_no": 1,
+          "freeform": 1,
+          "multi_select": 1,
+          "multiple_choice": 1
+        }
+      }
     ]
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-08T16:17:32.188589Z",
+    "status": "succeeded",
+    "duration_ms": 149359,
+    "final_git_commit_sha": "7a43fe335457ce832cae8ff2fe19f3d033fcf2a0",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "duration_ms": 0,
+        "retries": 0
+      },
+      {
+        "stage_id": "yes_no",
+        "stage_label": "yes_no",
+        "duration_ms": 74259,
+        "retries": 0
+      },
+      {
+        "stage_id": "confirmation",
+        "stage_label": "confirmation",
+        "duration_ms": 3530,
+        "retries": 0
+      },
+      {
+        "stage_id": "multiple_choice",
+        "stage_label": "multiple_choice",
+        "duration_ms": 7112,
+        "retries": 0
+      },
+      {
+        "stage_id": "multi_select",
+        "stage_label": "multi_select",
+        "duration_ms": 6165,
+        "retries": 0
+      },
+      {
+        "stage_id": "freeform",
+        "stage_label": "freeform",
+        "duration_ms": 10549,
+        "retries": 0
+      },
+      {
+        "stage_id": "summarize",
+        "stage_label": "summarize",
+        "duration_ms": 10619,
+        "billing_usd_micros": 29100,
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 530,
+      "output_tokens": 490,
+      "total_tokens": 6396,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 5376,
+      "total_usd_micros": 29100
+    },
+    "total_retries": 0
+  },
   "retro": null,
   "retro_prompt": null,
   "retro_response": null,
@@ -1177,6 +1425,46 @@
   "superseded_by": null,
   "pending_interviews": {},
   "stages": {
+    "exit@1": {
+      "first_event_seq": 90,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-08T16:17:32.151025Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-08T16:17:32.150955Z",
+      "duration_ms": 0,
+      "state": "succeeded"
+    },
+    "freeform@1": {
+      "first_event_seq": 68,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-08T16:17:10.535924Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-08T16:16:59.986155Z",
+      "duration_ms": 10549,
+      "state": "succeeded"
+    },
     "start@1": {
       "first_event_seq": 16,
       "prompt": null,
@@ -1217,26 +1505,6 @@
       "duration_ms": 6165,
       "state": "succeeded"
     },
-    "freeform@1": {
-      "first_event_seq": 68,
-      "prompt": null,
-      "response": null,
-      "completion": {
-        "outcome": "succeeded",
-        "notes": null,
-        "failure_reason": null,
-        "timestamp": "2026-05-08T16:17:10.535924Z"
-      },
-      "provider_used": null,
-      "diff": null,
-      "script_invocation": null,
-      "script_timing": null,
-      "parallel_results": null,
-      "output": null,
-      "started_at": "2026-05-08T16:16:59.986155Z",
-      "duration_ms": 10549,
-      "state": "succeeded"
-    },
     "yes_no@1": {
       "first_event_seq": 20,
       "prompt": null,
@@ -1261,7 +1529,12 @@
       "first_event_seq": 80,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Stage completed: summarize",
+        "failure_reason": null,
+        "timestamp": "2026-05-08T16:17:26.538696Z"
+      },
       "provider_used": {
         "mode": "prompt",
         "provider": "anthropic"
@@ -1272,7 +1545,8 @@
       "parallel_results": null,
       "output": null,
       "started_at": "2026-05-08T16:17:15.918532Z",
-      "state": "running"
+      "duration_ms": 10619,
+      "state": "succeeded"
     },
     "multiple_choice@1": {
       "first_event_seq": 44,
