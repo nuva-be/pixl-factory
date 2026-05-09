@@ -1,0 +1,12 @@
+digraph CommitPickerValidation {
+    graph [goal="Create two committed sandbox changes for validating the run files commit picker"]
+    rankdir=LR
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    implement [label="implement", shape=parallelogram, script="printf '\\nStage implement wrote this line.\\n' >> validation.txt"]
+    verify [label="verify", shape=parallelogram, script="printf 'Stage verify wrote this line.\\n' >> validation.txt"]
+
+    start -> implement -> verify -> exit
+}
