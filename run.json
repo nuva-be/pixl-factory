@@ -198,15 +198,100 @@
     }
   },
   "graph_source": "digraph CommitPickerValidation {\n    graph [goal=\"Create two committed sandbox changes for validating the run files commit picker\"]\n    rankdir=LR\n\n    start [shape=Mdiamond, label=\"Start\"]\n    exit  [shape=Msquare, label=\"Exit\"]\n\n    implement [label=\"implement\", shape=parallelogram, script=\"printf '\\\\nStage implement wrote this line.\\\\n' >> validation.txt\"]\n    verify [label=\"verify\", shape=parallelogram, script=\"printf 'Stage verify wrote this line.\\\\n' >> validation.txt\"]\n\n    start -> implement -> verify -> exit\n}\n",
-  "start": null,
-  "status": {
-    "kind": "starting"
+  "start": {
+    "run_id": "01KR72TMH9Y65KB3VB4WPK2WH6",
+    "start_time": "2026-05-09T19:18:45.344989Z",
+    "run_branch": "fabro/run/01KR72TMH9Y65KB3VB4WPK2WH6",
+    "base_sha": "010828ae7a6fe650aaa1a107cf3efed48a80e7fa"
   },
-  "status_updated_at": "2026-05-09T19:18:31.746703Z",
-  "last_event_at": "2026-05-09T19:18:44.868214Z",
+  "status": {
+    "kind": "running"
+  },
+  "status_updated_at": "2026-05-09T19:18:45.345083Z",
+  "last_event_at": "2026-05-09T19:18:47.276704Z",
   "pending_control": null,
-  "checkpoint": null,
-  "checkpoints": [],
+  "checkpoint": {
+    "timestamp": "2026-05-09T19:18:48.691310Z",
+    "current_node": "implement",
+    "completed_nodes": [
+      "start",
+      "implement"
+    ],
+    "node_retries": {},
+    "context_values": {
+      "internal.run_id": "01KR72TMH9Y65KB3VB4WPK2WH6",
+      "internal.work_dir": "/home/daytona/workspace",
+      "outcome": "succeeded",
+      "internal.thread_id": "start",
+      "failure_signature": "",
+      "thread.start.current_node": "implement",
+      "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+      "internal.node_visit_count": 1,
+      "internal.retry_count.implement": 0,
+      "graph.goal": "Create two committed sandbox changes for validating the run files commit picker",
+      "internal.retry_count.start": 0,
+      "graph.rankdir": "LR",
+      "internal.fidelity": "compact",
+      "failure_class": "",
+      "current_node": "implement"
+    },
+    "node_outcomes": {
+      "start": {
+        "status": "succeeded",
+        "usage": null
+      },
+      "implement": {
+        "status": "succeeded",
+        "context_updates": {
+          "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+        },
+        "notes": "Script completed: printf '\\nStage implement wrote this line.\\n' >> validation.txt",
+        "usage": null
+      }
+    },
+    "next_node_id": "verify",
+    "node_visits": {
+      "start": 1,
+      "implement": 1
+    }
+  },
+  "checkpoints": [
+    [
+      17,
+      {
+        "timestamp": "2026-05-09T19:18:47.276463Z",
+        "current_node": "start",
+        "completed_nodes": [
+          "start"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "internal.fidelity": "compact",
+          "current_node": "start",
+          "graph.goal": "Create two committed sandbox changes for validating the run files commit picker",
+          "graph.rankdir": "LR",
+          "failure_class": "",
+          "internal.node_visit_count": 1,
+          "internal.retry_count.start": 0,
+          "internal.thread_id": null,
+          "internal.work_dir": "/home/daytona/workspace",
+          "failure_signature": "",
+          "outcome": "succeeded",
+          "internal.run_id": "01KR72TMH9Y65KB3VB4WPK2WH6"
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          }
+        },
+        "next_node_id": "implement",
+        "node_visits": {
+          "start": 1
+        }
+      }
+    ]
+  ],
   "conclusion": null,
   "sandbox": {
     "provider": "daytona",
@@ -220,5 +305,46 @@
   "pull_request": null,
   "superseded_by": null,
   "pending_interviews": {},
-  "stages": {}
+  "stages": {
+    "implement@1": {
+      "first_event_seq": 18,
+      "prompt": null,
+      "response": null,
+      "completion": null,
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": {
+        "script": "printf '\\nStage implement wrote this line.\\n' >> validation.txt",
+        "command": "exec 2>&1\nprintf '\\nStage implement wrote this line.\\n' >> validation.txt",
+        "language": "shell"
+      },
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-09T19:18:47.276650Z",
+      "handler": "command",
+      "state": "running"
+    },
+    "start@1": {
+      "first_event_seq": 14,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-09T19:18:47.276236Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-09T19:18:47.276019Z",
+      "handler": "start",
+      "duration_ms": 0,
+      "state": "succeeded"
+    }
+  }
 }
