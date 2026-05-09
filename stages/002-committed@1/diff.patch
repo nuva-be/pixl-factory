@@ -1,0 +1,9 @@
+diff --git a/docs/internal/live-run-files-scope-committed.md b/docs/internal/live-run-files-scope-committed.md
+new file mode 100644
+index 00000000..597cbe05
+--- /dev/null
++++ b/docs/internal/live-run-files-scope-committed.md
+@@ -0,0 +1,3 @@
++Live run files scope test
++
++Committed agent node completed at 2026-05-09T17:12:37Z
