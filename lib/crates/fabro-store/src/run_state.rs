@@ -51,6 +51,10 @@ impl RunProjectionReducer for RunProjection {
         match &stored.body {
             EventBody::RunCreated(props) => {
                 let labels = props.labels.clone().into_iter().collect::<HashMap<_, _>>();
+                self.title = props
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| fabro_types::infer_run_title(props.graph.goal()));
                 self.spec = Some(RunSpec {
                     run_id,
                     settings: props.settings.clone(),
@@ -195,6 +199,9 @@ impl RunProjectionReducer for RunProjection {
                 if let Some(RunStatus::Archived { prior }) = self.status {
                     self.try_apply_status(prior.into(), ts)?;
                 }
+            }
+            EventBody::RunTitleUpdated(props) => {
+                self.title.clone_from(&props.title);
             }
             EventBody::CheckpointCompleted(props) => {
                 let checkpoint = checkpoint_from_props(props, ts);
@@ -513,6 +520,11 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> RunSummary
         .as_ref()
         .map(|spec| spec.graph.goal().to_string())
         .unwrap_or_default();
+    let title = if state.title.is_empty() {
+        fabro_types::infer_run_title(&goal)
+    } else {
+        state.title.clone()
+    };
     RunSummary::new(
         *run_id,
         workflow_name,
@@ -521,6 +533,7 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> RunSummary
             .as_ref()
             .and_then(|spec| spec.workflow_slug.clone()),
         goal,
+        title,
         state
             .spec
             .as_ref()
@@ -1672,6 +1685,97 @@ mod tests {
 
         let summary_json = serde_json::to_value(build_summary(&state, &fixtures::RUN_1)).unwrap();
         assert_eq!(summary_json["status"], json!({ "kind": "submitted" }));
+    }
+
+    #[test]
+    fn run_created_title_populates_projection_and_summary() {
+        let event = test_raw_event(
+            1,
+            "run.created",
+            &json!({
+                "title": "Explicit title",
+                "settings": WorkflowSettings::default(),
+                "graph": {
+                    "name": "test",
+                    "nodes": {},
+                    "edges": [],
+                    "attrs": { "goal": { "String": "Goal title" } }
+                },
+                "labels": {},
+                "run_dir": "/tmp/run"
+            }),
+            None,
+        );
+
+        let state = RunProjection::apply_events(&[event]).unwrap();
+        assert_eq!(state.title, "Explicit title");
+        assert_eq!(
+            build_summary(&state, &fixtures::RUN_1).title,
+            "Explicit title"
+        );
+    }
+
+    #[test]
+    fn legacy_run_created_without_title_infers_projection_title() {
+        let event = test_raw_event(
+            1,
+            "run.created",
+            &json!({
+                "settings": WorkflowSettings::default(),
+                "graph": {
+                    "name": "test",
+                    "nodes": {},
+                    "edges": [],
+                    "attrs": { "goal": { "String": "## Plan: Legacy title\n\nDetails" } }
+                },
+                "labels": {},
+                "run_dir": "/tmp/run"
+            }),
+            None,
+        );
+
+        let state = RunProjection::apply_events(&[event]).unwrap();
+        assert_eq!(state.title, "Legacy title");
+        assert_eq!(
+            build_summary(&state, &fixtures::RUN_1).title,
+            "Legacy title"
+        );
+    }
+
+    #[test]
+    fn run_title_updated_changes_projection_and_summary() {
+        let events = vec![
+            test_raw_event(
+                1,
+                "run.created",
+                &json!({
+                    "title": "Original title",
+                    "settings": WorkflowSettings::default(),
+                    "graph": {
+                        "name": "test",
+                        "nodes": {},
+                        "edges": [],
+                        "attrs": { "goal": { "String": "Goal title" } }
+                    },
+                    "labels": {},
+                    "run_dir": "/tmp/run"
+                }),
+                None,
+            ),
+            test_raw_event(
+                2,
+                "run.title.updated",
+                &json!({ "title": "Renamed title" }),
+                None,
+            ),
+        ];
+
+        let state = RunProjection::apply_events(&events).unwrap();
+        assert_eq!(state.title, "Renamed title");
+        assert_eq!(
+            build_summary(&state, &fixtures::RUN_1).title,
+            "Renamed title"
+        );
     }
 
     #[test]

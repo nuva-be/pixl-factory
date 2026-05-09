@@ -38,6 +38,7 @@ fn stage_status_from_string(status: &str) -> StageOutcome {
 fn event_body_from_event(event: &Event) -> EventBody {
     match event {
         Event::RunCreated {
+            title,
             settings,
             graph,
             workflow_source,
@@ -55,6 +56,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
             web_url,
             ..
         } => EventBody::RunCreated(fabro_types::RunCreatedProps {
+            title:            title.clone(),
             settings:         serde_json::from_value(settings.clone())
                 .expect("run.created settings"),
             graph:            serde_json::from_value(graph.clone()).expect("run.created graph"),
@@ -150,6 +152,11 @@ fn event_body_from_event(event: &Event) -> EventBody {
         }
         Event::RunUnarchived { .. } => {
             EventBody::RunUnarchived(fabro_types::RunUnarchivedProps::default())
+        }
+        Event::RunTitleUpdated { title, .. } => {
+            EventBody::RunTitleUpdated(fabro_types::RunTitleUpdatedProps {
+                title: title.clone(),
+            })
         }
         Event::WorkflowRunCompleted {
             duration_ms,
@@ -2030,6 +2037,7 @@ mod tests {
 
         let stored = to_run_event(&fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(WorkflowSettings::default()).unwrap(),
             graph:            serde_json::to_value(Graph::new("test")).unwrap(),
             workflow_source:  None,

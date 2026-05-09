@@ -31,6 +31,10 @@ export interface RunStatusResponse {
      * Unique run identifier (ULID).
      */
     'id': string;
+    /**
+     * Non-blank resolved run title.
+     */
+    'title': string;
     'status': RunStatus;
     'error'?: RunError;
     /**

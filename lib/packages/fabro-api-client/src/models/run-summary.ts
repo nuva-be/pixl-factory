@@ -37,6 +37,9 @@ export interface RunSummary {
     'workflow_name'?: string | null;
     'workflow_slug'?: string | null;
     'goal': string;
+    /**
+     * Non-blank resolved run title.
+     */
     'title': string;
     'labels': { [key: string]: string; };
     'source_directory'?: string | null;

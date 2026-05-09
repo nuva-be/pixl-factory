@@ -70,7 +70,7 @@ describe("subscribeToBoardEvents", () => {
     source.emit({ event: "run.running" });
 
     expect(created).toEqual(["/api/v1/attach"]);
-    expect(keys).toEqual([queryKeys.boards.runs()]);
+    expect(keys).toEqual([queryKeys.boards.runs(false), queryKeys.boards.runs(true)]);
 
     firstCleanup();
     expect(source.closed).toBe(false);
@@ -100,7 +100,7 @@ describe("subscribeToBoardEvents", () => {
     source.emit({ event: "run.running" });
 
     expect(created).toEqual(["/api/v1/attach"]);
-    expect(keys).toEqual([queryKeys.boards.runs()]);
+    expect(keys).toEqual([queryKeys.boards.runs(false), queryKeys.boards.runs(true)]);
 
     firstCleanup();
     expect(source.closed).toBe(false);

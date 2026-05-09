@@ -5,9 +5,9 @@ use super::super::{
     Principal, RequiredUser, Response, RewindRequest, RewindResponse, Router, RunAnswerTransport,
     RunControlAction, RunExecutionMode, RunId, RunStatus, RunStatusResponse, StartRunRequest,
     State, StatusCode, Storage, TimelineEntryResponse, WORKER_CANCEL_GRACE, WorkflowError,
-    append_control_request, get, load_pending_control, managed_run, operations, parse_run_id_path,
-    persist_cancelled_run_status, post, reject_if_archived, sleep, update_live_run_from_event,
-    workflow_event,
+    append_control_request, get, load_pending_control, load_run_title, managed_run, operations,
+    parse_run_id_path, persist_cancelled_run_status, post, reject_if_archived, sleep,
+    update_live_run_from_event, workflow_event,
 };
 
 pub(super) fn routes() -> Router<Arc<AppState>> {
@@ -130,12 +130,17 @@ async fn start_run(
         );
     }
 
+    let title = match load_run_title(state.as_ref(), &id).await {
+        Ok(title) => title,
+        Err(err) => return err.into_response(),
+    };
     let web_url = state.run_web_url(&id);
     state.scheduler_notify.notify_one();
     (
         StatusCode::OK,
         Json(RunStatusResponse {
             id: id.to_string(),
+            title,
             status: RunStatus::Queued,
             error: None,
             queue_position: None,
@@ -282,12 +287,17 @@ async fn cancel_run(
                 .into_response();
         }
     };
+    let title = match load_run_title(state.as_ref(), &id).await {
+        Ok(title) => title,
+        Err(err) => return err.into_response(),
+    };
     let web_url = state.run_web_url(&id);
 
     (
         StatusCode::OK,
         Json(RunStatusResponse {
             id: id.to_string(),
+            title,
             status: response_status,
             error: None,
             queue_position: None,
@@ -406,12 +416,17 @@ async fn pause_run(
                 .into_response();
         }
     };
+    let title = match load_run_title(state.as_ref(), &id).await {
+        Ok(title) => title,
+        Err(err) => return err.into_response(),
+    };
     let web_url = state.run_web_url(&id);
 
     (
         StatusCode::OK,
         Json(RunStatusResponse {
             id: id.to_string(),
+            title,
             status: response_status,
             error: None,
             queue_position: None,
@@ -513,12 +528,17 @@ async fn unpause_run(
                 .into_response();
         }
     };
+    let title = match load_run_title(state.as_ref(), &id).await {
+        Ok(title) => title,
+        Err(err) => return err.into_response(),
+    };
     let web_url = state.run_web_url(&id);
 
     (
         StatusCode::OK,
         Json(RunStatusResponse {
             id: id.to_string(),
+            title,
             status: response_status,
             error: None,
             queue_position: None,
@@ -760,11 +780,20 @@ async fn archive_status_response(state: &AppState, id: RunId) -> Response {
         )
         .into_response();
     };
+    let title = if projection.title.is_empty() {
+        projection.spec.as_ref().map_or_else(
+            || fabro_types::infer_run_title(""),
+            |spec| fabro_types::infer_run_title(spec.graph.goal()),
+        )
+    } else {
+        projection.title
+    };
     let web_url = state.run_web_url(&id);
     (
         StatusCode::OK,
         Json(RunStatusResponse {
             id: id.to_string(),
+            title,
             status,
             error: None,
             queue_position: None,

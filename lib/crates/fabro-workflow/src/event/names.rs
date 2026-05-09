@@ -24,6 +24,7 @@ pub fn event_name(event: &Event) -> &'static str {
         Event::RunSupersededBy { .. } => "run.superseded_by",
         Event::RunArchived { .. } => "run.archived",
         Event::RunUnarchived { .. } => "run.unarchived",
+        Event::RunTitleUpdated { .. } => "run.title.updated",
         Event::WorkflowRunCompleted { .. } => "run.completed",
         Event::WorkflowRunFailed { .. } => "run.failed",
         Event::RunNotice { .. } => "run.notice",

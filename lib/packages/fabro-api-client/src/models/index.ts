@@ -309,6 +309,7 @@ export * from './teams-integration-settings';
 export * from './terminal-status';
 export * from './timeline-entry-response';
 export * from './tls-mode';
+export * from './update-run-request';
 export * from './user-response';
 export * from './validate-response';
 export * from './webhook-strategy';

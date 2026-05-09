@@ -39,6 +39,9 @@ describe("queryKeys", () => {
       queryKeys.runs.detail("run-1"),
       queryKeys.runs.stageEvents("run-1", "stage-1"),
     ]);
+    expect(queryKeysForRunEvent("run-1", "run.title.updated")).toEqual([
+      queryKeys.runs.detail("run-1"),
+    ]);
   });
 
   test("agent activity events invalidate the per-stage events key", () => {

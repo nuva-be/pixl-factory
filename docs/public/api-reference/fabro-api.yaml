@@ -918,6 +918,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateRun
+      tags: [Runs]
+      summary: Update Run
+      description: Updates mutable run metadata. Title updates are allowed for all run states, including archived runs.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRunRequest"
+      responses:
+        "200":
+          description: Updated durable run summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunSummary"
+        "400":
+          description: Invalid title
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteRun
       tags: [Runs]
@@ -4607,6 +4645,11 @@ components:
           type: ["string", "null"]
           description: Optional pre-generated run ID to use instead of allocating a new ULID.
           example: "01HV6D7S5YF4Z4B2M7K4N0Q6T9"
+        title:
+          type: ["string", "null"]
+          maxLength: 100
+          description: Optional explicit run title. The server trims leading/trailing whitespace, rejects blank values, rejects control characters and newline characters, and requires at most 100 characters.
+          example: "Add rate limiting to auth endpoints"
         cwd:
           type: string
           description: CLI working directory at invocation time.
@@ -5076,11 +5119,24 @@ components:
           description: Resume from checkpoint instead of starting from submitted state.
           default: false
 
+    UpdateRunRequest:
+      description: Request body for updating mutable run metadata.
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          description: New run title. The server trims leading/trailing whitespace, rejects blank values, rejects control characters and newline characters, and requires at most 100 characters.
+          example: "Add rate limiting to auth endpoints"
+
     RunStatusResponse:
       description: Current status of a run with optional error and queue position.
       type: object
       required:
         - id
+        - title
         - status
         - created_at
       properties:
@@ -5088,6 +5144,10 @@ components:
           type: string
           description: Unique run identifier (ULID).
           example: 01JNQVR7M0EJ5GKAT2SC4ERS1Z
+        title:
+          type: string
+          description: Non-blank resolved run title.
+          example: Add rate limiting to auth endpoints
         status:
           $ref: "#/components/schemas/RunStatus"
         error:
@@ -6055,6 +6115,9 @@ components:
       required:
         - stages
       properties:
+        title:
+          type: string
+          description: Resolved run title from the event log.
         spec:
           oneOf:
             - $ref: "#/components/schemas/RunSpec"
@@ -6146,6 +6209,8 @@ components:
           type: string
         title:
           type: string
+          description: Non-blank resolved run title.
+          example: Add rate limiting to auth endpoints
         labels:
           type: object
           additionalProperties:
@@ -6827,7 +6892,7 @@ components:
           $ref: "#/components/schemas/RepositoryReference"
         title:
           type: string
-          description: Human-readable title describing the run's goal.
+          description: Non-blank resolved run title.
           example: Add rate limiting to auth endpoints
         status:
           $ref: "#/components/schemas/RunStatus"

@@ -16,6 +16,7 @@ fn templated_settings() -> WorkflowSettings {
 #[test]
 fn run_created_props_round_trip_templated_settings() {
     let props = RunCreatedProps {
+        title:            Some("Ship task".to_string()),
         settings:         templated_settings(),
         graph:            Graph::new("ship"),
         workflow_source:  Some("digraph Ship { start -> exit }".to_string()),
@@ -75,6 +76,7 @@ fn run_created_props_round_trip_templated_settings() {
 #[test]
 fn run_created_props_omits_web_url_when_absent() {
     let props = RunCreatedProps {
+        title:            None,
         settings:         WorkflowSettings::default(),
         graph:            Graph::new("ship"),
         workflow_source:  None,

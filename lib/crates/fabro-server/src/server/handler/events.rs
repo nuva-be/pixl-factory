@@ -386,6 +386,7 @@ fn denied_lifecycle_event_name(body: &EventBody) -> Option<&'static str> {
     match body {
         EventBody::RunArchived(_) => Some("run.archived"),
         EventBody::RunUnarchived(_) => Some("run.unarchived"),
+        EventBody::RunTitleUpdated(_) => Some("run.title.updated"),
         EventBody::RunCancelRequested(_) => Some("run.cancel.requested"),
         EventBody::RunPauseRequested(_) => Some("run.pause.requested"),
         EventBody::RunUnpauseRequested(_) => Some("run.unpause.requested"),

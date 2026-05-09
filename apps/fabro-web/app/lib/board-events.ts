@@ -34,6 +34,7 @@ const BOARD_STATUS_EVENTS = new Set([
   "run.failed",
   "run.archived",
   "run.unarchived",
+  "run.title.updated",
   "interview.started",
   "interview.completed",
   "interview.timeout",
@@ -57,7 +58,7 @@ export function subscribeToBoardEvents(
     subscriptionKey: BOARD_SUBSCRIPTION_KEY,
     mutate,
     debounceMs,
-    resyncKeys: () => [queryKeys.boards.runs()],
+    resyncKeys: () => boardRunKeys(),
     resolveInvalidation: boardInvalidation,
     fallbackSubscribe: () =>
       subscribeToSharedEventSource<EventPayload>({
@@ -75,9 +76,13 @@ export function subscribeToBoardEvents(
 function boardInvalidation(payload: EventPayload) {
   return {
     keys: payload.event && shouldRefreshBoardForEvent(payload.event)
-      ? [queryKeys.boards.runs()]
+      ? boardRunKeys()
       : [],
   };
+}
+
+function boardRunKeys() {
+  return [queryKeys.boards.runs(false), queryKeys.boards.runs(true)];
 }
 
 export function useBoardEvents() {

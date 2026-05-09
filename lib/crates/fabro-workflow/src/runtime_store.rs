@@ -160,6 +160,7 @@ mod tests {
         let record = test_run_spec();
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(&record.settings).unwrap(),
             graph:            serde_json::to_value(&record.graph).unwrap(),
             workflow_source:  Some("digraph test {}".to_string()),

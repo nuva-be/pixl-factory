@@ -12,6 +12,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use bytes::Bytes;
 use fabro_api::types::{
     BoardColumn, BoardColumnDefinition, RunManifest, RunStatusResponse, SubmitAnswerRequest,
+    UpdateRunRequest,
 };
 use fabro_config::Storage;
 use fabro_interview::AnswerSubmission;
@@ -29,8 +30,8 @@ use tracing::info;
 use super::super::{
     AppState, ListResponse, MAX_PAGE_OFFSET, PaginationParams, RunExecutionMode,
     answer_from_request, api_question_from_pending_interview, default_page_limit,
-    delete_run_internal, load_pending_interview, managed_run, parse_run_id_path,
-    reject_if_archived, resolve_interp_string, submit_pending_interview_answer,
+    delete_run_internal, load_pending_interview, load_run_title, managed_run, parse_run_id_path,
+    reject_if_archived, resolve_interp_string, submit_pending_interview_answer, workflow_event,
 };
 use crate::error::ApiError;
 use crate::principal_middleware::{
@@ -51,7 +52,10 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
         .route("/runs", get(list_runs).post(create_run))
         .route("/runs/resolve", get(resolve_run))
         .route("/boards/runs", get(list_board_runs))
-        .route("/runs/{id}", get(get_run_status).delete(delete_run))
+        .route(
+            "/runs/{id}",
+            get(get_run_status).patch(update_run).delete(delete_run),
+        )
         .route("/runs/{id}/questions", get(get_questions))
         .route("/runs/{id}/questions/{qid}/answer", post(submit_answer))
         .route("/runs/{id}/state", get(get_run_state))
@@ -400,6 +404,62 @@ async fn delete_run(
     }
 }
 
+async fn update_run(
+    subject: RequiredUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Response {
+    let id = match parse_run_id_path(&id) {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+    let request = match serde_json::from_slice::<UpdateRunRequest>(&body) {
+        Ok(request) => request,
+        Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
+    };
+    let title = match fabro_types::normalize_explicit_run_title(request.title.as_str()) {
+        Ok(title) => title,
+        Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
+    };
+    let current = match state.store.get_cached_summary(&id).await {
+        Ok(Some(summary)) => summary,
+        Ok(None) => return ApiError::not_found("Run not found.").into_response(),
+        Err(err) => {
+            return ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                .into_response();
+        }
+    };
+    if current.title == title {
+        return (StatusCode::OK, Json(current)).into_response();
+    }
+
+    let run_store = match state.store.open_run(&id).await {
+        Ok(run_store) => run_store,
+        Err(err) => {
+            return ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                .into_response();
+        }
+    };
+    if let Err(err) =
+        workflow_event::append_event(&run_store, &id, &workflow_event::Event::RunTitleUpdated {
+            title,
+            actor: Some(Principal::User(subject.0)),
+        })
+        .await
+    {
+        return ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
+    }
+
+    match state.store.get_cached_summary(&id).await {
+        Ok(Some(summary)) => (StatusCode::OK, Json(summary)).into_response(),
+        Ok(None) => ApiError::not_found("Run not found.").into_response(),
+        Err(err) => {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
+        }
+    }
+}
+
 async fn create_run(
     RequestAuth(auth_slot): RequestAuth,
     State(state): State<Arc<AppState>>,
@@ -460,6 +520,10 @@ async fn create_run(
         }
     };
     let created_at = created.run_id.created_at();
+    let title = match load_run_title(state.as_ref(), &created.run_id).await {
+        Ok(title) => title,
+        Err(err) => return err.into_response(),
+    };
 
     {
         let mut runs = state.runs.lock().expect("runs lock poisoned");
@@ -479,6 +543,7 @@ async fn create_run(
         StatusCode::CREATED,
         Json(RunStatusResponse {
             id: run_id.to_string(),
+            title,
             status: RunStatus::Submitted,
             error: None,
             queue_position: None,

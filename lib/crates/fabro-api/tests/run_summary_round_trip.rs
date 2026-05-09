@@ -26,6 +26,7 @@ fn run_summary_json_matches_openapi_shape() {
         Some("workflow".to_string()),
         Some("workflow".to_string()),
         String::new(),
+        "API title".to_string(),
         HashMap::from([("team".to_string(), "core".to_string())]),
         Some("/tmp/fabro".to_string()),
         false,
@@ -64,7 +65,7 @@ fn run_summary_json_matches_openapi_shape() {
             "workflow_name": "workflow",
             "workflow_slug": "workflow",
             "goal": "",
-            "title": "",
+            "title": "API title",
             "labels": {
                 "team": "core"
             },

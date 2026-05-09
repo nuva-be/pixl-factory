@@ -161,6 +161,7 @@ mod tests {
         let run_store = store.create_run(&record.run_id).await.unwrap();
         append_event(&run_store, &record.run_id, &Event::RunCreated {
             run_id:           record.run_id,
+            title:            None,
             settings:         serde_json::to_value(&record.settings).unwrap(),
             graph:            serde_json::to_value(&record.graph).unwrap(),
             workflow_source:  source.map(ToOwned::to_owned),

@@ -23,6 +23,7 @@ fn run_status_response(run_id: &str, status: &str) -> serde_json::Value {
     serde_json::json!({
         "id": run_id,
         "status": status,
+        "title": "Test run",
         "created_at": "2026-04-05T12:00:00Z"
     })
 }

@@ -11,6 +11,8 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunCreatedProps {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title:            Option<String>,
     pub settings:         WorkflowSettings,
     pub graph:            Graph,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -110,6 +112,11 @@ pub struct RunSupersededByProps {
     pub target_checkpoint_ordinal: usize,
     pub target_node_id:            String,
     pub target_visit:              usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunTitleUpdatedProps {
+    pub title: String,
 }
 
 #[allow(

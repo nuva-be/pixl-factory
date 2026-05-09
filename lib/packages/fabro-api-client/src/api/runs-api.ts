@@ -64,6 +64,8 @@ import type { StartRunRequest } from '../models';
 // @ts-ignore
 import type { TimelineEntryResponse } from '../models';
 // @ts-ignore
+import type { UpdateRunRequest } from '../models';
+// @ts-ignore
 import type { ValidateResponse } from '../models';
 /**
  * RunsApi - axios parameter creator
@@ -1048,6 +1050,51 @@ export const RunsApiAxiosParamCreator = function (configuration?: Configuration)
             };
         },
         /**
+         * Updates mutable run metadata. Title updates are allowed for all run states, including archived runs.
+         * @summary Update Run
+         * @param {string} id Unique run identifier (ULID).
+         * @param {UpdateRunRequest} updateRunRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateRun: async (id: string, updateRunRequest: UpdateRunRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('updateRun', 'id', id)
+            // verify required parameter 'updateRunRequest' is not null or undefined
+            assertParamExists('updateRun', 'updateRunRequest', updateRunRequest)
+            const localVarPath = `/api/v1/runs/{id}`
+                .replace(`{${"id"}}`, encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PATCH', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication SessionCookie required
+
+            // authentication BearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(updateRunRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Validates workflow structure and diagnostics without runtime readiness checks.
          * @summary Validate Workflow Manifest
          * @param {RunManifest} runManifest 
@@ -1408,6 +1455,20 @@ export const RunsApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Updates mutable run metadata. Title updates are allowed for all run states, including archived runs.
+         * @summary Update Run
+         * @param {string} id Unique run identifier (ULID).
+         * @param {UpdateRunRequest} updateRunRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async updateRun(id: string, updateRunRequest: UpdateRunRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<RunSummary>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updateRun(id, updateRunRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['RunsApi.updateRun']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * Validates workflow structure and diagnostics without runtime readiness checks.
          * @summary Validate Workflow Manifest
          * @param {RunManifest} runManifest 
@@ -1669,6 +1730,17 @@ export const RunsApiFactory = function (configuration?: Configuration, basePath?
          */
         unpauseRun(id: string, options?: RawAxiosRequestConfig): AxiosPromise<RunStatusResponse> {
             return localVarFp.unpauseRun(id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Updates mutable run metadata. Title updates are allowed for all run states, including archived runs.
+         * @summary Update Run
+         * @param {string} id Unique run identifier (ULID).
+         * @param {UpdateRunRequest} updateRunRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateRun(id: string, updateRunRequest: UpdateRunRequest, options?: RawAxiosRequestConfig): AxiosPromise<RunSummary> {
+            return localVarFp.updateRun(id, updateRunRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * Validates workflow structure and diagnostics without runtime readiness checks.
@@ -1949,6 +2021,18 @@ export class RunsApi extends BaseAPI {
      */
     public unpauseRun(id: string, options?: RawAxiosRequestConfig) {
         return RunsApiFp(this.configuration).unpauseRun(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Updates mutable run metadata. Title updates are allowed for all run states, including archived runs.
+     * @summary Update Run
+     * @param {string} id Unique run identifier (ULID).
+     * @param {UpdateRunRequest} updateRunRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public updateRun(id: string, updateRunRequest: UpdateRunRequest, options?: RawAxiosRequestConfig) {
+        return RunsApiFp(this.configuration).updateRun(id, updateRunRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

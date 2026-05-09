@@ -20,6 +20,7 @@ use crate::outcome::{BilledModelUsage, FailureDetail, Outcome};
 pub enum Event {
     RunCreated {
         run_id:           RunId,
+        title:            Option<String>,
         settings:         serde_json::Value,
         graph:            serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,6 +108,11 @@ pub enum Event {
         actor: Option<Principal>,
     },
     RunUnarchived {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor: Option<Principal>,
+    },
+    RunTitleUpdated {
+        title: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         actor: Option<Principal>,
     },
@@ -753,6 +759,9 @@ impl Event {
             }
             Self::RunUnarchived { actor } => {
                 info!(?actor, "Run unarchived");
+            }
+            Self::RunTitleUpdated { title, actor } => {
+                info!(title, ?actor, "Run title updated");
             }
             Self::WorkflowRunCompleted {
                 duration_ms,

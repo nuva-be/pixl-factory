@@ -160,6 +160,7 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
             git,
             goal,
             run_id: input.run_id.map(|run_id| run_id.to_string()),
+            title: None,
             target: types::ManifestTarget {
                 identifier: input.workflow.display().to_string(),
                 path:       target_key,

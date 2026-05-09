@@ -168,6 +168,7 @@ async fn persist_forked_run(
 
     event::append_event(&run_store, &spec.run_id, &Event::RunCreated {
         run_id:           spec.run_id,
+        title:            None,
         settings:         serde_json::to_value(&spec.settings)
             .map_err(|err| Error::engine(err.to_string()))?,
         graph:            serde_json::to_value(&spec.graph)
@@ -344,6 +345,7 @@ mod tests {
 
         event::append_event(&source, &source_run_id, &Event::RunCreated {
             run_id:           source_run_id,
+            title:            None,
             settings:         serde_json::to_value(&settings).unwrap(),
             graph:            serde_json::to_value(&graph).unwrap(),
             workflow_source:  Some("digraph fork_source {}".to_string()),

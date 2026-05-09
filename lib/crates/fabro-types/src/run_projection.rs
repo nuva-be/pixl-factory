@@ -12,6 +12,8 @@ use crate::{
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct RunProjection {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title:              String,
     pub spec:               Option<RunSpec>,
     pub graph_source:       Option<String>,
     pub start:              Option<StartRecord>,

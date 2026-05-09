@@ -88,6 +88,8 @@ pub enum EventBody {
     RunArchived(RunArchivedProps),
     #[serde(rename = "run.unarchived")]
     RunUnarchived(RunUnarchivedProps),
+    #[serde(rename = "run.title.updated")]
+    RunTitleUpdated(RunTitleUpdatedProps),
     #[serde(rename = "run.completed")]
     RunCompleted(RunCompletedProps),
     #[serde(rename = "run.failed")]
@@ -381,6 +383,7 @@ impl EventBody {
             Self::RunSupersededBy(_) => "run.superseded_by",
             Self::RunArchived(_) => "run.archived",
             Self::RunUnarchived(_) => "run.unarchived",
+            Self::RunTitleUpdated(_) => "run.title.updated",
             Self::RunCompleted(_) => "run.completed",
             Self::RunFailed(_) => "run.failed",
             Self::RunNotice(_) => "run.notice",

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use fabro_util::text::strip_goal_decoration;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -57,6 +56,7 @@ impl RunSummary {
         workflow_name: Option<String>,
         workflow_slug: Option<String>,
         goal: String,
+        title: String,
         labels: HashMap<String, String>,
         source_directory: Option<String>,
         in_place: bool,
@@ -71,7 +71,6 @@ impl RunSummary {
         diff_summary: Option<DiffSummary>,
         pull_request: Option<PullRequestRecord>,
     ) -> Self {
-        let title = truncate_goal(&goal);
         let repository = RepositoryReference {
             name: repository_name(repo_origin_url.as_deref(), source_directory.as_deref()),
         };
@@ -102,19 +101,6 @@ impl RunSummary {
             pull_request,
         }
     }
-}
-
-fn truncate_goal(goal: &str) -> String {
-    const MAX_LEN: usize = 100;
-
-    let stripped = strip_goal_decoration(goal);
-    let char_count = stripped.chars().count();
-    if char_count <= MAX_LEN {
-        return stripped.to_string();
-    }
-
-    let truncated: String = stripped.chars().take(MAX_LEN - 3).collect();
-    format!("{truncated}...")
 }
 
 fn repository_name(repo_origin_url: Option<&str>, source_directory: Option<&str>) -> String {
@@ -183,6 +169,7 @@ mod tests {
             Some("workflow".to_string()),
             Some("workflow".to_string()),
             "ship it".to_string(),
+            "Production title".to_string(),
             HashMap::from([("team".to_string(), "core".to_string())]),
             Some("/Users/client/local-checkout".to_string()),
             false,
@@ -200,7 +187,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(summary.title, "ship it");
+        assert_eq!(summary.title, "Production title");
         assert_eq!(summary.repository, RepositoryReference {
             name: "fabro-sh/fabro".to_string(),
         });
@@ -300,6 +287,7 @@ mod tests {
             None,
             None,
             "ship it".to_string(),
+            "ship it".to_string(),
             HashMap::new(),
             Some("/Users/client/local-checkout".to_string()),
             false,
@@ -321,6 +309,7 @@ mod tests {
             fixtures::RUN_1,
             None,
             None,
+            "ship it".to_string(),
             "ship it".to_string(),
             HashMap::new(),
             None,

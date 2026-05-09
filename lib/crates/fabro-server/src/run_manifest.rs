@@ -51,6 +51,7 @@ pub(crate) struct PreparedManifest {
     pub git:              Option<types::GitContext>,
     pub root_source:      String,
     pub run_id:           Option<RunId>,
+    pub title:            Option<String>,
     pub settings:         WorkflowSettings,
     pub target_path:      ManifestPath,
     pub workflow_bundle:  WorkflowBundle,
@@ -129,6 +130,11 @@ pub(crate) fn prepare_manifest(
     if let Some(goal) = manifest.goal.as_ref() {
         settings.run.goal = Some(RunGoal::Inline(InterpString::parse(&goal.text)));
     }
+    let title = manifest
+        .title
+        .as_ref()
+        .map(|title| fabro_types::normalize_explicit_run_title(title.as_str()))
+        .transpose()?;
 
     let in_place = settings.run.sandbox.provider == "local"
         && settings.run.sandbox.local.worktree_mode == WorktreeMode::Never;
@@ -143,6 +149,7 @@ pub(crate) fn prepare_manifest(
             .map(str::parse::<RunId>)
             .transpose()
             .context("invalid run ID")?,
+        title,
         settings: settings.clone(),
         target_path,
         workflow_bundle,
@@ -177,6 +184,7 @@ pub(crate) fn create_run_input(
         workflow_bundle: Some(prepared.workflow_bundle),
         submitted_manifest_bytes: None,
         run_id: prepared.run_id,
+        title: prepared.title,
         git: prepared.git,
         fork_source_ref: None,
         in_place: prepared.in_place,
@@ -1352,6 +1360,7 @@ mod tests {
             git:       None,
             goal:      None,
             run_id:    None,
+            title:     None,
             target:    types::ManifestTarget {
                 identifier: "workflow.fabro".to_string(),
                 path:       "workflow.fabro".to_string(),

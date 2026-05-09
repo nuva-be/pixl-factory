@@ -23,6 +23,7 @@ pub mod run_event;
 pub mod run_id;
 pub mod run_projection;
 pub mod run_summary;
+pub mod run_title;
 pub mod sandbox_record;
 pub mod secret;
 pub mod settings;
@@ -73,6 +74,7 @@ pub use run_event::{
 pub use run_id::{RunId, fixtures};
 pub use run_projection::{PendingInterviewRecord, RunProjection, StageProjection, first_event_seq};
 pub use run_summary::RunSummary;
+pub use run_title::{RunTitleError, infer_run_title, normalize_explicit_run_title};
 pub use sandbox_record::SandboxRecord;
 pub use secret::{SecretMetadata, SecretType};
 pub use stage_completion::StageCompletion;

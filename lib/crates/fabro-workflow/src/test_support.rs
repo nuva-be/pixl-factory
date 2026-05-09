@@ -107,6 +107,7 @@ async fn initialized(
     let run_store = inner_store;
     append_event(&run_store, &run_options.run_id, &Event::RunCreated {
         run_id:           run_options.run_id,
+        title:            None,
         settings:         serde_json::to_value(&run_options.settings)
             .expect("failed to serialize settings"),
         graph:            serde_json::to_value(graph).expect("failed to serialize graph"),

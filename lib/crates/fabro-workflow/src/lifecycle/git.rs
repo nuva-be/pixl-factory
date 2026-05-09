@@ -708,6 +708,7 @@ mod tests {
         let run_store = store.create_run(&run_id).await.unwrap();
         append_event(&run_store, &run_id, &Event::RunCreated {
             run_id,
+            title: None,
             settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
             graph: serde_json::to_value(fabro_types::Graph::new("metadata")).unwrap(),
             workflow_source: None,

@@ -255,6 +255,7 @@ fn archive_resolves_selector_via_server_endpoint() {
                     "error": null,
                     "queue_position": null,
                     "pending_control": null,
+                    "title": "Nightly run",
                     "created_at": "2026-04-05T12:00:00Z"
                 })
                 .to_string(),

@@ -48,7 +48,7 @@ export interface RunListItem {
     'goal': string;
     'repository': RepositoryReference;
     /**
-     * Human-readable title describing the run\'s goal.
+     * Non-blank resolved run title.
      */
     'title': string;
     'status': RunStatus;

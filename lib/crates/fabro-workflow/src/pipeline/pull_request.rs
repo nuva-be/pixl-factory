@@ -1044,6 +1044,7 @@ mod tests {
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(&run_spec.settings).unwrap(),
             graph:            serde_json::to_value(&run_spec.graph).unwrap(),
             workflow_source:  Some("digraph test { plan -> code }".to_string()),
@@ -1110,6 +1111,7 @@ mod tests {
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(&run_spec.settings).unwrap(),
             graph:            serde_json::to_value(&run_spec.graph).unwrap(),
             workflow_source:  Some("digraph test { plan -> code }".to_string()),
@@ -1459,6 +1461,7 @@ mod tests {
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(&run_spec.settings).unwrap(),
             graph:            serde_json::to_value(&run_spec.graph).unwrap(),
             workflow_source:  None,
@@ -1570,6 +1573,7 @@ mod tests {
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(&run_spec.settings).unwrap(),
             graph:            serde_json::to_value(&run_spec.graph).unwrap(),
             workflow_source:  Some("digraph test { plan -> code }".to_string()),
@@ -1739,6 +1743,7 @@ mod tests {
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
+            title:            None,
             settings:         serde_json::to_value(&run_spec.settings).unwrap(),
             graph:            serde_json::to_value(&run_spec.graph).unwrap(),
             workflow_source:  None,

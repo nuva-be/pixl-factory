@@ -67,6 +67,7 @@ fn stored_event_fields_for_variant(event: &Event) -> StoredEventFields {
         | Event::RunSteer { actor, .. }
         | Event::RunArchived { actor }
         | Event::RunUnarchived { actor, .. }
+        | Event::RunTitleUpdated { actor, .. }
         | Event::InterviewCompleted { actor, .. }
         | Event::AgentSteerBuffered { actor, .. } => StoredEventFields {
             actor: actor.clone(),

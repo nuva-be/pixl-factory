@@ -46,6 +46,7 @@ const RUN_SUMMARY_EVENTS = new Set([
   "run.unblocked",
   "run.archived",
   "run.unarchived",
+  "run.title.updated",
 ]);
 const STAGE_EVENTS = new Set([
   "stage.started",

@@ -42,6 +42,7 @@ pub struct CreateRunInput {
     pub workflow_bundle: Option<WorkflowBundle>,
     pub submitted_manifest_bytes: Option<Vec<u8>>,
     pub run_id: Option<RunId>,
+    pub title: Option<String>,
     pub git: Option<GitContext>,
     pub fork_source_ref: Option<ForkSourceRef>,
     pub in_place: bool,
@@ -102,6 +103,7 @@ pub async fn create(
         workflow_bundle,
         submitted_manifest_bytes,
         run_id,
+        title,
         git,
         fork_source_ref,
         in_place,
@@ -164,6 +166,7 @@ pub async fn create(
         workflow_config,
         submitted_manifest_bytes.as_deref(),
         accepted_definition.as_ref(),
+        title,
         web_url,
     )
     .await?;
@@ -183,6 +186,7 @@ async fn persist_created_run(
     workflow_config: Option<String>,
     submitted_manifest_bytes: Option<&[u8]>,
     accepted_definition: Option<&RunDefinition>,
+    explicit_title: Option<String>,
     web_url: Option<String>,
 ) -> Result<(), Error> {
     let record = persisted.run_spec();
@@ -207,10 +211,12 @@ async fn persist_created_run(
         None => None,
     };
 
+    let title = explicit_title.unwrap_or_else(|| fabro_types::infer_run_title(record.graph.goal()));
     let stored = to_run_event_at(
         &record.run_id,
         &Event::RunCreated {
             run_id: record.run_id,
+            title: Some(title),
             settings: normalize_json_value(
                 serde_json::to_value(&record.settings)
                     .map_err(|err| Error::engine(err.to_string()))?,
@@ -713,6 +719,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: None,
+                title: None,
                 git: None,
                 fork_source_ref: None,
                 in_place: false,
@@ -757,6 +764,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: None,
+                title: None,
                 git: None,
                 fork_source_ref: None,
                 in_place: false,
@@ -817,6 +825,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_1),
+                title: None,
                 git: Some(fabro_types::GitContext {
                     origin_url:   String::new(),
                     branch:       "main".to_string(),
@@ -932,6 +941,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_2),
+                title: None,
                 git: None,
                 fork_source_ref: None,
                 in_place: false,
@@ -969,6 +979,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_2),
+                title: None,
                 git: Some(fabro_types::GitContext {
                     origin_url:   "https://github.com/acme/widgets".to_string(),
                     branch:       String::new(),
@@ -1040,6 +1051,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_3),
+                title: None,
                 git: None,
                 fork_source_ref: None,
                 in_place: false,
@@ -1084,6 +1096,7 @@ mod tests {
                 workflow_bundle: None,
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_64),
+                title: None,
                 git: None,
                 fork_source_ref: None,
                 in_place: false,

@@ -2465,6 +2465,7 @@ async fn list_run_stages_distinguishes_visits() {
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::RunCreated {
             run_id,
+            title: None,
             settings: serde_json::to_value(fabro_types::WorkflowSettings::default()).unwrap(),
             graph: serde_json::to_value(&graph).unwrap(),
             workflow_source: None,
@@ -3394,6 +3395,7 @@ async fn create_completed_run_ready_for_pull_request(
     create_durable_run_with_events(state, run_id, &[
         workflow_event::Event::RunCreated {
             run_id,
+            title: None,
             settings: serde_json::to_value(&run_spec.settings).unwrap(),
             graph: serde_json::to_value(&run_spec.graph).unwrap(),
             workflow_source: None,
@@ -6369,6 +6371,62 @@ async fn create_run_returns_submitted() {
     let response = app.oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::CREATED).await;
     assert_eq!(body["status"]["kind"], "submitted");
+    assert_eq!(body["title"], "Test");
+}
+
+#[tokio::test]
+async fn create_run_accepts_explicit_title() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let mut manifest = minimal_manifest_json(MINIMAL_DOT);
+    manifest["title"] = json!("  Explicit server title  ");
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/runs"))
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_string(&manifest).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::CREATED).await;
+    assert_eq!(body["title"], "Explicit server title");
+
+    let run_id = body["id"].as_str().unwrap();
+    let detail_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let detail = response_json!(detail_response, StatusCode::OK).await;
+    assert_eq!(detail["title"], "Explicit server title");
+}
+
+#[tokio::test]
+async fn create_run_rejects_invalid_titles() {
+    let app = test_app_with();
+    for title in [
+        "   ".to_string(),
+        "First\nSecond".to_string(),
+        "x".repeat(101),
+    ] {
+        let mut manifest = minimal_manifest_json(MINIMAL_DOT);
+        manifest["title"] = json!(title);
+        let req = Request::builder()
+            .method("POST")
+            .uri(api("/runs"))
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&manifest).unwrap()))
+            .unwrap();
+
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_status!(response, StatusCode::BAD_REQUEST).await;
+    }
 }
 
 #[tokio::test]
@@ -6396,6 +6454,7 @@ async fn start_run_transitions_to_queued() {
     let response = app.oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::OK).await;
     assert_eq!(body["status"]["kind"], "queued");
+    assert_eq!(body["title"], "Test");
 
     let status = state
         .store
@@ -6408,6 +6467,142 @@ async fn start_run_transitions_to_queued() {
         .status
         .unwrap();
     assert_eq!(status, RunStatus::Queued);
+}
+
+#[tokio::test]
+async fn patch_run_title_updates_active_and_archived_runs() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = create_run(&app, MINIMAL_DOT)
+        .await
+        .parse::<RunId>()
+        .unwrap();
+
+    let patch_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(api(&format!("/runs/{run_id}")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "title": "  Active title  " }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let patch_body = response_json!(patch_response, StatusCode::OK).await;
+    assert_eq!(patch_body["title"], "Active title");
+
+    let run_store = state.store.open_run_reader(&run_id).await.unwrap();
+    let event_count = run_store.list_events().await.unwrap().len();
+    let same_title_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(api(&format!("/runs/{run_id}")))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "title": "Active title" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let same_title_body = response_json!(same_title_response, StatusCode::OK).await;
+    assert_eq!(same_title_body["title"], "Active title");
+    assert_eq!(
+        state
+            .store
+            .open_run_reader(&run_id)
+            .await
+            .unwrap()
+            .list_events()
+            .await
+            .unwrap()
+            .len(),
+        event_count,
+        "same-title PATCH should not append an event"
+    );
+
+    let run_store = state.store.open_run(&run_id).await.unwrap();
+    for event in [
+        workflow_event::Event::RunQueued,
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+    ] {
+        workflow_event::append_event(&run_store, &run_id, &event)
+            .await
+            .unwrap();
+    }
+    workflow_event::append_event(
+        &run_store,
+        &run_id,
+        &workflow_event::Event::WorkflowRunCompleted {
+            duration_ms:          1,
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    )
+    .await
+    .unwrap();
+    response_json!(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(api(&format!("/runs/{run_id}/archive")))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+        StatusCode::OK
+    )
+    .await;
+
+    let archived_patch_response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(api(&format!("/runs/{run_id}")))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "title": "Archived title" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let archived_patch_body = response_json!(archived_patch_response, StatusCode::OK).await;
+    assert_eq!(archived_patch_body["title"], "Archived title");
+    assert_eq!(archived_patch_body["status"]["kind"], "archived");
+}
+
+#[tokio::test]
+async fn patch_run_title_rejects_invalid_titles() {
+    let app = test_app_with();
+    let run_id = create_run(&app, MINIMAL_DOT).await;
+
+    for title in [String::new(), "Bad\rTitle".to_string(), "x".repeat(101)] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(api(&format!("/runs/{run_id}")))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "title": title }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_status!(response, StatusCode::BAD_REQUEST).await;
+    }
 }
 
 #[tokio::test]
@@ -7255,6 +7450,7 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::RunCreated {
             run_id,
+            title: None,
             settings: serde_json::to_value(settings).unwrap(),
             graph: serde_json::to_value(graph).unwrap(),
             workflow_source: None,
@@ -7319,6 +7515,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::RunCreated {
             run_id,
+            title: None,
             settings: serde_json::to_value(fabro_types::WorkflowSettings::default()).unwrap(),
             graph: serde_json::to_value(graph).unwrap(),
             workflow_source: None,

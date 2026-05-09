@@ -42,6 +42,10 @@ import type { StageProjection } from './stage-projection';
  * Raw internal run projection derived from the event log.
  */
 export interface RunProjection {
+    /**
+     * Resolved run title from the event log.
+     */
+    'title'?: string;
     'spec'?: RunSpec | null;
     'graph_source'?: string | null;
     'start'?: { [key: string]: any; } | null;

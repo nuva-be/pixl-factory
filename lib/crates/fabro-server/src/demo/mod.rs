@@ -931,6 +931,7 @@ mod runs {
             Some(workflow_name.into()),
             Some(workflow_slug.into()),
             goal.into(),
+            fabro_types::infer_run_title(goal),
             labels(entries),
             Some(format!("/demo/{repo_name}")),
             false,
