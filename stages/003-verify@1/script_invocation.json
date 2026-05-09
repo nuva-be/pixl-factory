@@ -1,0 +1,5 @@
+{
+  "script": "printf 'Stage verify wrote this line.\\n' >> validation.txt",
+  "command": "exec 2>&1\nprintf 'Stage verify wrote this line.\\n' >> validation.txt",
+  "language": "shell"
+}

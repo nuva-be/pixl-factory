@@ -1,0 +1,8 @@
+diff --git a/validation.txt b/validation.txt
+new file mode 100644
+index 00000000..f2a0dc38
+--- /dev/null
++++ b/validation.txt
+@@ -0,0 +1,2 @@
++
++Stage implement wrote this line.
