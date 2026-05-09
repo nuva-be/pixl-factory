@@ -1,5 +1,5 @@
 use fabro_types::settings::cli::OutputFormat;
-use fabro_types::settings::run::{ApprovalMode, RunMode, WorktreeMode};
+use fabro_types::settings::run::{ApprovalMode, RunMode};
 use fabro_types::settings::server::ObjectStoreProvider;
 
 use crate::{Combine, ServerSettingsBuilder, SettingsLayer, WorkflowSettingsBuilder};
@@ -75,15 +75,6 @@ fn apply_builtin_defaults_materializes_expected_layer() {
             .and_then(|run| run.execution.as_ref())
             .and_then(|execution| execution.approval),
         Some(ApprovalMode::Prompt)
-    );
-    assert_eq!(
-        layer
-            .run
-            .as_ref()
-            .and_then(|run| run.sandbox.as_ref())
-            .and_then(|sandbox| sandbox.local.as_ref())
-            .and_then(|local| local.worktree_mode),
-        Some(WorktreeMode::Always)
     );
     assert_eq!(
         layer

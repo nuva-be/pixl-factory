@@ -875,8 +875,8 @@ mod runs {
 
     use fabro_api::types::*;
     use fabro_types::settings::run::{
-        DaytonaSettings, DaytonaSnapshotSettings, LocalSandboxSettings, RunGoal, RunModelSettings,
-        RunNamespace, RunPrepareSettings, RunSandboxSettings,
+        DaytonaSettings, DaytonaSnapshotSettings, RunGoal, RunModelSettings, RunNamespace,
+        RunPrepareSettings, RunSandboxSettings,
     };
     use fabro_types::settings::{InterpString, ProjectNamespace, WorkflowNamespace};
     use fabro_types::{RunId, StageId, WorkflowSettings};
@@ -933,7 +933,6 @@ mod runs {
             goal.into(),
             labels(entries),
             Some(format!("/demo/{repo_name}")),
-            false,
             Some(format!("https://github.com/demo/{repo_name}.git")),
             Some(created_at),
             Some(created_at),
@@ -1022,7 +1021,6 @@ mod runs {
             elapsed_secs: summary.elapsed_secs,
             goal: summary.goal,
             source_directory: summary.source_directory,
-            in_place: Some(summary.in_place),
             repo_origin_url: summary.repo_origin_url,
             labels: summary.labels,
             pending_control: summary.pending_control,
@@ -1657,7 +1655,6 @@ mod runs {
                     stop_on_terminal: true,
                     devcontainer:     false,
                     env:              HashMap::new(),
-                    local:            LocalSandboxSettings::default(),
                     docker:           None,
                     daytona:          Some(DaytonaSettings {
                         auto_stop_interval: Some(60),

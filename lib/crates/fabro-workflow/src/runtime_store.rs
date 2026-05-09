@@ -150,7 +150,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         }
     }
 
@@ -173,7 +172,6 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await

@@ -69,7 +69,6 @@ function sampleSettings({
         stop_on_terminal: true,
         devcontainer: true,
         env: {},
-        local: { worktree_mode: "dirty" },
         docker: null,
         daytona: {
           auto_stop_interval: autoStopInterval,

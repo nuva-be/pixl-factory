@@ -4783,11 +4783,6 @@ components:
           type: boolean
         preserve_sandbox:
           type: boolean
-        worktree_mode:
-          type: string
-          description: |
-            Override `run.sandbox.local.worktree_mode` (e.g. `never` for
-            `--in-place`).
         label:
           type: array
           items:
@@ -6013,7 +6008,6 @@ components:
         - run_id
         - settings
         - graph
-        - in_place
       properties:
         run_id:
           type: string
@@ -6046,8 +6040,6 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ForkSourceRef"
             - type: "null"
-        in_place:
-          type: boolean
 
     RunProjection:
       description: Raw internal run projection derived from the event log.
@@ -6152,8 +6144,6 @@ components:
             type: string
         source_directory:
           type: ["string", "null"]
-        in_place:
-          type: boolean
         repo_origin_url:
           type: ["string", "null"]
         repository:
@@ -6837,8 +6827,6 @@ components:
             type: string
         source_directory:
           type: ["string", "null"]
-        in_place:
-          type: boolean
         repo_origin_url:
           type: ["string", "null"]
         start_time:
@@ -8104,7 +8092,7 @@ components:
 
     RunSandboxSettings:
       type: object
-      required: [provider, preserve, stop_on_terminal, devcontainer, env, local, docker, daytona]
+      required: [provider, preserve, stop_on_terminal, devcontainer, env, docker, daytona]
       properties:
         provider:
           type: string
@@ -8118,8 +8106,6 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/InterpString"
-        local:
-          $ref: "#/components/schemas/LocalSandboxSettings"
         docker:
           oneOf:
             - $ref: "#/components/schemas/DockerSettings"
@@ -8128,17 +8114,6 @@ components:
           oneOf:
             - $ref: "#/components/schemas/DaytonaSettings"
             - type: "null"
-
-    LocalSandboxSettings:
-      type: object
-      required: [worktree_mode]
-      properties:
-        worktree_mode:
-          $ref: "#/components/schemas/WorktreeMode"
-
-    WorktreeMode:
-      type: string
-      enum: [always, clean, dirty, never]
 
     DockerSettings:
       type: object

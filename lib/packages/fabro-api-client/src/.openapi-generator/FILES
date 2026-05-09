@@ -139,7 +139,6 @@ models/interview-provider-settings.ts
 models/interview-question-record.ts
 models/ip-allow-entry.ts
 models/literal-ip-allow-entry.ts
-models/local-sandbox-settings.ts
 models/log-destination.ts
 models/manifest-args.ts
 models/manifest-config.ts
@@ -343,5 +342,4 @@ models/workflow-namespace.ts
 models/workflow-reference.ts
 models/workflow-schedule-summary.ts
 models/workflow-settings.ts
-models/worktree-mode.ts
 models/write-blob-response.ts

@@ -1,5 +1,5 @@
 use fabro_types::settings::InterpString;
-use fabro_types::settings::run::{ApprovalMode, RunGoal, RunMode, WorktreeMode};
+use fabro_types::settings::run::{ApprovalMode, RunGoal, RunMode};
 
 use crate::{SettingsLayer, WorkflowSettingsBuilder};
 
@@ -14,7 +14,6 @@ fn resolves_run_defaults_from_empty_settings() {
     assert_eq!(settings.prepare.timeout_ms, 300_000);
     assert_eq!(settings.sandbox.provider, "docker");
     assert!(settings.sandbox.stop_on_terminal);
-    assert_eq!(settings.sandbox.local.worktree_mode, WorktreeMode::Always);
     let docker = settings
         .sandbox
         .docker

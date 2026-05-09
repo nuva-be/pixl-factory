@@ -22,7 +22,7 @@ pub use project::ProjectLayer;
 pub use run::{
     DaytonaDockerfileLayer, DaytonaSandboxLayer, DaytonaSnapshotLayer, DockerSandboxLayer,
     GitAuthorLayer, HookAgentMarker, HookEntry, HookTlsMode, InterviewProviderLayer,
-    InterviewsLayer, LocalSandboxLayer, McpEntryLayer, ModelRefOrSplice, NotificationProviderLayer,
+    InterviewsLayer, McpEntryLayer, ModelRefOrSplice, NotificationProviderLayer,
     NotificationRouteLayer, PrepareStep, RunAgentLayer, RunArtifactsLayer, RunCheckpointLayer,
     RunExecutionLayer, RunGitLayer, RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer,
     RunLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer, RunSandboxLayer, RunScmLayer,

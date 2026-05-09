@@ -44,7 +44,6 @@ pub struct CreateRunInput {
     pub run_id: Option<RunId>,
     pub git: Option<GitContext>,
     pub fork_source_ref: Option<ForkSourceRef>,
-    pub in_place: bool,
     pub provenance: Option<RunProvenance>,
     pub configured_providers: Vec<Provider>,
     /// Public URL where this run can be viewed in the web UI, when the server
@@ -70,7 +69,6 @@ struct PersistCreateOptions {
     source_directory:     Option<String>,
     git:                  Option<GitContext>,
     fork_source_ref:      Option<ForkSourceRef>,
-    in_place:             bool,
     provenance:           Option<RunProvenance>,
     configured_providers: Vec<Provider>,
 }
@@ -104,7 +102,6 @@ pub async fn create(
         run_id,
         git,
         fork_source_ref,
-        in_place,
         provenance,
         configured_providers,
         web_url,
@@ -141,7 +138,6 @@ pub async fn create(
                 source_directory,
                 git,
                 fork_source_ref,
-                in_place,
                 provenance,
                 configured_providers,
             },
@@ -234,7 +230,6 @@ async fn persist_created_run(
             manifest_blob,
             git: record.git.clone(),
             fork_source_ref: record.fork_source_ref.clone(),
-            in_place: record.in_place,
             web_url,
         },
         record.run_id.created_at(),
@@ -347,7 +342,6 @@ fn persist_validated(
         source_directory,
         git,
         fork_source_ref,
-        in_place,
         provenance,
         configured_providers,
     } = options;
@@ -374,7 +368,6 @@ fn persist_validated(
         definition_blob: None,
         git,
         fork_source_ref,
-        in_place,
     };
 
     pipeline::persist(validated, PersistOptions { run_dir, run_spec })
@@ -715,7 +708,6 @@ mod tests {
                 run_id: None,
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -759,7 +751,6 @@ mod tests {
                 run_id: None,
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -825,7 +816,6 @@ mod tests {
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -934,7 +924,6 @@ mod tests {
                 run_id: Some(fixtures::RUN_2),
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -977,7 +966,6 @@ mod tests {
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1042,7 +1030,6 @@ mod tests {
                 run_id: Some(fixtures::RUN_3),
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1086,7 +1073,6 @@ mod tests {
                 run_id: Some(fixtures::RUN_64),
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: Some(fabro_types::RunProvenance {
                     server:  Some(fabro_types::RunServerProvenance {
                         version: "0.9.0".to_string(),

@@ -1,12 +1,12 @@
 use fabro_types::settings::InterpString;
 use fabro_types::settings::run::{
     ArtifactsSettings, DaytonaSettings, DaytonaSnapshotSettings, DockerSettings, DockerfileSource,
-    GitAuthorSettings, HookDefinition, HookType, InterviewProviderSettings, LocalSandboxSettings,
-    McpServerSettings, McpTransport, MergeStrategy, NotificationProviderSettings,
-    NotificationRouteSettings, PullRequestSettings, RunAgentSettings, RunCheckpointSettings,
-    RunExecutionSettings, RunGitSettings, RunGoal, RunIntegrationsGithubSettings,
-    RunIntegrationsSettings, RunInterviewsSettings, RunModelSettings, RunNamespace,
-    RunPrepareSettings, RunSandboxSettings, RunScmSettings, ScmGitHubSettings, TlsMode,
+    GitAuthorSettings, HookDefinition, HookType, InterviewProviderSettings, McpServerSettings,
+    McpTransport, MergeStrategy, NotificationProviderSettings, NotificationRouteSettings,
+    PullRequestSettings, RunAgentSettings, RunCheckpointSettings, RunExecutionSettings,
+    RunGitSettings, RunGoal, RunIntegrationsGithubSettings, RunIntegrationsSettings,
+    RunInterviewsSettings, RunModelSettings, RunNamespace, RunPrepareSettings, RunSandboxSettings,
+    RunScmSettings, ScmGitHubSettings, TlsMode,
 };
 
 use super::ResolveError;
@@ -183,22 +183,8 @@ fn resolve_sandbox(
             .devcontainer
             .expect("defaults.toml should provide run.sandbox.devcontainer"),
         env: sandbox.env.clone().into_inner(),
-        local: resolve_local_sandbox(sandbox),
         docker: sandbox.docker.as_ref().map(resolve_docker),
         daytona: sandbox.daytona.as_ref().map(resolve_daytona),
-    }
-}
-
-fn resolve_local_sandbox(sandbox: &RunSandboxLayer) -> LocalSandboxSettings {
-    let local = sandbox
-        .local
-        .as_ref()
-        .expect("defaults.toml should provide run.sandbox.local");
-
-    LocalSandboxSettings {
-        worktree_mode: local
-            .worktree_mode
-            .expect("defaults.toml should provide run.sandbox.local.worktree_mode"),
     }
 }
 

@@ -2478,7 +2478,6 @@ async fn list_run_stages_distinguishes_visits() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
-            in_place: false,
             web_url: None,
         },
         workflow_event::Event::RunStarting,
@@ -3388,7 +3387,6 @@ async fn create_completed_run_ready_for_pull_request(
         manifest_blob: None,
         definition_blob: None,
         fork_source_ref: None,
-        in_place: false,
     };
 
     create_durable_run_with_events(state, run_id, &[
@@ -3407,7 +3405,6 @@ async fn create_completed_run_ready_for_pull_request(
             manifest_blob: None,
             git,
             fork_source_ref: None,
-            in_place: false,
             web_url: None,
         },
         workflow_event::Event::WorkflowRunStarted {
@@ -7268,7 +7265,6 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
-            in_place: false,
             web_url: None,
         },
         workflow_event::Event::RunSubmitted {
@@ -7332,7 +7328,6 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
-            in_place: false,
             web_url: None,
         },
         workflow_event::Event::RunSubmitted {

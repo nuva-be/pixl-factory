@@ -1040,7 +1040,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1057,7 +1056,6 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await
@@ -1106,7 +1104,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1123,7 +1120,6 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await
@@ -1455,7 +1451,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1472,7 +1467,6 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await
@@ -1566,7 +1560,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1583,7 +1576,6 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await
@@ -1735,7 +1727,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1752,7 +1743,6 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await
