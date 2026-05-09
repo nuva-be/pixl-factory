@@ -1,11 +1,11 @@
-import { ClockIcon, PauseCircleIcon } from "@heroicons/react/20/solid";
+import { PauseCircleIcon } from "@heroicons/react/20/solid";
 
 import type { Stage } from "../stage-sidebar";
 import { ACTIVE_STAGE_STATES } from "../../lib/stage-sidebar";
 import { useTickingNow } from "../../lib/time";
 import { StageMetaBar } from "./meta-bar";
 
-function formatElapsed(startedAt: string | null): string {
+function formatHms(startedAt: string | null): string {
   if (!startedAt) return "—";
   const startMs = Date.parse(startedAt);
   if (Number.isNaN(startMs)) return "—";
@@ -20,36 +20,27 @@ export function WaitStatus({ stage }: { stage: Stage }) {
   const isActive = ACTIVE_STAGE_STATES.has(stage.status);
   // Tick every second while waiting so the clock keeps moving.
   useTickingNow(isActive);
-  const elapsed = formatElapsed(stage.startedAt);
+  const elapsed = isActive ? formatHms(stage.startedAt) : stage.duration;
+  const label = isActive ? "Waiting" : "Wait complete";
 
   return (
     <div className="space-y-6 pl-3 pr-4 pt-2 sm:pr-6 lg:pr-8">
       <StageMetaBar stage={stage} />
 
-      <section className="rounded-lg bg-panel p-6 outline-1 -outline-offset-1 outline-line">
-        <div className="flex items-center gap-3">
-          {isActive ? (
-            <PauseCircleIcon className="size-6 text-amber" aria-hidden="true" />
-          ) : (
-            <ClockIcon className="size-6 text-fg-muted" aria-hidden="true" />
-          )}
-          <div>
-            <p className="text-sm font-medium text-fg">
-              {isActive ? "Waiting" : "Wait complete"}
-            </p>
-            <p className="mt-0.5 text-xs text-fg-muted">
-              {isActive
-                ? "The workflow will resume automatically when the configured duration elapses."
-                : `Held for ${stage.duration} before continuing.`}
-            </p>
+      <section className="flex items-center justify-center rounded-lg bg-panel py-12 outline-1 -outline-offset-1 outline-line">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-fg-muted">
+            {isActive && (
+              <PauseCircleIcon className="size-3.5 text-amber" aria-hidden="true" />
+            )}
+            {label}
           </div>
-          <div className="ml-auto text-right">
-            <div className="text-[10px] font-medium uppercase tracking-wider text-fg-muted">
-              {isActive ? "Elapsed" : "Total"}
-            </div>
-            <div className="font-mono text-2xl tabular-nums text-fg">
-              {isActive ? elapsed : stage.duration}
-            </div>
+          <div
+            className={`font-mono text-5xl tabular-nums ${
+              isActive ? "text-fg" : "text-fg-2"
+            }`}
+          >
+            {elapsed}
           </div>
         </div>
       </section>

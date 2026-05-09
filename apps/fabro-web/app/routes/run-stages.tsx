@@ -40,6 +40,7 @@ import { WaitStatus } from "../components/stage-renderers/wait-status";
 import { formatAbsoluteTs, formatBytes } from "../lib/format";
 import {
   useRun,
+  useRunEventsList,
   useRunStageEvents,
   useRunStageLog,
   useRunStages,
@@ -1137,6 +1138,11 @@ export default function RunStages() {
   const renderer: StageRenderer = selectedStage
     ? selectStageRenderer(selectedStage.handler)
     : "summary";
+  // Some renderers need run-scoped events (e.g. conditional renders the
+  // engine-level edge.selected event, which has no stage_id). Only fetch when
+  // the active renderer actually needs it to keep this off the hot path.
+  const needsRunEvents = renderer === "conditional";
+  const runEventsQuery = useRunEventsList(needsRunEvents ? id : undefined);
   const commandTurn = useMemo<CommandTurn | null>(() => {
     for (let i = turns.length - 1; i >= 0; i -= 1) {
       const t = turns[i];
@@ -1344,7 +1350,12 @@ export default function RunStages() {
             ) : renderer === "human" ? (
               <HumanQA stage={selectedStage} events={debugEvents} />
             ) : renderer === "conditional" ? (
-              <ConditionalDecision stage={selectedStage} />
+              <ConditionalDecision
+                stage={selectedStage}
+                runEvents={runEventsQuery.data ?? []}
+                allStages={stages}
+                runId={id}
+              />
             ) : renderer === "parallel" ? (
               <ParallelChildren
                 stage={selectedStage}

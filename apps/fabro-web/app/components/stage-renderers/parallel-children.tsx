@@ -30,15 +30,33 @@ function shortSha(sha: string | null): string | null {
   return sha.length > 8 ? sha.slice(0, 8) : sha;
 }
 
-function StatItem({ label, value }: { label: string; value: string | number }) {
+function StatItem({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  tone?: "default" | "success" | "danger";
+}) {
+  const toneClass =
+    tone === "success" ? "text-mint" : tone === "danger" ? "text-coral" : "text-fg";
   return (
-    <div className="flex flex-col">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-fg-muted">
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-fg-muted">
         {label}
       </span>
-      <span className="font-mono text-sm tabular-nums text-fg-2">{value}</span>
+      <span className={`font-mono text-xl tabular-nums ${toneClass}`}>{value}</span>
     </div>
   );
+}
+
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const mins = Math.floor(ms / 60_000);
+  const secs = Math.round((ms % 60_000) / 1000);
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
 function ChildRow({
@@ -133,20 +151,28 @@ export function ParallelChildren({
         stage={stage}
         trailing={
           overview.joinPolicy ? (
-            <span className="text-xs text-fg-muted">
-              join: <span className="font-mono text-fg-3">{overview.joinPolicy}</span>
+            <span className="inline-flex items-center rounded-full bg-overlay-strong px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fg-2">
+              {overview.joinPolicy.replace(/_/g, " ")}
             </span>
           ) : null
         }
       />
 
-      <section className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg bg-panel p-4 outline-1 -outline-offset-1 outline-line sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg bg-panel p-5 outline-1 -outline-offset-1 outline-line sm:grid-cols-4">
         <StatItem label="Branches" value={overview.branchCount ?? "—"} />
-        <StatItem label="Succeeded" value={overview.successCount ?? (overview.isComplete ? 0 : "—")} />
-        <StatItem label="Failed" value={overview.failureCount ?? (overview.isComplete ? 0 : "—")} />
         <StatItem
-          label="State"
-          value={overview.isComplete ? "Complete" : "In flight"}
+          label="Succeeded"
+          value={overview.successCount ?? (overview.isComplete ? 0 : "—")}
+          tone="success"
+        />
+        <StatItem
+          label="Failed"
+          value={overview.failureCount ?? (overview.isComplete ? 0 : "—")}
+          tone={overview.failureCount && overview.failureCount > 0 ? "danger" : "default"}
+        />
+        <StatItem
+          label="Duration"
+          value={overview.durationMs != null ? formatMs(overview.durationMs) : overview.isComplete ? "—" : "running"}
         />
       </section>
 

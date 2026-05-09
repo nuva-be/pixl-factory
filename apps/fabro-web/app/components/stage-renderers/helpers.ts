@@ -139,6 +139,7 @@ export interface ParallelOverview {
   joinPolicy: string | null;
   successCount: number | null;
   failureCount: number | null;
+  durationMs: number | null;
   results: ParallelBranchResult[];
   isComplete: boolean;
 }
@@ -153,6 +154,7 @@ export function parseParallelOverview(events: EventEnvelope[]): ParallelOverview
   let joinPolicy: string | null = null;
   let successCount: number | null = null;
   let failureCount: number | null = null;
+  let durationMs: number | null = null;
   let results: ParallelBranchResult[] = [];
   let isComplete = false;
 
@@ -165,6 +167,7 @@ export function parseParallelOverview(events: EventEnvelope[]): ParallelOverview
       isComplete = true;
       successCount = getNumber(props, "success_count") ?? successCount;
       failureCount = getNumber(props, "failure_count") ?? failureCount;
+      durationMs = getNumber(props, "duration_ms") ?? durationMs;
       const rawResults = getArray(props, "results") ?? [];
       results = rawResults
         .map((entry) => {
@@ -181,7 +184,15 @@ export function parseParallelOverview(events: EventEnvelope[]): ParallelOverview
     }
   }
 
-  return { branchCount, joinPolicy, successCount, failureCount, results, isComplete };
+  return {
+    branchCount,
+    joinPolicy,
+    successCount,
+    failureCount,
+    durationMs,
+    results,
+    isComplete,
+  };
 }
 
 export interface FanInOutcome {
@@ -235,6 +246,44 @@ export function extractStageNotes(events: EventEnvelope[]): string | null {
     if (notes) return notes;
   }
   return null;
+}
+
+export interface EdgeSelection {
+  fromNode: string;
+  toNode: string;
+  reason: string;
+  condition: string | null;
+  isJump: boolean;
+}
+
+/**
+ * Find the `edge.selected` event whose `from_node` matches this conditional
+ * stage's node. Edge events are run-scoped (no stage_id) so callers must pass
+ * the full run events list, not the per-stage events.
+ *
+ * When the stage runs multiple times, the most recent matching event wins —
+ * for now we just take the last one. Sufficient until we surface visit data.
+ */
+export function findEdgeForNode(
+  runEvents: EventEnvelope[],
+  nodeId: string,
+): EdgeSelection | null {
+  let latest: EdgeSelection | null = null;
+  for (const event of runEvents) {
+    if (event.event !== "edge.selected") continue;
+    const props = event.properties ?? {};
+    const fromNode = getString(props, "from_node");
+    if (fromNode !== nodeId) continue;
+    const toNode = getString(props, "to_node") ?? "";
+    latest = {
+      fromNode: nodeId,
+      toNode,
+      reason: getString(props, "reason") ?? "",
+      condition: getString(props, "condition") ?? null,
+      isJump: props.is_jump === true,
+    };
+  }
+  return latest;
 }
 
 // Re-export helper used by renderers that need to read nested properties.

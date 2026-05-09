@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   CpuChipIcon,
+  SparklesIcon,
   TrophyIcon,
 } from "@heroicons/react/20/solid";
 import type { EventEnvelope } from "@qltysh/fabro-api-client";
@@ -111,26 +112,36 @@ export function FanInResults({
         }
       />
 
-      <section className="rounded-lg bg-panel p-5 outline-1 -outline-offset-1 outline-line">
-        <div className="flex items-center gap-2 text-xs">
-          <TrophyIcon className="size-4 text-amber" aria-hidden="true" />
-          <span className="font-medium uppercase tracking-wider text-fg-muted">
-            Selected
-          </span>
+      <section className="overflow-hidden rounded-lg bg-gradient-to-br from-amber/10 via-panel to-panel outline-1 -outline-offset-1 outline-line">
+        <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:gap-8">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-amber/15 ring-1 ring-amber/30">
+            <TrophyIcon className="size-7 text-amber" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber">
+              Selected branch
+            </div>
+            {outcome.selectedId ? (
+              <p className="mt-1 truncate font-mono text-2xl text-fg">
+                {outcome.selectedId}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-fg-muted">
+                Awaiting fan-in completion
+              </p>
+            )}
+            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-fg-muted">
+              {outcome.hasReducerTranscript ? (
+                <>
+                  <SparklesIcon className="size-3.5" aria-hidden="true" />
+                  Selected by LLM reducer
+                </>
+              ) : (
+                <>Selected by heuristic (status &middot; score &middot; id)</>
+              )}
+            </p>
+          </div>
         </div>
-        {outcome.selectedId ? (
-          <p className="mt-2 font-mono text-base text-fg">{outcome.selectedId}</p>
-        ) : (
-          <p className="mt-2 text-sm text-fg-muted">
-            No winner reported yet. The fan-in will publish the selected branch
-            once it completes.
-          </p>
-        )}
-        <p className="mt-2 text-xs text-fg-muted">
-          {outcome.hasReducerTranscript
-            ? "Selected by an LLM reducer (see transcript below)."
-            : "Selected heuristically by status, score, and id."}
-        </p>
       </section>
 
       {reducer && promptParts && (

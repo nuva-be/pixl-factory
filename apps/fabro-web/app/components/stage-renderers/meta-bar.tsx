@@ -23,8 +23,10 @@ function liveDuration(startedAt: string | null, fallback: string): string {
 
 /**
  * Compact horizontal status strip used at the top of every specialized stage
- * renderer. Shows the status pill, live-or-final duration, and an optional
- * trailing slot for renderer-specific metadata (e.g. branch counts).
+ * renderer. Shows the status pill and live-or-final duration; the timestamp
+ * is exposed via tooltip on the duration to avoid stuffing the bar with
+ * extra labels. The trailing slot is right-aligned for renderer-specific
+ * metadata (chips, counts, model badges, etc.).
  */
 export function StageMetaBar({
   stage,
@@ -38,23 +40,27 @@ export function StageMetaBar({
   useTickingNow(isActive);
   const duration = isActive ? liveDuration(stage.startedAt, stage.duration) : stage.duration;
 
+  const durationNode = (
+    <span className="inline-flex items-center gap-1 font-mono tabular-nums text-fg-muted">
+      <ClockIcon className="size-3.5" aria-hidden="true" />
+      {duration}
+    </span>
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
       <span
-        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${stageStatusTone(stage.status)}`}
+        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${stageStatusTone(stage.status)}`}
       >
         {stageStatusLabel(stage.status)}
       </span>
-      <span className="inline-flex items-center gap-1 font-mono tabular-nums text-fg-muted">
-        <ClockIcon className="size-3" aria-hidden="true" />
-        {duration}
-      </span>
-      {stage.startedAt && (
-        <Tooltip label={formatAbsoluteTs(stage.startedAt)}>
-          <span className="text-fg-muted">started</span>
+      {stage.startedAt ? (
+        <Tooltip label={`Started ${formatAbsoluteTs(stage.startedAt)}`}>
+          {durationNode}
         </Tooltip>
+      ) : (
+        durationNode
       )}
-      <span className="font-mono text-fg-muted">{stage.handler}</span>
       {trailing && <span className="ml-auto inline-flex items-center gap-3">{trailing}</span>}
     </div>
   );
