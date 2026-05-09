@@ -22,7 +22,7 @@ const ICON_BUTTON_CLASS =
 
 export const handle = { wide: true, fullHeight: true };
 export const TERMINAL_DOCK_CLEARANCE_CLASS =
-  "pb-[calc(0.25rem+var(--fabro-interview-dock-clearance,0px))]";
+  "pb-[calc(0.125rem+var(--fabro-interview-dock-clearance,0px))]";
 
 type ConnectionStatus = "connecting" | "ready" | "closed" | "error";
 
@@ -91,14 +91,21 @@ function getString(value: Record<string, unknown> | null, key: string): string |
   return typeof child === "string" ? child : null;
 }
 
-function sendResize(socket: WebSocket | null, fitAddon: XtermFitAddon | null) {
-  if (!socket || socket.readyState !== WebSocket.OPEN || !fitAddon) return;
+function safeFit(fitAddon: XtermFitAddon, terminal: XtermTerminal) {
   const proposed = fitAddon.proposeDimensions();
   if (!proposed || proposed.cols <= 0 || proposed.rows <= 0) return;
+  // Reserve one row of buffer to defeat sub-pixel cell-height rounding,
+  // which otherwise clips the bottom row when the available height is not
+  // an exact multiple of the cell height.
+  terminal.resize(proposed.cols, Math.max(proposed.rows - 1, 1));
+}
+
+function sendResize(socket: WebSocket | null, terminal: XtermTerminal | null) {
+  if (!socket || socket.readyState !== WebSocket.OPEN || !terminal) return;
   socket.send(JSON.stringify({
     type: "resize",
-    cols: proposed.cols,
-    rows: proposed.rows,
+    cols: terminal.cols,
+    rows: terminal.rows,
   }));
 }
 
@@ -225,7 +232,7 @@ export default function RunTerminal({ params }: { params: { id: string } }) {
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       terminal.open(terminalEl.current);
-      fitAddon.fit();
+      safeFit(fitAddon, terminal);
       terminal.focus();
       terminalRef.current = terminal;
       fitRef.current = fitAddon;
@@ -241,7 +248,7 @@ export default function RunTerminal({ params }: { params: { id: string } }) {
       }));
 
       socket.addEventListener("open", () => {
-        sendResize(socket, fitAddon);
+        sendResize(socket, terminal);
       });
       socket.addEventListener("message", (event) => {
         if (typeof event.data === "string") {
@@ -273,10 +280,18 @@ export default function RunTerminal({ params }: { params: { id: string } }) {
       });
 
       resizeObserver = new ResizeObserver(() => {
-        fitAddon.fit();
-        sendResize(socket, fitAddon);
+        safeFit(fitAddon, terminal);
+        sendResize(socket, terminal);
       });
       resizeObserver.observe(terminalEl.current);
+
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        void document.fonts.ready.then(() => {
+          if (disposed) return;
+          safeFit(fitAddon, terminal);
+          sendResize(socket, terminal);
+        });
+      }
     }
 
     void connect();
