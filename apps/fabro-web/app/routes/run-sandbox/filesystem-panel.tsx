@@ -142,9 +142,8 @@ interface BuiltTreeInputs {
 
 // The list endpoint returns flat names like `foo` (depth=1) or `foo/bar.ts`
 // (depth=2). We feed those names to @pierre/trees as relative paths. Every
-// directory gets a synthetic placeholder child so empty directories still
-// appear; the placeholders are filtered out before selection.
-const DIRECTORY_PLACEHOLDER = "__fabro_dir__";
+// directories are represented with the tree library's canonical trailing-slash
+// form so empty directories appear without synthetic child rows.
 
 export function buildTreeInputs(entries: readonly SandboxFileEntry[]): BuiltTreeInputs {
   const paths: string[] = [];
@@ -154,7 +153,7 @@ export function buildTreeInputs(entries: readonly SandboxFileEntry[]): BuiltTree
   for (const entry of entries) {
     if (entry.is_dir) {
       directories.add(entry.name);
-      paths.push(`${entry.name}/${DIRECTORY_PLACEHOLDER}`);
+      paths.push(`${entry.name}/`);
     } else {
       fileEntries.set(entry.name, entry);
       paths.push(entry.name);
@@ -164,8 +163,8 @@ export function buildTreeInputs(entries: readonly SandboxFileEntry[]): BuiltTree
   return { paths, fileEntries, directories };
 }
 
-function isPlaceholderPath(path: string): boolean {
-  return path.endsWith(`/${DIRECTORY_PLACEHOLDER}`) || path === DIRECTORY_PLACEHOLDER;
+function normalizeDirectorySelection(path: string): string {
+  return path.replace(/\/+$/, "");
 }
 
 export function classifySelection(
@@ -173,19 +172,15 @@ export function classifySelection(
   fileEntries: Map<string, SandboxFileEntry>,
   directories: Set<string>,
 ): { kind: "file"; entry: SandboxFileEntry } | { kind: "dir"; relativePath: string } | null {
-  if (isPlaceholderPath(selectedPath)) {
-    const relPath = selectedPath.substring(0, selectedPath.length - DIRECTORY_PLACEHOLDER.length - 1);
-    if (relPath) return { kind: "dir", relativePath: relPath };
-    return null;
-  }
   const fileEntry = fileEntries.get(selectedPath);
   if (fileEntry) return { kind: "file", entry: fileEntry };
-  if (directories.has(selectedPath)) {
-    return { kind: "dir", relativePath: selectedPath };
+  const directoryPath = normalizeDirectorySelection(selectedPath);
+  if (directories.has(directoryPath)) {
+    return { kind: "dir", relativePath: directoryPath };
   }
   // Intermediate directory implied by a nested path (depth>1). Treat selection
   // as navigation into that subdir.
-  return { kind: "dir", relativePath: selectedPath };
+  return { kind: "dir", relativePath: directoryPath };
 }
 
 interface PreviewState {

@@ -205,14 +205,15 @@ describe("binary and decoding helpers", () => {
 });
 
 describe("buildTreeInputs", () => {
-  test("emits placeholders for directories so they appear in the tree", () => {
+  test("emits native directory paths without user-visible placeholders", () => {
     const entries: SandboxFileEntry[] = [
       { name: "src", is_dir: true },
       { name: "package.json", is_dir: false, size: 200 },
     ];
     const inputs = buildTreeInputs(entries);
+    expect(inputs.paths).toContain("src/");
     expect(inputs.paths).toContain("package.json");
-    expect(inputs.paths.some((path) => path.startsWith("src/"))).toBe(true);
+    expect(inputs.paths).not.toContain("src/__fabro_dir__");
     expect(inputs.directories.has("src")).toBe(true);
     expect(inputs.fileEntries.get("package.json")?.size).toBe(200);
   });
@@ -225,9 +226,8 @@ describe("classifySelection", () => {
   ];
   const inputs = buildTreeInputs(entries);
 
-  test("recognizes a placeholder selection as a directory", () => {
-    const placeholder = inputs.paths.find((path) => path.startsWith("src/"))!;
-    expect(classifySelection(placeholder, inputs.fileEntries, inputs.directories)).toEqual({
+  test("recognizes a native directory path selection as a directory", () => {
+    expect(classifySelection("src/", inputs.fileEntries, inputs.directories)).toEqual({
       kind:         "dir",
       relativePath: "src",
     });
@@ -363,11 +363,11 @@ describe("FilesystemPanel render", () => {
     };
     renderPanel();
     expect(lastFilesArgs?.path).toBe("/");
-    const placeholder = filesystemPanelModule.buildTreeInputs(
+    const directoryPath = filesystemPanelModule.buildTreeInputs(
       filesState.data!.data,
-    ).paths.find((path) => path.startsWith("src/"))!;
+    ).paths.find((path) => path === "src/")!;
     act(() => {
-      lastTreeOptions?.onSelectionChange?.([placeholder]);
+      lastTreeOptions?.onSelectionChange?.([directoryPath]);
     });
     expect(lastFilesArgs?.path).toBe("/src");
   });
