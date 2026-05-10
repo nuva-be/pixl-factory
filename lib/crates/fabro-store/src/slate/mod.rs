@@ -1083,4 +1083,77 @@ mod tests {
                 .is_empty()
         );
     }
+
+    #[tokio::test]
+    async fn append_event_hydrates_local_projection_cache_for_fresh_writer() {
+        let (object_store, store) = make_store();
+        let run_id = test_run_id("run-1");
+        let run = store.create_run(&run_id).await.unwrap();
+        append_created(&run, "run-1", dt("2026-03-27T12:00:00Z")).await;
+        run.append_event(&event_payload(
+            "run-1",
+            "2026-03-27T12:00:01Z",
+            "run.queued",
+            &serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+        run.append_event(&event_payload(
+            "run-1",
+            "2026-03-27T12:00:02Z",
+            "run.starting",
+            &serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+        run.append_event(&event_payload(
+            "run-1",
+            "2026-03-27T12:00:03Z",
+            "run.running",
+            &serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+        run.append_event(&event_payload(
+            "run-1",
+            "2026-03-27T12:00:04Z",
+            "run.failed",
+            &serde_json::json!({
+                "error": "workflow failed",
+                "duration_ms": 1,
+                "reason": "workflow_error",
+            }),
+        ))
+        .await
+        .unwrap();
+
+        let reopened = Database::new(
+            Arc::clone(&object_store),
+            "runs/",
+            Duration::from_millis(1),
+            None,
+        );
+        let fresh_writer = reopened.open_run(&run_id).await.unwrap();
+        fresh_writer
+            .append_event(&event_payload(
+                "run-1",
+                "2026-03-27T12:00:05Z",
+                "run.title.updated",
+                &serde_json::json!({ "title": "Renamed failed run" }),
+            ))
+            .await
+            .unwrap();
+
+        let state = fresh_writer.state().await.unwrap();
+        assert_eq!(state.title, "Renamed failed run");
+        assert_eq!(state.status, RunStatus::Failed {
+            reason: FailureReason::WorkflowError,
+        });
+
+        let cached = reopened.get_cached_run(&run_id).await.unwrap().unwrap();
+        assert_eq!(cached.summary.title, "Renamed failed run");
+        assert_eq!(cached.summary.status, RunStatus::Failed {
+            reason: FailureReason::WorkflowError,
+        });
+    }
 }

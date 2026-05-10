@@ -174,8 +174,14 @@ impl RunDatabase {
     async fn cache_event(&self, event: &EventEnvelope) -> Result<()> {
         {
             let mut projection_cache = self.inner.projection_cache.lock().await;
-            apply_cached_projection_event(&mut projection_cache.state, event)?;
-            projection_cache.last_seq = event.seq;
+            if projection_cache.state.is_none() && event.seq > 1 {
+                drop(projection_cache);
+                self.rebuild_local_projection_cache_through(event.seq)
+                    .await?;
+            } else {
+                apply_cached_projection_event(&mut projection_cache.state, event)?;
+                projection_cache.last_seq = event.seq;
+            }
         }
         let mut recent_events = self.inner.recent_events.lock().await;
         recent_events.push_back(event.clone());
@@ -183,6 +189,28 @@ impl RunDatabase {
             recent_events.pop_front();
         }
         let _ = self.inner.event_tx.send(event.clone());
+        Ok(())
+    }
+
+    async fn rebuild_local_projection_cache_through(&self, seq: u32) -> Result<()> {
+        let events = list_events_from(&self.inner.db, &self.inner.run_id, 1).await?;
+        let Some(last_seq) = events.last().map(|event| event.seq) else {
+            return Err(Error::InvalidEvent(format!(
+                "run {} has no events while rebuilding projection cache",
+                self.inner.run_id
+            )));
+        };
+        if last_seq < seq {
+            return Err(Error::InvalidEvent(format!(
+                "run {} projection cache rebuild stopped at seq {last_seq}, before appended seq {seq}",
+                self.inner.run_id
+            )));
+        }
+
+        let state = RunProjection::apply_events(&events)?;
+        let mut projection_cache = self.inner.projection_cache.lock().await;
+        projection_cache.state = Some(state);
+        projection_cache.last_seq = last_seq;
         Ok(())
     }
 
