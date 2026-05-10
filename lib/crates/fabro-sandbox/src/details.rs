@@ -1,6 +1,6 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
-#[cfg(feature = "daytona")]
-use anyhow::{Context, anyhow};
 use fabro_types::{
     RunId, SandboxDetails, SandboxRecord, SandboxResources, SandboxState, SandboxTimestamps,
 };
@@ -44,7 +44,7 @@ fn local_details() -> SandboxDetails {
         region:       None,
         image:        None,
         resources:    SandboxResources::default(),
-        labels:       Default::default(),
+        labels:       BTreeMap::new(),
         timestamps:   SandboxTimestamps::default(),
     }
 }
@@ -53,15 +53,14 @@ fn local_details() -> SandboxDetails {
 mod docker {
     use std::collections::BTreeMap;
 
+    use anyhow::{Context, Result, anyhow};
     use bollard::Docker;
     use bollard::container::InspectContainerOptions;
-    use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum};
+    use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum, HostConfig};
     use chrono::{DateTime, Utc};
     use fabro_types::{
         RunId, SandboxDetails, SandboxRecord, SandboxResources, SandboxState, SandboxTimestamps,
     };
-
-    use super::*;
 
     pub(super) async fn docker_details(
         record: &SandboxRecord,
@@ -86,9 +85,7 @@ mod docker {
             .as_ref()
             .and_then(|state| state.status.as_ref())
             .copied();
-        let normalized_state = status_enum
-            .map(normalize_docker_state)
-            .unwrap_or(SandboxState::Unknown);
+        let normalized_state = status_enum.map_or(SandboxState::Unknown, normalize_docker_state);
         let native_state = status_enum
             .map(|status| status.to_string())
             .filter(|value| !value.is_empty());
@@ -141,7 +138,7 @@ mod docker {
             .map(|dt| dt.with_timezone(&Utc))
     }
 
-    pub(super) fn docker_cpu_cores(host_config: &bollard::models::HostConfig) -> Option<f64> {
+    pub(super) fn docker_cpu_cores(host_config: &HostConfig) -> Option<f64> {
         let quota = host_config.cpu_quota?;
         let period = host_config.cpu_period?;
         if quota <= 0 || period <= 0 {
@@ -321,13 +318,13 @@ mod docker {
 mod daytona {
     use std::collections::BTreeMap;
 
+    use anyhow::{Context, Result, anyhow};
     use chrono::{DateTime, Utc};
     use daytona_api_client::models::SandboxState as DaytonaState;
     use fabro_types::{
         SandboxDetails, SandboxRecord, SandboxResources, SandboxState, SandboxTimestamps,
     };
 
-    use super::*;
     use crate::daytona::DaytonaSandbox;
 
     pub(super) async fn daytona_details(
@@ -361,8 +358,7 @@ mod daytona {
     fn map_daytona_sandbox(sandbox: &daytona_sdk::Sandbox) -> SandboxDetails {
         let normalized_state = sandbox
             .state
-            .map(normalize_daytona_state)
-            .unwrap_or(SandboxState::Unknown);
+            .map_or(SandboxState::Unknown, normalize_daytona_state);
         let native_state = sandbox.state.map(|state| state.to_string());
 
         let resources = SandboxResources {
@@ -431,11 +427,10 @@ mod daytona {
             | DaytonaState::PullingSnapshot => SandboxState::Provisioning,
             DaytonaState::Starting => SandboxState::Starting,
             DaytonaState::Started => SandboxState::Running,
-            DaytonaState::Stopping => SandboxState::Stopping,
+            DaytonaState::Stopping | DaytonaState::Archiving => SandboxState::Stopping,
             DaytonaState::Stopped => SandboxState::Stopped,
             DaytonaState::Restoring => SandboxState::Restoring,
             DaytonaState::Resizing => SandboxState::Resizing,
-            DaytonaState::Archiving => SandboxState::Stopping,
             DaytonaState::Archived => SandboxState::Archived,
             DaytonaState::Destroying => SandboxState::Deleting,
             DaytonaState::Destroyed => SandboxState::Deleted,
