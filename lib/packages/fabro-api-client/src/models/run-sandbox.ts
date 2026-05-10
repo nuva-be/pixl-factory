@@ -15,20 +15,35 @@
 
 // May contain unused imports in some cases
 // @ts-ignore
+import type { SandboxProvider } from './sandbox-provider';
+// May contain unused imports in some cases
+// @ts-ignore
 import type { SandboxResources } from './sandbox-resources';
 
 /**
- * Sandbox environment summary used for the runs board.
+ * Canonical sandbox environment record for a run.
  */
 export interface RunSandbox {
+    'provider': SandboxProvider;
     /**
-     * Sandbox identifier.
+     * Fabro sandbox control identifier used for reconnect, terminal, and delete operations.
      */
-    'id'?: string | null;
+    'id': string;
     /**
      * Path where the run executed inside the sandbox.
      */
-    'working_directory'?: string | null;
-    'resources'?: SandboxResources;
+    'working_directory': string;
+    /**
+     * Whether the provider cloned the repository into the sandbox, or null while unknown.
+     */
+    'repo_cloned'?: boolean | null;
+    /**
+     * Repository origin cloned into the sandbox when available.
+     */
+    'clone_origin_url'?: string | null;
+    /**
+     * Repository branch cloned into the sandbox when available.
+     */
+    'clone_branch'?: string | null;
+    'resources'?: SandboxResources | null;
 }
-

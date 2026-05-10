@@ -9,9 +9,9 @@ use fabro_types::run_event::{
 use fabro_types::{
     BilledModelUsage, Checkpoint, CheckpointRecord, CommandTermination, Conclusion, EventBody,
     FailureSignature, InterviewQuestionRecord, Outcome, PendingInterviewRecord, PullRequestRecord,
-    RunControlAction, RunDiff, RunEvent, RunId, RunProjection, RunSpec, RunStatus, RunSummary,
-    SandboxRecord, StageCompletion, StageHandler, StageId, StageOutcome, StageProjection,
-    StageState, StartRecord, TerminalStatus, first_event_seq,
+    RunControlAction, RunDiff, RunEvent, RunId, RunProjection, RunSandbox, RunSpec, RunStatus,
+    RunSummary, StageCompletion, StageHandler, StageId, StageOutcome, StageProjection, StageState,
+    StartRecord, TerminalStatus, first_event_seq,
 };
 use fabro_util::error::render_with_causes;
 use serde_json::Value;
@@ -220,13 +220,14 @@ impl RunProjectionReducer for RunProjection {
                 });
             }
             EventBody::SandboxInitialized(props) => {
-                self.sandbox = Some(SandboxRecord {
-                    provider:          props.provider.clone(),
+                self.sandbox = Some(RunSandbox {
+                    provider:          props.provider,
+                    id:                props.id.clone(),
                     working_directory: props.working_directory.clone(),
-                    identifier:        props.identifier.clone(),
                     repo_cloned:       props.repo_cloned,
                     clone_origin_url:  props.clone_origin_url.clone(),
                     clone_branch:      props.clone_branch.clone(),
+                    resources:         None,
                 });
             }
             EventBody::PullRequestCreated(props) => {

@@ -892,14 +892,14 @@ fn event_body_from_event(event: &Event) -> EventBody {
         Event::SandboxInitialized {
             working_directory,
             provider,
-            identifier,
+            id,
             repo_cloned,
             clone_origin_url,
             clone_branch,
         } => EventBody::SandboxInitialized(fabro_types::SandboxInitializedProps {
             working_directory: working_directory.clone(),
-            provider:          provider.clone(),
-            identifier:        identifier.clone(),
+            provider:          *provider,
+            id:                id.clone(),
             repo_cloned:       *repo_cloned,
             clone_origin_url:  clone_origin_url.clone(),
             clone_branch:      clone_branch.clone(),

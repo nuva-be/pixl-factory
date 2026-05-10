@@ -46,8 +46,8 @@ describe("terminal view helpers", () => {
     expect(terminalAccessCommandLabel(null)).toBeNull();
   });
 
-  test("uses sandbox identifier as terminal status detail", () => {
-    expect(sandboxStatusDetail({ provider: "docker", identifier: "container-abc123" }))
+  test("uses sandbox id as terminal status detail", () => {
+    expect(sandboxStatusDetail({ provider: "docker", id: "container-abc123" }))
       .toBe("container-abc123");
     expect(sandboxStatusDetail({ provider: "daytona", id: "sandbox-name" }))
       .toBe("sandbox-name");

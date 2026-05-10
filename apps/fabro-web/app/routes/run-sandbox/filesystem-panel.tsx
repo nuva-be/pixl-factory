@@ -46,8 +46,9 @@ const pierreHighlighterOptions = { theme: "pierre-dark" };
 type TreeThemeStyle = CSSProperties & Record<`--${string}`, string | number>;
 
 interface FilesystemPanelProps {
-  runId:    string;
-  leading?: React.ReactNode;
+  runId:          string;
+  leading?:       React.ReactNode;
+  rootDirectory?: string | null;
 }
 
 // `path` here is always an absolute sandbox path (e.g. `/src/main.ts`).
@@ -190,10 +191,21 @@ interface PreviewState {
   byteLength?: number;
 }
 
-export default function FilesystemPanel({ runId, leading }: FilesystemPanelProps) {
-  const [currentDir, setCurrentDir] = useState<string>(DEFAULT_DIR);
+export default function FilesystemPanel({
+  runId,
+  leading,
+  rootDirectory,
+}: FilesystemPanelProps) {
+  const initialDirectory = rootDirectory || DEFAULT_DIR;
+  const [currentDir, setCurrentDir] = useState<string>(initialDirectory);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedFileSize, setSelectedFileSize] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    setCurrentDir(initialDirectory);
+    setSelectedFilePath(null);
+    setSelectedFileSize(undefined);
+  }, [initialDirectory]);
 
   const filesQuery = useSandboxFiles(runId, currentDir);
   const entries = filesQuery.data?.data ?? [];

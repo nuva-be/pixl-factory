@@ -155,12 +155,26 @@ fn board_run_metadata_from_projection(
 
     if let Some(sandbox) = projection.sandbox.as_ref() {
         let mut sandbox_metadata = serde_json::Map::new();
+        sandbox_metadata.insert("provider".to_string(), serde_json::json!(sandbox.provider));
+        sandbox_metadata.insert("id".to_string(), serde_json::json!(&sandbox.id));
         sandbox_metadata.insert(
             "working_directory".to_string(),
             serde_json::json!(&sandbox.working_directory),
         );
-        if let Some(identifier) = sandbox.identifier.as_ref() {
-            sandbox_metadata.insert("id".to_string(), serde_json::json!(identifier));
+        if let Some(repo_cloned) = sandbox.repo_cloned {
+            sandbox_metadata.insert("repo_cloned".to_string(), serde_json::json!(repo_cloned));
+        }
+        if let Some(clone_origin_url) = sandbox.clone_origin_url.as_ref() {
+            sandbox_metadata.insert(
+                "clone_origin_url".to_string(),
+                serde_json::json!(clone_origin_url),
+            );
+        }
+        if let Some(clone_branch) = sandbox.clone_branch.as_ref() {
+            sandbox_metadata.insert("clone_branch".to_string(), serde_json::json!(clone_branch));
+        }
+        if let Some(resources) = sandbox.resources {
+            sandbox_metadata.insert("resources".to_string(), serde_json::json!(resources));
         }
         metadata.insert(
             "sandbox".to_string(),

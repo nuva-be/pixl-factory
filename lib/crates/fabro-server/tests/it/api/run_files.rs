@@ -236,7 +236,7 @@ async fn invalid_scope_returns_400() {
 #[tokio::test]
 async fn submitted_run_without_sandbox_returns_empty_envelope() {
     // A run that has been created but not started has no base_sha or
-    // sandbox record, so the handler returns an empty envelope. The UI
+    // run sandbox, so the handler returns an empty envelope. The UI
     // maps that to R4(a).
     let app = fabro_server::test_support::build_test_router(test_app_state());
     let manifest = minimal_manifest_json(MINIMAL_DOT);

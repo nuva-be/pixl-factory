@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::SandboxProvider;
+
 #[derive(
     Debug,
     Clone,
@@ -327,9 +329,8 @@ pub struct GitCloneFailedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxInitializedProps {
     pub working_directory: String,
-    pub provider:          String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub identifier:        Option<String>,
+    pub provider:          SandboxProvider,
+    pub id:                String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo_cloned:       Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

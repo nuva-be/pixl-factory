@@ -9,7 +9,7 @@ use fabro_github::GitHubCredentials;
     unused_imports,
     reason = "Daytona-enabled builds persist RunId in the sandbox spec."
 )]
-use fabro_types::RunId;
+use fabro_types::{RunId, RunSandbox, SandboxProvider};
 
 #[cfg(any(feature = "docker", feature = "daytona"))]
 use crate::clone_source;
@@ -18,7 +18,6 @@ use crate::daytona::{DaytonaConfig, DaytonaSandbox, DaytonaSnapshotConfig};
 #[cfg(feature = "docker")]
 use crate::docker::{DockerSandbox, DockerSandboxOptions};
 use crate::local::LocalSandbox;
-use crate::sandbox_record::SandboxRecord;
 use crate::{Sandbox, SandboxEventCallback};
 
 /// Options for sandbox initialization and construction.
@@ -46,22 +45,34 @@ pub enum SandboxSpec {
 }
 
 impl SandboxSpec {
-    pub fn provider_name(&self) -> &'static str {
+    pub fn provider(&self) -> SandboxProvider {
         match self {
-            Self::Local { .. } => "local",
+            Self::Local { .. } => SandboxProvider::Local,
             #[cfg(feature = "docker")]
-            Self::Docker { .. } => "docker",
+            Self::Docker { .. } => SandboxProvider::Docker,
             #[cfg(feature = "daytona")]
-            Self::Daytona { .. } => "daytona",
+            Self::Daytona { .. } => SandboxProvider::Daytona,
         }
     }
 
-    /// Build a SandboxRecord for persistence.
-    pub fn to_sandbox_record(&self, sandbox: &dyn Sandbox) -> SandboxRecord {
+    pub fn provider_name(&self) -> &'static str {
+        match self.provider() {
+            SandboxProvider::Local => "local",
+            SandboxProvider::Docker => "docker",
+            SandboxProvider::Daytona => "daytona",
+        }
+    }
+
+    /// Build a RunSandbox for persistence.
+    pub fn to_run_sandbox(&self, sandbox: &dyn Sandbox, run_id: RunId) -> RunSandbox {
         let working_directory = sandbox.working_directory().to_string();
-        let identifier = {
+        let id = {
             let info = sandbox.sandbox_info();
-            if info.is_empty() { None } else { Some(info) }
+            if info.is_empty() {
+                format!("local:{run_id}")
+            } else {
+                info
+            }
         };
 
         match self {
@@ -71,10 +82,10 @@ impl SandboxSpec {
                 clone_origin_url,
                 clone_branch,
                 ..
-            } => SandboxRecord {
-                provider: self.provider_name().to_string(),
+            } => RunSandbox {
+                provider: self.provider(),
+                id,
                 working_directory: working_directory.clone(),
-                identifier,
                 repo_cloned: clone_source::repo_cloned_for_record(
                     config.skip_clone,
                     clone_origin_url.as_deref(),
@@ -83,6 +94,7 @@ impl SandboxSpec {
                     clone_origin_url.as_deref(),
                 ),
                 clone_branch: clone_branch.clone(),
+                resources: None,
             },
             #[cfg(feature = "daytona")]
             Self::Daytona {
@@ -90,10 +102,10 @@ impl SandboxSpec {
                 clone_origin_url,
                 clone_branch,
                 ..
-            } => SandboxRecord {
-                provider: self.provider_name().to_string(),
+            } => RunSandbox {
+                provider: self.provider(),
+                id,
                 working_directory: working_directory.clone(),
-                identifier,
                 repo_cloned: clone_source::repo_cloned_for_record(
                     config.skip_clone,
                     clone_origin_url.as_deref(),
@@ -102,14 +114,16 @@ impl SandboxSpec {
                     clone_origin_url.as_deref(),
                 ),
                 clone_branch: clone_branch.clone(),
+                resources: None,
             },
-            _ => SandboxRecord {
-                provider: self.provider_name().to_string(),
+            _ => RunSandbox {
+                provider: self.provider(),
+                id,
                 working_directory,
-                identifier,
                 repo_cloned: None,
                 clone_origin_url: None,
                 clone_branch: None,
+                resources: None,
             },
         }
     }

@@ -365,7 +365,7 @@ pub async fn initialize(
             .await
             .map_err(|err| Error::engine(err.to_string()))?;
         let record = run_state.sandbox.ok_or_else(|| {
-            Error::Precondition("cannot resume run: sandbox record is missing".to_string())
+            Error::Precondition("cannot resume run: run sandbox is missing".to_string())
         })?;
         let daytona_api_key = match &options.vault {
             Some(vault) => vault
@@ -434,14 +434,16 @@ pub async fn initialize(
     }
 
     if sandbox_initialized {
-        let sandbox_record = options.sandbox.to_sandbox_record(&*sandbox);
+        let run_sandbox = options
+            .sandbox
+            .to_run_sandbox(&*sandbox, options.run_options.run_id);
         options.emitter.emit(&Event::SandboxInitialized {
-            working_directory: sandbox_record.working_directory.clone(),
-            provider:          sandbox_record.provider.clone(),
-            identifier:        sandbox_record.identifier.clone(),
-            repo_cloned:       sandbox_record.repo_cloned,
-            clone_origin_url:  sandbox_record.clone_origin_url.clone(),
-            clone_branch:      sandbox_record.clone_branch.clone(),
+            working_directory: run_sandbox.working_directory.clone(),
+            provider:          run_sandbox.provider,
+            id:                run_sandbox.id.clone(),
+            repo_cloned:       run_sandbox.repo_cloned,
+            clone_origin_url:  run_sandbox.clone_origin_url.clone(),
+            clone_branch:      run_sandbox.clone_branch.clone(),
         });
     }
 

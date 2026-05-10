@@ -472,7 +472,7 @@ mod tests {
     use fabro_types::graph::Graph;
     use fabro_types::run::RunSpec;
     use fabro_types::{
-        Checkpoint, CheckpointRecord, Conclusion, RunDiff, RunStatus, SandboxRecord,
+        Checkpoint, CheckpointRecord, Conclusion, RunDiff, RunSandbox, RunStatus, SandboxProvider,
         StageCompletion, StageOutcome, StartRecord, SuccessReason, WorkflowSettings,
         first_event_seq, fixtures,
     };
@@ -556,13 +556,14 @@ mod tests {
             total_retries:        0,
             diff:                 RunDiff::default(),
         });
-        projection.sandbox = Some(SandboxRecord {
-            provider:          "local".to_string(),
+        projection.sandbox = Some(RunSandbox {
+            provider:          SandboxProvider::Local,
+            id:                "sandbox-1".to_string(),
             working_directory: "/tmp/project".to_string(),
-            identifier:        Some("sandbox-1".to_string()),
             repo_cloned:       None,
             clone_origin_url:  None,
             clone_branch:      None,
+            resources:         None,
         });
         let stage =
             projection.stage_entry(stage_id.node_id(), stage_id.visit(), first_event_seq(2));

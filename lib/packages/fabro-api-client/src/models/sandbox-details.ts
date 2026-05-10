@@ -15,6 +15,9 @@
 
 // May contain unused imports in some cases
 // @ts-ignore
+import type { SandboxProvider } from './sandbox-provider';
+// May contain unused imports in some cases
+// @ts-ignore
 import type { SandboxResources } from './sandbox-resources';
 // May contain unused imports in some cases
 // @ts-ignore
@@ -27,18 +30,15 @@ import type { SandboxTimestamps } from './sandbox-timestamps';
  * Provider-neutral details about the sandbox owned by a run.
  */
 export interface SandboxDetails {
+    'provider': SandboxProvider;
     /**
-     * Sandbox provider name (`local`, `docker`, `daytona`).
+     * Fabro sandbox control identifier used for reconnect, terminal, and delete operations.
      */
-    'provider': string;
+    'id': string;
     /**
-     * Provider-facing sandbox name when available.
+     * Path where the run executed inside the sandbox.
      */
-    'name'?: string;
-    /**
-     * Provider-facing identifier (container ID, Daytona UUID) when available.
-     */
-    'id'?: string;
+    'working_directory': string;
     'state': SandboxState;
     /**
      * Original provider state string before normalization. Display/debugging only; UI behavior keys off `state`.

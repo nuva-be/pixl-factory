@@ -20,8 +20,8 @@ use fabro_model::{ModelRef, Provider};
 use fabro_types::settings::ServerAuthMethod;
 use fabro_types::{
     AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
-    InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec, SuccessReason,
-    SystemActorKind, WorkflowSettings, fixtures,
+    InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec,
+    SandboxProvider, SuccessReason, SystemActorKind, WorkflowSettings, fixtures,
 };
 use fabro_util::check_report::CheckStatus;
 use httpmock::Method::{GET, POST};
@@ -7630,9 +7630,9 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
             definition_blob: None,
         },
         workflow_event::Event::SandboxInitialized {
-            provider:          "local".to_string(),
+            provider:          SandboxProvider::Local,
+            id:                "sandbox-preserve-1".to_string(),
             working_directory: "/tmp/fabro-preserved-sandbox".to_string(),
-            identifier:        Some("sandbox-preserve-1".to_string()),
             repo_cloned:       None,
             clone_origin_url:  None,
             clone_branch:      None,
@@ -7650,10 +7650,8 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
     assert_eq!(body["deleted"].as_bool(), Some(true));
     assert_eq!(body["sandbox_preserved"].as_bool(), Some(true));
     assert_eq!(body["sandbox"]["provider"].as_str(), Some("local"));
-    assert_eq!(
-        body["sandbox"]["identifier"].as_str(),
-        Some("sandbox-preserve-1")
-    );
+    assert_eq!(body["sandbox"]["id"].as_str(), Some("sandbox-preserve-1"));
+    assert!(body["sandbox"].get("identifier").is_none());
 
     let req = Request::builder()
         .method("GET")
@@ -7696,10 +7694,10 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::SandboxInitialized {
-            provider:          "missing-provider".to_string(),
+            provider:          SandboxProvider::Docker,
+            id:                "missing-sandbox".to_string(),
             working_directory: "/tmp/fabro-missing-sandbox".to_string(),
-            identifier:        Some("missing-sandbox".to_string()),
-            repo_cloned:       None,
+            repo_cloned:       Some(false),
             clone_origin_url:  None,
             clone_branch:      None,
         },
@@ -9348,9 +9346,9 @@ async fn boards_runs_includes_live_board_metadata_from_run_state() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::SandboxInitialized {
-            provider:          "local".to_string(),
+            provider:          SandboxProvider::Local,
+            id:                "sb-test".to_string(),
             working_directory: "/sandbox/workdir".to_string(),
-            identifier:        Some("sb-test".to_string()),
             repo_cloned:       None,
             clone_origin_url:  None,
             clone_branch:      None,
@@ -9423,9 +9421,9 @@ async fn boards_runs_page_limit_preserves_metadata_for_paged_items() {
             workflow_event::Event::RunStarting,
             workflow_event::Event::RunRunning,
             workflow_event::Event::SandboxInitialized {
-                provider:          "local".to_string(),
+                provider:          SandboxProvider::Local,
+                id:                sandbox_id.to_string(),
                 working_directory: "/sandbox/workdir".to_string(),
-                identifier:        Some(sandbox_id.to_string()),
                 repo_cloned:       None,
                 clone_origin_url:  None,
                 clone_branch:      None,

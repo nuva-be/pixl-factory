@@ -32,11 +32,11 @@ pub mod types {
         AuthMethod, BilledTokenCounts, CommandTermination, DiffStats, DiffSummary, DirtyStatus,
         EventEnvelope, GitContext, IdpIdentity, InterviewOption, InterviewQuestionRecord,
         PendingInterviewRecord, PreRunPushOutcome, Principal, QuestionType, RepositoryReference,
-        RunClientProvenance, RunEvent, RunProjection, RunProvenance, RunServerProvenance,
-        RunSummary, SandboxDetails, SandboxResources, SandboxService, SandboxServiceListResponse,
-        SandboxState, SandboxTimestamps, SecretMetadata, SecretType, ServerSettings,
-        StageCompletion, StageHandler, StageOutcome, StageProjection, StageState, SystemActorKind,
-        UserPrincipal, WorkflowSettings,
+        RunClientProvenance, RunEvent, RunProjection, RunProvenance, RunSandbox,
+        RunServerProvenance, RunSummary, SandboxDetails, SandboxProvider, SandboxResources,
+        SandboxService, SandboxServiceListResponse, SandboxState, SandboxTimestamps,
+        SecretMetadata, SecretType, ServerSettings, StageCompletion, StageHandler, StageOutcome,
+        StageProjection, StageState, SystemActorKind, UserPrincipal, WorkflowSettings,
     };
 
     pub use crate::generated::types::*;

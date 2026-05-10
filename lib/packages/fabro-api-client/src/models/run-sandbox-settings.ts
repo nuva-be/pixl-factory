@@ -19,9 +19,12 @@ import type { DaytonaSettings } from './daytona-settings';
 // May contain unused imports in some cases
 // @ts-ignore
 import type { DockerSettings } from './docker-settings';
+// May contain unused imports in some cases
+// @ts-ignore
+import type { SandboxProvider } from './sandbox-provider';
 
 export interface RunSandboxSettings {
-    'provider': string;
+    'provider': SandboxProvider;
     'preserve': boolean;
     'stop_on_terminal': boolean;
     'devcontainer': boolean;
@@ -29,4 +32,3 @@ export interface RunSandboxSettings {
     'docker': DockerSettings | null;
     'daytona': DaytonaSettings | null;
 }
-

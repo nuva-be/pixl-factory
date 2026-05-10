@@ -1697,16 +1697,12 @@ async fn delete_run_sandbox_resource(
         return Ok(DeleteRunOutcome::NoContent);
     };
     if preserve {
-        let identifier = record
-            .identifier
-            .clone()
-            .unwrap_or_else(|| record.working_directory.clone());
         return Ok(DeleteRunOutcome::Preserved(DeleteRunResponse {
             deleted:           true,
             sandbox_preserved: true,
             sandbox:           DeleteRunSandbox {
                 provider: record.provider,
-                identifier,
+                id:       record.id,
             },
         }));
     }

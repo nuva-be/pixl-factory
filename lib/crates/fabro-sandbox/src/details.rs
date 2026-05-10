@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use fabro_types::{
-    RunId, SandboxDetails, SandboxRecord, SandboxResources, SandboxState, SandboxTimestamps,
+    RunId, RunSandbox, SandboxDetails, SandboxProvider, SandboxResources, SandboxState,
+    SandboxTimestamps,
 };
 
 /// Inspect the sandbox identified by `record` and return provider-neutral
@@ -17,35 +18,42 @@ use fabro_types::{
     reason = "Feature-gated providers consume some parameters only when enabled."
 )]
 pub async fn sandbox_details(
-    record: &SandboxRecord,
+    record: &RunSandbox,
     daytona_api_key: Option<String>,
     daytona_organization_id: Option<String>,
     run_id: Option<RunId>,
 ) -> Result<SandboxDetails> {
-    match record.provider.as_str() {
-        "local" => Ok(local_details()),
+    match record.provider {
+        SandboxProvider::Local => Ok(local_details(record)),
         #[cfg(feature = "docker")]
-        "docker" => docker::docker_details(record, run_id).await,
+        SandboxProvider::Docker => docker::docker_details(record, run_id).await,
+        #[cfg(not(feature = "docker"))]
+        SandboxProvider::Docker => Err(anyhow::anyhow!(
+            "Sandbox provider '{}' has no details implementation",
+            record.provider
+        )),
         #[cfg(feature = "daytona")]
-        "daytona" => daytona::daytona_details(record, daytona_api_key).await,
-        other => Err(anyhow::anyhow!(
-            "Sandbox provider '{other}' has no details implementation"
+        SandboxProvider::Daytona => daytona::daytona_details(record, daytona_api_key).await,
+        #[cfg(not(feature = "daytona"))]
+        SandboxProvider::Daytona => Err(anyhow::anyhow!(
+            "Sandbox provider '{}' has no details implementation",
+            record.provider
         )),
     }
 }
 
-fn local_details() -> SandboxDetails {
+fn local_details(record: &RunSandbox) -> SandboxDetails {
     SandboxDetails {
-        provider:     "local".to_string(),
-        name:         None,
-        id:           None,
-        state:        SandboxState::Running,
-        native_state: None,
-        region:       None,
-        image:        None,
-        resources:    SandboxResources::default(),
-        labels:       BTreeMap::new(),
-        timestamps:   SandboxTimestamps::default(),
+        provider:          SandboxProvider::Local,
+        id:                record.id.clone(),
+        working_directory: record.working_directory.clone(),
+        state:             SandboxState::Running,
+        native_state:      None,
+        region:            None,
+        image:             None,
+        resources:         SandboxResources::default(),
+        labels:            BTreeMap::new(),
+        timestamps:        SandboxTimestamps::default(),
     }
 }
 
@@ -59,27 +67,27 @@ mod docker {
     use bollard::models::{ContainerInspectResponse, ContainerStateStatusEnum, HostConfig};
     use chrono::{DateTime, Utc};
     use fabro_types::{
-        RunId, SandboxDetails, SandboxRecord, SandboxResources, SandboxState, SandboxTimestamps,
+        RunId, RunSandbox, SandboxDetails, SandboxProvider, SandboxResources, SandboxState,
+        SandboxTimestamps,
     };
 
     pub(super) async fn docker_details(
-        record: &SandboxRecord,
+        record: &RunSandbox,
         _run_id: Option<RunId>,
     ) -> Result<SandboxDetails> {
-        let identifier = record
-            .identifier
-            .as_deref()
-            .context("Docker sandbox record missing identifier (container ID/name)")?;
         let docker =
             Docker::connect_with_local_defaults().context("Failed to connect to Docker daemon")?;
         let inspect = docker
-            .inspect_container(identifier, None::<InspectContainerOptions>)
+            .inspect_container(&record.id, None::<InspectContainerOptions>)
             .await
-            .map_err(|err| anyhow!("Failed to inspect Docker container '{identifier}': {err}"))?;
-        Ok(map_docker_inspect(inspect))
+            .map_err(|err| anyhow!("Failed to inspect Docker container '{}': {err}", record.id))?;
+        Ok(map_docker_inspect(inspect, record))
     }
 
-    fn map_docker_inspect(inspect: ContainerInspectResponse) -> SandboxDetails {
+    fn map_docker_inspect(
+        inspect: ContainerInspectResponse,
+        record: &RunSandbox,
+    ) -> SandboxDetails {
         let status_enum = inspect
             .state
             .as_ref()
@@ -106,19 +114,14 @@ mod docker {
             .map(|map| map.into_iter().collect())
             .unwrap_or_default();
 
-        let name = inspect
-            .name
-            .map(|raw| raw.trim_start_matches('/').to_string())
-            .filter(|name| !name.is_empty());
-
         let image = inspect.image;
 
         let created_at = inspect.created.as_deref().and_then(parse_docker_timestamp);
 
         SandboxDetails {
-            provider: "docker".to_string(),
-            name,
-            id: inspect.id,
+            provider: SandboxProvider::Docker,
+            id: record.id.clone(),
+            working_directory: record.working_directory.clone(),
             state: normalized_state,
             native_state,
             region: None,
@@ -171,6 +174,18 @@ mod docker {
 
         use super::*;
 
+        fn record() -> RunSandbox {
+            RunSandbox {
+                provider:          SandboxProvider::Docker,
+                id:                "container-abc123".to_string(),
+                working_directory: "/workspace".to_string(),
+                repo_cloned:       Some(true),
+                clone_origin_url:  None,
+                clone_branch:      None,
+                resources:         None,
+            }
+        }
+
         #[test]
         fn cpu_cores_divides_quota_by_period() {
             let host = HostConfig {
@@ -210,7 +225,7 @@ mod docker {
                 }),
                 ..Default::default()
             };
-            let details = map_docker_inspect(inspect);
+            let details = map_docker_inspect(inspect, &record());
             assert_eq!(details.resources.memory_bytes, None);
         }
 
@@ -223,18 +238,19 @@ mod docker {
                 }),
                 ..Default::default()
             };
-            let details = map_docker_inspect(inspect);
+            let details = map_docker_inspect(inspect, &record());
             assert_eq!(details.resources.memory_bytes, Some(2_147_483_648));
         }
 
         #[test]
-        fn name_strips_leading_slash() {
+        fn record_identity_is_carried_through() {
             let inspect = ContainerInspectResponse {
                 name: Some("/fabro-run-abc".to_string()),
                 ..Default::default()
             };
-            let details = map_docker_inspect(inspect);
-            assert_eq!(details.name.as_deref(), Some("fabro-run-abc"));
+            let details = map_docker_inspect(inspect, &record());
+            assert_eq!(details.id, "container-abc123");
+            assert_eq!(details.working_directory, "/workspace");
         }
 
         #[test]
@@ -322,25 +338,22 @@ mod daytona {
     use chrono::{DateTime, Utc};
     use daytona_api_client::models::SandboxState as DaytonaState;
     use fabro_types::{
-        SandboxDetails, SandboxRecord, SandboxResources, SandboxState, SandboxTimestamps,
+        RunSandbox, SandboxDetails, SandboxProvider, SandboxResources, SandboxState,
+        SandboxTimestamps,
     };
 
     use crate::daytona::DaytonaSandbox;
 
     pub(super) async fn daytona_details(
-        record: &SandboxRecord,
+        record: &RunSandbox,
         daytona_api_key: Option<String>,
     ) -> Result<SandboxDetails> {
-        let identifier = record
-            .identifier
-            .as_deref()
-            .context("Daytona sandbox record missing identifier (sandbox name)")?;
         let repo_cloned = record
             .repo_cloned
-            .context("Daytona sandbox record missing clone metadata")?;
+            .context("Daytona run sandbox missing clone metadata")?;
 
         let sandbox_handle = DaytonaSandbox::reconnect(
-            identifier,
+            &record.id,
             daytona_api_key,
             repo_cloned,
             record.clone_origin_url.clone(),
@@ -352,10 +365,10 @@ mod daytona {
             .sandbox_handle()
             .ok_or_else(|| anyhow!("Daytona sandbox is not initialized after reconnect"))?;
 
-        Ok(map_daytona_sandbox(sdk_sandbox))
+        Ok(map_daytona_sandbox(sdk_sandbox, record))
     }
 
-    fn map_daytona_sandbox(sandbox: &daytona_sdk::Sandbox) -> SandboxDetails {
+    fn map_daytona_sandbox(sandbox: &daytona_sdk::Sandbox, record: &RunSandbox) -> SandboxDetails {
         let normalized_state = sandbox
             .state
             .map_or(SandboxState::Unknown, normalize_daytona_state);
@@ -381,9 +394,9 @@ mod daytona {
         };
 
         SandboxDetails {
-            provider: "daytona".to_string(),
-            name: Some(sandbox.name.clone()),
-            id: Some(sandbox.id.clone()),
+            provider: SandboxProvider::Daytona,
+            id: record.id.clone(),
+            working_directory: record.working_directory.clone(),
             state: normalized_state,
             native_state,
             region,
@@ -525,11 +538,20 @@ mod tests {
 
     #[test]
     fn local_details_returns_running_with_no_metadata() {
-        let details = local_details();
-        assert_eq!(details.provider, "local");
+        let record = RunSandbox {
+            provider:          SandboxProvider::Local,
+            id:                "local:01JNQVR7M0EJ5GKAT2SC4ERS1Z".to_string(),
+            working_directory: "/Users/client/project".to_string(),
+            repo_cloned:       None,
+            clone_origin_url:  None,
+            clone_branch:      None,
+            resources:         None,
+        };
+        let details = local_details(&record);
+        assert_eq!(details.provider, SandboxProvider::Local);
         assert_eq!(details.state, SandboxState::Running);
-        assert!(details.name.is_none());
-        assert!(details.id.is_none());
+        assert_eq!(details.id, "local:01JNQVR7M0EJ5GKAT2SC4ERS1Z");
+        assert_eq!(details.working_directory, "/Users/client/project");
         assert!(details.region.is_none());
         assert!(details.image.is_none());
         assert!(details.labels.is_empty());

@@ -266,6 +266,7 @@ export * from './run-timings';
 export * from './sandbox-details';
 export * from './sandbox-file-entry';
 export * from './sandbox-file-list-response';
+export * from './sandbox-provider';
 export * from './sandbox-resources';
 export * from './sandbox-service';
 export * from './sandbox-service-discovery-source';

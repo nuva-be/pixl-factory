@@ -144,8 +144,8 @@ function StatusStrip({ details }: { details: SandboxDetails }) {
 function OverviewPanel({ details }: { details: SandboxDetails }) {
   return (
     <Panel title="Overview">
-      <Row label="Name" value={nullable(details.name)} />
       <Row label="ID" value={nullable(details.id)} />
+      <Row label="Working directory" value={nullable(details.working_directory)} />
       <Row
         label="Region"
         value={details.region ? details.region : details.provider === "docker" ? "local" : EMPTY_VALUE}
@@ -282,7 +282,13 @@ export default function RunSandbox({ params }: { params: { id: string } }) {
               return <ServicesPanel runId={params.id} leading={modeToggle} />;
             }
             if (mode === "filesystem") {
-              return <FilesystemPanel runId={params.id} leading={modeToggle} />;
+              return (
+                <FilesystemPanel
+                  runId={params.id}
+                  rootDirectory={sandboxQuery.data?.working_directory}
+                  leading={modeToggle}
+                />
+              );
             }
             return (
               <VncPanel runId={params.id} provider={provider} leading={modeToggle} />

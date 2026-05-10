@@ -1159,8 +1159,12 @@ mod runs {
 
     fn sandbox(id: &str, cpu_cores: u32, memory_gib: u32) -> RunSandbox {
         RunSandbox {
-            id:                Some(id.to_string()),
-            working_directory: Some("/workspace".to_string()),
+            provider:          SandboxProvider::Docker,
+            id:                id.to_string(),
+            working_directory: "/workspace".to_string(),
+            repo_cloned:       Some(true),
+            clone_origin_url:  None,
+            clone_branch:      None,
             resources:         Some(SandboxResources {
                 cpu_cores:    Some(f64::from(cpu_cores)),
                 memory_bytes: Some(u64::from(memory_gib) * 1024 * 1024 * 1024),

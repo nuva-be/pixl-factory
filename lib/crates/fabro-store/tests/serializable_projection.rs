@@ -6,8 +6,8 @@ use fabro_types::graph::Graph;
 use fabro_types::run::RunSpec;
 use fabro_types::{
     BilledModelUsage, BilledTokenCounts, Checkpoint, CheckpointRecord, InterviewQuestionRecord,
-    QuestionType, RunDiff, RunStatus, SandboxRecord, StageCompletion, StageOutcome, StartRecord,
-    TerminalStatus, WorkflowSettings, first_event_seq, fixtures,
+    QuestionType, RunDiff, RunSandbox, RunStatus, SandboxProvider, StageCompletion, StageOutcome,
+    StartRecord, TerminalStatus, WorkflowSettings, first_event_seq, fixtures,
 };
 use serde_json::json;
 
@@ -99,13 +99,14 @@ fn serializable_projection_round_trips_and_trims_bulky_node_fields() {
         checkpoint: sample_checkpoint(),
         diff:       RunDiff::default(),
     });
-    projection.sandbox = Some(SandboxRecord {
-        provider:          "local".to_string(),
+    projection.sandbox = Some(RunSandbox {
+        provider:          SandboxProvider::Local,
+        id:                "sandbox-1".to_string(),
         working_directory: "/tmp/project".to_string(),
-        identifier:        Some("sandbox-1".to_string()),
         repo_cloned:       None,
         clone_origin_url:  None,
         clone_branch:      None,
+        resources:         None,
     });
     projection.pending_interviews = BTreeMap::new();
     let stage = projection.stage_entry(stage_id.node_id(), stage_id.visit(), first_event_seq(2));

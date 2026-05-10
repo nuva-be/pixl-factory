@@ -13,11 +13,15 @@
  */
 
 
-// May contain unused imports in some cases
-// @ts-ignore
-import type { SandboxProvider } from './sandbox-provider';
 
-export interface DeleteRunSandbox {
-    'provider': SandboxProvider;
-    'id': string;
-}
+/**
+ * Sandbox execution provider.
+ */
+
+export const SandboxProvider = {
+    LOCAL: 'local',
+    DOCKER: 'docker',
+    DAYTONA: 'daytona'
+} as const;
+
+export type SandboxProvider = typeof SandboxProvider[keyof typeof SandboxProvider];

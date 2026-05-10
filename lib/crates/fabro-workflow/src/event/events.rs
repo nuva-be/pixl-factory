@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use ::fabro_types::{
     BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
     ForkSourceRef, GitContext, ParallelBranchId, Principal, PullRequestRecord, RunBlobId, RunId,
-    RunNoticeLevel, RunProvenance, StageId, SuccessReason, run_event as fabro_types,
+    RunNoticeLevel, RunProvenance, SandboxProvider, StageId, SuccessReason,
+    run_event as fabro_types,
 };
 use fabro_agent::{AgentEvent, SandboxEvent};
 use serde::{Deserialize, Serialize};
@@ -436,9 +437,8 @@ pub enum Event {
     /// Emitted after the sandbox has been initialized (by engine lifecycle).
     SandboxInitialized {
         working_directory: String,
-        provider:          String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        identifier:        Option<String>,
+        provider:          SandboxProvider,
+        id:                String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         repo_cloned:       Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1137,13 +1137,13 @@ impl Event {
             Self::SandboxInitialized {
                 working_directory,
                 provider,
-                identifier,
+                id,
                 ..
             } => {
                 info!(
                     working_directory,
-                    provider,
-                    identifier = identifier.as_deref().unwrap_or(""),
+                    provider = %provider,
+                    id,
                     "Sandbox initialized"
                 );
             }

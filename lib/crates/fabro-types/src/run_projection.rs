@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     BilledTokenCounts, Checkpoint, Conclusion, InterviewQuestionRecord, InvalidTransition,
-    ModelRef, PullRequestRecord, RunControlAction, RunDiff, RunId, RunSpec, RunStatus,
-    SandboxRecord, StageCompletion, StageHandler, StageId, StageState, StartRecord,
+    ModelRef, PullRequestRecord, RunControlAction, RunDiff, RunId, RunSandbox, RunSpec, RunStatus,
+    StageCompletion, StageHandler, StageId, StageState, StartRecord,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -22,7 +22,7 @@ pub struct RunProjection {
     pub pending_control:    Option<RunControlAction>,
     pub checkpoints:        Vec<CheckpointRecord>,
     pub conclusion:         Option<Conclusion>,
-    pub sandbox:            Option<SandboxRecord>,
+    pub sandbox:            Option<RunSandbox>,
     pub pull_request:       Option<PullRequestRecord>,
     pub superseded_by:      Option<RunId>,
     pub pending_interviews: BTreeMap<String, PendingInterviewRecord>,

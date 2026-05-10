@@ -120,10 +120,10 @@ mock.restore();
 
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = [];
 
-function renderPanel(): TestRenderer.ReactTestRenderer {
+function renderPanel(props: Partial<React.ComponentProps<typeof FilesystemPanel>> = {}): TestRenderer.ReactTestRenderer {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = TestRenderer.create(<FilesystemPanel runId="run_1" />);
+    renderer = TestRenderer.create(<FilesystemPanel runId="run_1" {...props} />);
   });
   mountedRenderers.push(renderer);
   return renderer;
@@ -283,6 +283,15 @@ describe("FilesystemPanel render", () => {
     };
     renderPanel();
     expect(lastFilesArgs).toEqual({ id: "run_1", path: "/" });
+  });
+
+  test("requests the sandbox working directory when provided", () => {
+    filesState = {
+      ...makeEmptyFilesState(),
+      data: { data: [] },
+    };
+    renderPanel({ rootDirectory: "/workspace" });
+    expect(lastFilesArgs).toEqual({ id: "run_1", path: "/workspace" });
   });
 
   test("renders breadcrumbs and tree when entries arrive", () => {

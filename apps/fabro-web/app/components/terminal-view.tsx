@@ -120,8 +120,7 @@ function getString(value: Record<string, unknown> | null, key: string): string |
 }
 
 export function sandboxStatusDetail(sandbox: Record<string, unknown> | null): string | null {
-  return getString(sandbox, "identifier")
-    ?? getString(sandbox, "id")
+  return getString(sandbox, "id")
     ?? getString(sandbox, "provider");
 }
 

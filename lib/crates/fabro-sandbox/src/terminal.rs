@@ -9,7 +9,7 @@ use crate::Sandbox;
 use crate::daytona::{DEFAULT_DAYTONA_API_URL, DaytonaSandbox};
 #[cfg(feature = "docker")]
 use crate::docker::DockerSandbox;
-use crate::{SandboxProvider, SandboxRecord};
+use crate::{RunSandbox, SandboxProvider};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalSize {
@@ -35,7 +35,7 @@ pub trait TerminalSession: Send + Sync {
 }
 
 pub async fn open_terminal_for_run(
-    record: &SandboxRecord,
+    record: &RunSandbox,
     daytona_api_key: Option<String>,
     daytona_organization_id: Option<String>,
     run_id: Option<RunId>,
@@ -48,17 +48,14 @@ pub async fn open_terminal_for_run(
     #[cfg(not(any(feature = "daytona", feature = "docker")))]
     let _ = size;
 
-    match record.provider.as_str() {
+    match record.provider {
         #[cfg(feature = "daytona")]
-        "daytona" => {
-            let identifier = record.identifier.as_deref().ok_or_else(|| {
-                crate::Error::message("Daytona sandbox record is missing the sandbox identifier")
-            })?;
+        SandboxProvider::Daytona => {
             let repo_cloned = record.repo_cloned.ok_or_else(|| {
-                crate::Error::message("Daytona sandbox record is missing clone metadata")
+                crate::Error::message("Daytona run sandbox is missing clone metadata")
             })?;
             let sandbox = DaytonaSandbox::reconnect(
-                identifier,
+                &record.id,
                 daytona_api_key.clone(),
                 repo_cloned,
                 record.clone_origin_url.clone(),
@@ -79,15 +76,12 @@ pub async fn open_terminal_for_run(
             Ok(Box::new(session))
         }
         #[cfg(feature = "docker")]
-        "docker" => {
-            let identifier = record.identifier.as_deref().ok_or_else(|| {
-                crate::Error::message("Docker sandbox record is missing the container identifier")
-            })?;
+        SandboxProvider::Docker => {
             let repo_cloned = record.repo_cloned.ok_or_else(|| {
-                crate::Error::message("Docker sandbox record is missing clone metadata")
+                crate::Error::message("Docker run sandbox is missing clone metadata")
             })?;
             let sandbox = DockerSandbox::reconnect(
-                identifier,
+                &record.id,
                 repo_cloned,
                 record.clone_origin_url.clone(),
                 record.clone_branch.clone(),
@@ -98,12 +92,9 @@ pub async fn open_terminal_for_run(
             let session = DockerTerminalSession::open(&sandbox, size).await?;
             Ok(Box::new(session))
         }
-        provider if provider == SandboxProvider::Local.to_string() => Err(crate::Error::message(
+        SandboxProvider::Local => Err(crate::Error::message(
             "Local sandboxes do not support embedded terminals",
         )),
-        other => Err(crate::Error::message(format!(
-            "Sandbox provider '{other}' does not support embedded terminals"
-        ))),
     }
 }
 

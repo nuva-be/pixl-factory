@@ -22,10 +22,11 @@ pub mod run_blob_id;
 pub mod run_event;
 pub mod run_id;
 pub mod run_projection;
+pub mod run_sandbox;
 pub mod run_summary;
 pub mod run_title;
 pub mod sandbox_details;
-pub mod sandbox_record;
+pub mod sandbox_provider;
 pub mod sandbox_services;
 pub mod secret;
 pub mod settings;
@@ -77,10 +78,11 @@ pub use run_id::{RunId, fixtures};
 pub use run_projection::{
     CheckpointRecord, PendingInterviewRecord, RunProjection, StageProjection, first_event_seq,
 };
+pub use run_sandbox::RunSandbox;
 pub use run_summary::RunSummary;
 pub use run_title::{RunTitleError, infer_run_title, normalize_explicit_run_title};
 pub use sandbox_details::{SandboxDetails, SandboxResources, SandboxState, SandboxTimestamps};
-pub use sandbox_record::SandboxRecord;
+pub use sandbox_provider::SandboxProvider;
 pub use sandbox_services::{
     SandboxService, SandboxServiceDiscoverySource, SandboxServiceListMeta,
     SandboxServiceListResponse,

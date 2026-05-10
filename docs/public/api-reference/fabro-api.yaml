@@ -2626,7 +2626,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SandboxDetails"
         "404":
-          description: Run not found or run has no sandbox record
+          description: Run not found or run has no sandbox
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -5378,11 +5378,11 @@ components:
 
     DeleteRunSandbox:
       type: object
-      required: [provider, identifier]
+      required: [provider, id]
       properties:
         provider:
-          type: string
-        identifier:
+          $ref: "#/components/schemas/SandboxProvider"
+        id:
           type: string
 
     ApiQuestionOption:
@@ -6442,8 +6442,9 @@ components:
             - $ref: "#/components/schemas/Conclusion"
             - type: "null"
         sandbox:
-          type: ["object", "null"]
-          additionalProperties: true
+          oneOf:
+            - $ref: "#/components/schemas/RunSandbox"
+            - type: "null"
         pull_request:
           type: ["object", "null"]
           additionalProperties: true
@@ -7047,20 +7048,45 @@ components:
           description: Whether the elapsed time exceeds the expected threshold.
           example: false
 
+    SandboxProvider:
+      description: Sandbox execution provider.
+      type: string
+      enum:
+        - local
+        - docker
+        - daytona
+
     RunSandbox:
-      description: Sandbox environment summary used for the runs board.
+      description: Canonical sandbox environment record for a run.
       type: object
+      required:
+        - provider
+        - id
+        - working_directory
       properties:
+        provider:
+          $ref: "#/components/schemas/SandboxProvider"
         id:
-          type: ["string", "null"]
-          description: Sandbox identifier.
-          example: sb-a1b2c3d4
+          type: string
+          description: Fabro sandbox control identifier used for reconnect, terminal, and delete operations.
+          example: container-a1b2c3d4
         working_directory:
-          type: ["string", "null"]
+          type: string
           description: Path where the run executed inside the sandbox.
           example: /workspace
+        repo_cloned:
+          type: ["boolean", "null"]
+          description: Whether the provider cloned the repository into the sandbox, or null while unknown.
+        clone_origin_url:
+          type: ["string", "null"]
+          description: Repository origin cloned into the sandbox when available.
+        clone_branch:
+          type: ["string", "null"]
+          description: Repository branch cloned into the sandbox when available.
         resources:
-          $ref: "#/components/schemas/SandboxResources"
+          oneOf:
+            - $ref: "#/components/schemas/SandboxResources"
+            - type: "null"
 
     RunQuestion:
       description: A pending human-in-the-loop question summary.
@@ -7922,21 +7948,21 @@ components:
       type: object
       required:
         - provider
+        - id
+        - working_directory
         - state
         - resources
         - labels
         - timestamps
       properties:
         provider:
-          type: string
-          description: Sandbox provider name (`local`, `docker`, `daytona`).
-          example: docker
-        name:
-          type: string
-          description: Provider-facing sandbox name when available.
+          $ref: "#/components/schemas/SandboxProvider"
         id:
           type: string
-          description: Provider-facing identifier (container ID, Daytona UUID) when available.
+          description: Fabro sandbox control identifier used for reconnect, terminal, and delete operations.
+        working_directory:
+          type: string
+          description: Path where the run executed inside the sandbox.
         state:
           $ref: "#/components/schemas/SandboxState"
         native_state:
@@ -8753,7 +8779,7 @@ components:
       required: [provider, preserve, stop_on_terminal, devcontainer, env, docker, daytona]
       properties:
         provider:
-          type: string
+          $ref: "#/components/schemas/SandboxProvider"
         preserve:
           type: boolean
         stop_on_terminal:

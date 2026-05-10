@@ -473,7 +473,8 @@ mod tests {
     use fabro_llm::types::TokenCounts;
     use fabro_model::{ModelRef, Provider};
     use fabro_types::{
-        MetadataSnapshotFailureKind, MetadataSnapshotPhase, ParallelBranchId, StageId, fixtures,
+        MetadataSnapshotFailureKind, MetadataSnapshotPhase, ParallelBranchId, SandboxProvider,
+        StageId, fixtures,
     };
     use fabro_workflow::event::{Event, RunNoticeLevel, to_run_event, to_run_event_at};
     use fabro_workflow::outcome::billed_model_usage_from_llm;
@@ -709,8 +710,8 @@ mod tests {
             stage_started("code", "Code"),
             Event::SandboxInitialized {
                 working_directory: "/home/daytona/workspace".into(),
-                provider:          "daytona".into(),
-                identifier:        None,
+                provider:          SandboxProvider::Daytona,
+                id:                "daytona:sandbox-id".into(),
                 repo_cloned:       None,
                 clone_origin_url:  None,
                 clone_branch:      None,
@@ -1084,8 +1085,8 @@ mod tests {
         emit(&mut ui, stage_started("code", "Code"));
         emit(&mut ui, Event::SandboxInitialized {
             working_directory: "/home/daytona/workspace".into(),
-            provider:          "daytona".into(),
-            identifier:        None,
+            provider:          SandboxProvider::Daytona,
+            id:                "daytona:sandbox-id".into(),
             repo_cloned:       None,
             clone_origin_url:  None,
             clone_branch:      None,

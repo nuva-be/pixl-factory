@@ -127,22 +127,22 @@ describe("formatBytesAsMemory", () => {
 describe("RunSandbox route", () => {
   test("renders panels for a fully populated sandbox", () => {
     currentDetails = {
-      provider:     "docker",
-      name:         "fabro-run-abc",
-      id:           "abcdef123456",
-      state:        "running",
-      native_state: "running",
-      region:       null,
-      image:        "ghcr.io/fabro/sandbox:latest",
-      resources:    {
+      provider:          "docker",
+      id:                "abcdef123456",
+      working_directory: "/workspace",
+      state:             "running",
+      native_state:      "running",
+      region:            undefined,
+      image:             "ghcr.io/fabro/sandbox:latest",
+      resources:         {
         cpu_cores:    2,
         memory_bytes: 4 * 1024 * 1024 * 1024,
-        disk_bytes:   null,
+        disk_bytes:   undefined,
       },
-      labels: { run: "abc" },
-      timestamps: {
+      labels:            { run: "abc" },
+      timestamps:        {
         created_at:       "2026-05-09T12:00:00Z",
-        last_activity_at: null,
+        last_activity_at: undefined,
       },
     };
     const renderer = renderRoute();
@@ -156,22 +156,22 @@ describe("RunSandbox route", () => {
 
   test("renders without crashing when most fields are null", () => {
     currentDetails = {
-      provider:     "local",
-      name:         null,
-      id:           null,
-      state:        "unknown",
-      native_state: null,
-      region:       null,
-      image:        null,
-      resources:    {
-        cpu_cores:    null,
-        memory_bytes: null,
-        disk_bytes:   null,
+      provider:          "local",
+      id:                "local:run_1",
+      working_directory: "/tmp/project",
+      state:             "unknown",
+      native_state:      undefined,
+      region:            undefined,
+      image:             undefined,
+      resources:         {
+        cpu_cores:    undefined,
+        memory_bytes: undefined,
+        disk_bytes:   undefined,
       },
-      labels: {},
-      timestamps: {
-        created_at:       null,
-        last_activity_at: null,
+      labels:            {},
+      timestamps:        {
+        created_at:       undefined,
+        last_activity_at: undefined,
       },
     };
     const renderer = renderRoute();

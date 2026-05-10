@@ -103,7 +103,7 @@ async fn retrieve_run_sandbox(
         Ok(id) => id,
         Err(response) => return response,
     };
-    let record = match load_run_sandbox_record_or_not_found(&state, &id).await {
+    let record = match load_run_sandbox_or_not_found(&state, &id).await {
         Ok(record) => record,
         Err(response) => return response,
     };
@@ -215,7 +215,7 @@ async fn run_terminal(
 }
 
 async fn terminal_websocket(mut socket: WebSocket, state: Arc<AppState>, id: RunId) {
-    let record = match load_run_sandbox_record(&state, &id).await {
+    let record = match load_run_sandbox(&state, &id).await {
         Ok(record) => record,
         Err(response) => {
             let message = terminal_error_from_status(response.status());
@@ -394,13 +394,13 @@ async fn create_ssh_access(
         Ok(id) => id,
         Err(response) => return response,
     };
-    let record = match load_run_sandbox_record(&state, &id).await {
+    let record = match load_run_sandbox(&state, &id).await {
         Ok(record) => record,
         Err(response) => return response,
     };
 
-    match record.provider.as_str() {
-        provider if provider == SandboxProvider::Daytona.to_string() => {
+    match record.provider {
+        SandboxProvider::Daytona => {
             let sandbox = match reconnect_daytona_sandbox(&state, &id).await {
                 Ok(sandbox) => sandbox,
                 Err(response) => return response,
@@ -414,7 +414,7 @@ async fn create_ssh_access(
                 }
             }
         }
-        provider if provider == SandboxProvider::Docker.to_string() => {
+        SandboxProvider::Docker => {
             let sandbox = match reconnect_run_sandbox(&state, &id).await {
                 Ok(sandbox) => sandbox,
                 Err(response) => return response,
@@ -433,7 +433,7 @@ async fn create_ssh_access(
                 }
             }
         }
-        _ => ApiError::new(
+        SandboxProvider::Local => ApiError::new(
             StatusCode::CONFLICT,
             "Sandbox provider does not support access commands.",
         )
@@ -450,11 +450,11 @@ async fn create_sandbox_vnc_preview(
         Ok(id) => id,
         Err(response) => return response,
     };
-    let record = match load_run_sandbox_record(&state, &id).await {
+    let record = match load_run_sandbox(&state, &id).await {
         Ok(record) => record,
         Err(response) => return response,
     };
-    if record.provider != SandboxProvider::Daytona.to_string() {
+    if record.provider != SandboxProvider::Daytona {
         return ApiError::new(
             StatusCode::NOT_IMPLEMENTED,
             "Sandbox provider does not support VNC previews.",
@@ -554,11 +554,11 @@ async fn list_sandbox_services(
         Ok(id) => id,
         Err(response) => return response,
     };
-    let record = match load_run_sandbox_record(&state, &id).await {
+    let record = match load_run_sandbox(&state, &id).await {
         Ok(record) => record,
         Err(response) => return response,
     };
-    let provider = record.provider;
+    let provider = record.provider.to_string();
     let sandbox = match reconnect_run_sandbox(&state, &id).await {
         Ok(sandbox) => sandbox,
         Err(response) => return response,
@@ -844,7 +844,7 @@ async fn reconnect_run_sandbox(
     state: &Arc<AppState>,
     run_id: &RunId,
 ) -> Result<Box<dyn Sandbox>, Response> {
-    let record = load_run_sandbox_record(state, run_id).await?;
+    let record = load_run_sandbox(state, run_id).await?;
     let daytona_api_key = state.vault_or_env(EnvVars::DAYTONA_API_KEY);
     let sandbox = reconnect_for_run(&record, daytona_api_key, Some(*run_id))
         .await
@@ -862,21 +862,14 @@ async fn reconnect_daytona_sandbox(
     state: &Arc<AppState>,
     run_id: &RunId,
 ) -> Result<DaytonaSandbox, Response> {
-    let record = load_run_sandbox_record(state, run_id).await?;
-    if record.provider != SandboxProvider::Daytona.to_string() {
+    let record = load_run_sandbox(state, run_id).await?;
+    if record.provider != SandboxProvider::Daytona {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             "Sandbox provider does not support this capability.",
         )
         .into_response());
     }
-    let Some(name) = record.identifier.as_deref() else {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "Sandbox record is missing the Daytona identifier.",
-        )
-        .into_response());
-    };
     let Some(repo_cloned) = record.repo_cloned else {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -886,7 +879,7 @@ async fn reconnect_daytona_sandbox(
     };
     let daytona_api_key = state.vault_or_env(EnvVars::DAYTONA_API_KEY);
     let sandbox = DaytonaSandbox::reconnect(
-        name,
+        &record.id,
         daytona_api_key,
         repo_cloned,
         record.clone_origin_url.clone(),
@@ -902,10 +895,10 @@ async fn reconnect_daytona_sandbox(
     Ok(sandbox)
 }
 
-async fn load_run_sandbox_record(
+async fn load_run_sandbox(
     state: &Arc<AppState>,
     run_id: &RunId,
-) -> Result<fabro_types::SandboxRecord, Response> {
+) -> Result<fabro_types::RunSandbox, Response> {
     match state.store.open_run_reader(run_id).await {
         Ok(run_store) => match run_store.state().await {
             Ok(run_state) => run_state.sandbox.ok_or_else(|| {
@@ -919,13 +912,13 @@ async fn load_run_sandbox_record(
     }
 }
 
-/// Same as `load_run_sandbox_record`, but treats a missing sandbox record as
+/// Same as `load_run_sandbox`, but treats a missing sandbox as
 /// `404 Not Found` instead of `409 Conflict`. Used by the inspection endpoint
 /// where there is no resource to act on if the run never had a sandbox.
-async fn load_run_sandbox_record_or_not_found(
+async fn load_run_sandbox_or_not_found(
     state: &Arc<AppState>,
     run_id: &RunId,
-) -> Result<fabro_types::SandboxRecord, Response> {
+) -> Result<fabro_types::RunSandbox, Response> {
     match state.store.open_run_reader(run_id).await {
         Ok(run_store) => match run_store.state().await {
             Ok(run_state) => run_state
@@ -1067,7 +1060,7 @@ LISTEN 0 4096 [::]:3000 [::]:* users:(("vite",pid=84,fd=19))
     #[test]
     fn proc_net_parser_extracts_listening_tcp_services_without_processes() {
         let discovery = parse_sandbox_services(
-            r#"
+            r"
 FABRO_PROC_NET_TCP /proc/net/tcp
   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 0100007F:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000   501        0 11111
@@ -1077,7 +1070,7 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
   sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 00000000000000000000000000000000:1F90 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000   501        0 44444
    1: 00000000000000000000000001000000:09C4 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000   501        0 55555
-"#,
+",
             "daytona",
         );
 
@@ -1322,6 +1315,7 @@ mod retrieve_sandbox_tests {
                 "event": "sandbox.initialized",
                 "properties": {
                     "provider": provider,
+                    "id": format!("{provider}:sandbox-id"),
                     "working_directory": "/workspace",
                 },
             }),
@@ -1351,7 +1345,7 @@ mod retrieve_sandbox_tests {
     }
 
     #[tokio::test]
-    async fn run_without_sandbox_record_returns_404() {
+    async fn run_without_sandbox_returns_404() {
         let state = test_app_state();
         let app = build_test_router(state.clone());
         let run_id = RunId::new();
@@ -1396,29 +1390,13 @@ mod retrieve_sandbox_tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
         assert_eq!(body["provider"], "local");
+        assert_eq!(body["id"], "local:sandbox-id");
+        assert_eq!(body["working_directory"], "/workspace");
         assert_eq!(body["state"], "running");
+        assert!(body.get("name").is_none());
+        assert!(body.get("identifier").is_none());
         assert!(body["resources"].is_object());
         assert!(body["timestamps"].is_object());
-    }
-
-    #[tokio::test]
-    async fn unknown_provider_returns_501() {
-        let state = test_app_state();
-        let app = build_test_router(state.clone());
-        let run_id = RunId::new();
-        let run_store = state
-            .store_ref()
-            .create_run(&run_id)
-            .await
-            .expect("test run should be creatable");
-        append_run_created(&run_store, &run_id).await;
-        append_sandbox_initialized(&run_store, &run_id, "ephemeral-mystery-cloud").await;
-
-        let response = app
-            .oneshot(req_get(&format!("/api/v1/runs/{run_id}/sandbox")))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     }
 
     #[tokio::test]
