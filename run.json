@@ -216,7 +216,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-10T07:56:01.519898Z",
-  "last_event_at": "2026-05-10T08:01:06.626700Z",
+  "last_event_at": "2026-05-10T08:01:10.580138Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -256,9 +256,9 @@
       "diff": {}
     },
     {
-      "seq": 0,
+      "seq": 36,
       "checkpoint": {
-        "timestamp": "2026-05-10T08:01:06.764025Z",
+        "timestamp": "2026-05-10T08:01:10.579847Z",
         "current_node": "nap",
         "completed_nodes": [
           "start",
@@ -266,29 +266,25 @@
         ],
         "node_retries": {},
         "context_values": {
-          "outcome": "succeeded",
           "response.nap": "done",
-          "internal.work_dir": "/home/daytona/workspace",
           "thread.start.current_node": "nap",
+          "last_stage": "nap",
+          "internal.thread_id": "start",
+          "internal.fidelity": "compact",
+          "outcome": "succeeded",
+          "internal.run_id": "01KR8E56X3T1AFB97YZXBCEKDD",
+          "internal.node_visit_count": 1,
           "internal.retry_count.start": 0,
           "failure_signature": "",
-          "internal.node_visit_count": 1,
-          "internal.fidelity": "compact",
-          "internal.run_id": "01KR8E56X3T1AFB97YZXBCEKDD",
-          "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
           "current_node": "nap",
           "failure_class": "",
-          "last_response": "done",
-          "last_stage": "nap",
-          "graph.rankdir": "LR",
+          "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
           "internal.retry_count.nap": 0,
-          "internal.thread_id": "start"
+          "graph.rankdir": "LR",
+          "internal.work_dir": "/home/daytona/workspace",
+          "last_response": "done"
         },
         "node_outcomes": {
-          "start": {
-            "status": "succeeded",
-            "usage": null
-          },
           "nap": {
             "status": "succeeded",
             "context_updates": {
@@ -320,18 +316,60 @@
               },
               "total_usd_micros": 36575
             }
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
           }
         },
         "next_node_id": "exit",
+        "git_commit_sha": "b63c2ac8d7c09af2a774c1b05fdfe93a6a944b59",
         "node_visits": {
-          "start": 1,
-          "nap": 1
+          "nap": 1,
+          "start": 1
         }
       },
-      "diff": {}
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
     }
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-10T08:01:10.613817Z",
+    "status": "succeeded",
+    "duration_ms": 309061,
+    "final_git_commit_sha": "b63c2ac8d7c09af2a774c1b05fdfe93a6a944b59",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "duration_ms": 0,
+        "retries": 0
+      },
+      {
+        "stage_id": "nap",
+        "stage_label": "nap",
+        "duration_ms": 303211,
+        "billing_usd_micros": 36575,
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 517,
+      "output_tokens": 78,
+      "total_tokens": 16959,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 7974,
+      "cache_write_tokens": 8390,
+      "total_usd_micros": 36575
+    },
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "provider": "daytona",
     "working_directory": "/home/daytona/workspace",
@@ -348,7 +386,12 @@
       "first_event_seq": 20,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Stage completed: nap",
+        "failure_reason": null,
+        "timestamp": "2026-05-10T08:01:06.763801Z"
+      },
       "provider_used": {
         "mode": "agent",
         "provider": "anthropic",
@@ -361,6 +404,7 @@
       "output": null,
       "started_at": "2026-05-10T07:56:03.552864Z",
       "handler": "agent",
+      "duration_ms": 303211,
       "usage": {
         "input_tokens": 517,
         "output_tokens": 78,
@@ -374,7 +418,7 @@
         "provider": "anthropic",
         "model_id": "claude-sonnet-4-6"
       },
-      "state": "running"
+      "state": "succeeded"
     },
     "start@1": {
       "first_event_seq": 16,
@@ -394,6 +438,35 @@
       "output": null,
       "started_at": "2026-05-10T07:56:03.551192Z",
       "handler": "start",
+      "duration_ms": 0,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    },
+    "exit@1": {
+      "first_event_seq": 39,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-10T08:01:10.580138Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-10T08:01:10.580089Z",
+      "handler": "exit",
       "duration_ms": 0,
       "usage": {
         "input_tokens": 0,
