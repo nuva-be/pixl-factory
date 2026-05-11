@@ -4,9 +4,9 @@
 
 **Goal:** Add `backend="acp"` as a first-class Fabro LLM backend for agent and prompt nodes, backed by the official ACP Rust SDK and isolated in a new `fabro-acp` crate.
 
-**Architecture:** Add a new `fabro-acp` crate that owns ACP command resolution, stdio protocol execution, response aggregation, credential/env preparation, and ACP-specific tests. Extend the sandbox abstraction with bidirectional stdio so ACP agents run inside the same local/Docker sandbox where they can read and modify the workspace; `fabro-workflow` keeps the workflow-owned `CodergenBackend` adapter and delegates protocol work to `fabro-acp` to avoid a Rust crate cycle. Add ACP-specific events and router support so `api`, `cli`, and `acp` are explicit backend choices with no silent fallback for misspellings.
+**Architecture:** Add a new `fabro-acp` crate that owns ACP command resolution, sandbox-backed stdio transport, protocol execution, response aggregation, and ACP-specific tests. Extend the sandbox abstraction with bidirectional non-PTY stdio so ACP agents run inside the same local/Docker sandbox where they can read and modify the workspace; `fabro-workflow` keeps the workflow-owned `CodergenBackend` adapter, credentials/env preparation, events, and changed-file detection to avoid leaking workflow concerns into the protocol crate. Add ACP-specific events and router support so `api`, `cli`, and `acp` are explicit backend choices with no silent fallback for misspellings.
 
-**Tech Stack:** Rust, Tokio, `agent-client-protocol = "0.11.1"`, `agent-client-protocol-tokio = "0.11.1"` for command parsing/default ACP agent metadata where useful, JSON-RPC over stdio, Fabro sandbox providers, `cargo nextest`.
+**Tech Stack:** Rust, Tokio, `agent-client-protocol = "0.11.1"`, `agent-client-protocol-tokio = "0.11.1"` for command parsing/default ACP agent metadata where useful, `agent_client_protocol::Lines` / `ByteStreams` over sandbox stdio, Fabro sandbox providers, `cargo nextest`.
 
 ---
 
@@ -21,6 +21,7 @@
   - Anthropic: `npx -y @zed-industries/claude-code-acp@latest`
   - OpenAI, Kimi, Zai, Minimax, Inception, OpenAI-compatible: `npx -y @zed-industries/codex-acp@latest`
   - Gemini: `npx -y -- @google/gemini-cli@latest --experimental-acp`
+- Before running one of Fabro's default `npx`-based ACP commands, Fabro ensures Node/npm/npx exist in the sandbox using the same Node bootstrap strategy as the legacy CLI backend. Explicit `acp_command` overrides are not implicitly installed beyond this Node bootstrap; if they need other binaries, the workflow/sandbox image must provide them.
 - Advanced users and tests can set `acp_command="..."` on an ACP-backed node to override the default command. The override is only honored when `backend="acp"` and is parsed with the same shell-word rules as the ACP Tokio helper.
 - ACP receives the same provider credentials and workflow tool env currently forwarded to CLI agents. Model selection is recorded in Fabro events/projections, but stable ACP v1 has no portable model-selection request. Users who need model-specific ACP behavior must encode that in their chosen ACP command until ACP model/session config stabilizes.
 - ACP stages emit `agent.acp.started`, `agent.acp.completed`, `agent.acp.cancelled`, and `agent.acp.timed_out`; run projections expose `provider_used.mode == "acp"`.
@@ -30,6 +31,7 @@
 
 - ACP agent processes must run inside the active Fabro sandbox, not on the host, so file mutations, Git diff detection, secrets forwarding, and cancellation match existing run isolation.
 - ACP stdio must be line-preserving, non-PTY JSON-RPC. Do not implement ACP over terminal PTY sessions.
+- Do not use `agent_client_protocol_tokio::AcpAgent` to connect to the running agent process; it spawns on the host. It is acceptable only for parsing/validating command strings or using its default command constants. The actual connection must adapt `Sandbox::spawn_stdio_process(...)` into an `agent_client_protocol` transport.
 - The new `fabro-acp` crate must use `agent-client-protocol` schema/session/message types for initialization, session creation, prompt turns, updates, cancellation, and fake-agent tests. Do not hand-roll ACP request/response structs.
 - `fabro-acp` must not depend on `fabro-workflow`; otherwise `fabro-workflow` cannot instantiate it without a dependency cycle. The workflow adapter is intentionally thin and delegates all protocol behavior to `fabro-acp`.
 - ACP response text is the concatenation of `SessionUpdate::AgentMessageChunk(ContentBlock::Text(...))` chunks until the prompt response stop reason arrives. Thought chunks, plans, tool call updates, and custom updates are ignored for `CodergenResult::Text` but must keep the stall watchdog alive.
@@ -45,8 +47,8 @@
 
 - Create `lib/crates/fabro-acp/Cargo.toml` and `lib/crates/fabro-acp/src/lib.rs`: crate surface and exports.
 - Create `lib/crates/fabro-acp/src/command.rs`: provider-to-ACP-command mapping and command override parsing helpers.
-- Create `lib/crates/fabro-acp/src/env.rs`: credential resolution and launch env construction shared by ACP runs.
-- Create `lib/crates/fabro-acp/src/session.rs`: ACP lifecycle using `agent_client_protocol::Client`, `InitializeRequest`, `NewSessionRequest`, `PromptRequest`, `SessionUpdate`, and stop reason handling.
+- Create `lib/crates/fabro-acp/src/transport.rs`: adapt `fabro_agent::Sandbox::spawn_stdio_process(...)` into an `agent_client_protocol` transport using `Lines` or `ByteStreams`, collect stderr tails, and terminate/wait on process cleanup.
+- Create `lib/crates/fabro-acp/src/session.rs`: ACP lifecycle using `agent_client_protocol::Client`, `InitializeRequest`, `NewSessionRequest`, `PromptRequest`, `SessionUpdate`, `CancelNotification`, and stop reason handling.
 - Create `lib/crates/fabro-acp/src/error.rs`: ACP-specific error type that converts cleanly into workflow handler errors.
 - Create `lib/crates/fabro-acp/src/test_support.rs` behind `#[cfg(any(test, feature = "test-support"))]`: fake ACP agent/transport helpers using `agent-client-protocol` types.
 - Modify root `Cargo.toml`: add workspace dependencies for `agent-client-protocol` and `agent-client-protocol-tokio` and include `fabro-acp` through the existing `lib/crates/*` workspace glob.
@@ -57,8 +59,12 @@
 - Modify `lib/crates/fabro-sandbox/src/worktree.rs`, `read_guard.rs`, and sandbox decorators: forward stdio support to wrapped sandboxes and preserve worktree path resolution.
 - Create `lib/crates/fabro-workflow/src/handler/llm/acp.rs`: workflow-owned `CodergenBackend` adapter that calls `fabro_acp`.
 - Create `lib/crates/fabro-workflow/src/handler/llm/changed_files.rs`: shared Git changed-file detection currently embedded in CLI backend.
+- Create `lib/crates/fabro-workflow/src/handler/llm/node_runtime.rs`: shared Node/npm bootstrap helper used by both CLI and ACP default `npx` commands.
 - Modify `lib/crates/fabro-workflow/src/handler/llm/cli.rs`: use shared changed-file helpers and move `BackendRouter` to support API/CLI/ACP selection.
 - Modify `lib/crates/fabro-workflow/src/handler/llm/mod.rs`: export `AgentAcpBackend` and the router.
+- Modify `lib/crates/fabro-types/src/graph.rs`: add `Node::acp_command()`.
+- Modify `lib/crates/fabro-workflow/src/transforms/import.rs`: treat `acp_command` as a semantic default attribute when imported workflow placeholders carry it.
+- Create `lib/crates/fabro-validate/src/rules/backend_valid.rs` and modify `lib/crates/fabro-validate/src/rules/mod.rs`: validate node `backend` values are absent or one of `api`, `cli`, `acp`.
 - Modify `lib/crates/fabro-workflow/src/pipeline/initialize.rs`: construct `AgentAcpBackend` alongside API and CLI backends.
 - Modify event files: `lib/crates/fabro-workflow/src/event/events.rs`, `names.rs`, `convert.rs`, `stored_fields.rs` as needed for `agent.acp.*`.
 - Modify run event/projection files: `lib/crates/fabro-types/src/run_event/mod.rs` and `lib/crates/fabro-store/src/run_state.rs`.
@@ -185,16 +191,16 @@ Add dependencies:
 [dependencies]
 agent-client-protocol.workspace = true
 agent-client-protocol-tokio.workspace = true
-fabro-auth = { path = "../fabro-auth" }
 fabro-agent = { path = "../fabro-agent" }
 fabro-model = { path = "../fabro-model" }
 fabro-types = { path = "../fabro-types" }
 fabro-util = { path = "../fabro-util" }
+bytes.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
+tokio-util = { workspace = true, features = ["compat", "io"] }
 futures.workspace = true
 uuid.workspace = true
 tracing.workspace = true
@@ -357,9 +363,30 @@ async fn spawn_stdio_process(
 ) -> crate::Result<StdioProcess>;
 ```
 
-`StdioProcess` should own stdin, stdout, stderr, and child lifecycle. It needs methods or fields sufficient for `fabro-acp` to create a line-based ACP transport and to terminate/wait on cancellation. Prefer narrow methods (`write_line`, `read_stdout_line`, `read_stderr_to_end`, `terminate`) over exposing provider internals.
+`StdioProcess` should own stdin, stdout, stderr, and child lifecycle. It must expose enough typed IO for `fabro-acp` to build an `agent_client_protocol` transport without provider-specific downcasts:
 
-For local, spawn `/bin/bash -lc <command>` with piped stdin/stdout/stderr, current env filtering consistent with `exec_command_streaming`, and process-group cleanup.
+```rust
+pub struct StdioProcess {
+    pub stdin: Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+    pub stdout: Pin<Box<dyn tokio::io::AsyncRead + Send>>,
+    pub stderr: StderrCollector,
+    pub handle: StdioProcessHandle,
+}
+
+impl StdioProcessHandle {
+    pub async fn terminate(&self) -> crate::Result<()>;
+    pub async fn wait(&self) -> crate::Result<CommandTermination>;
+}
+```
+
+The exact type names can differ, but the public API must support all of these operations:
+
+- build line-oriented JSON-RPC from stdout/stdin in `fabro-acp`
+- collect stderr concurrently for protocol/exit errors
+- terminate the child/exec on timeout or cancellation
+- wait for final termination without leaking provider internals
+
+For local, spawn `/bin/bash -lc <command>` with piped stdin/stdout/stderr, current env filtering consistent with `exec_command_streaming`, and process-group cleanup. The local implementation can expose child stdout directly as `AsyncRead`.
 
 - [ ] **Step 4: Implement Docker provider**
 
@@ -378,7 +405,7 @@ CreateExecOptions {
 }
 ```
 
-The test must assert `tty == Some(false)` because ACP JSON-RPC must not run over PTY.
+Start with `StartExecOptions { detach: false, tty: false, output_capacity: None }` and keep the returned `input` writer. Bollard returns stdout/stderr as a multiplexed `Stream<Item = LogOutput>` rather than separate `AsyncRead`s; convert only `LogOutput::StdOut` bytes into the `stdout` reader used by ACP and feed `LogOutput::StdErr` bytes into the stderr collector. The test must assert both create and start options use `tty == false` because ACP JSON-RPC must not run over PTY.
 
 - [ ] **Step 5: Implement provider forwarding and unsupported Daytona**
 
@@ -421,7 +448,7 @@ git commit -m "feat: add sandbox stdio processes"
 
 **Files:**
 - Create: `lib/crates/fabro-acp/src/session.rs`
-- Create: `lib/crates/fabro-acp/src/env.rs`
+- Create: `lib/crates/fabro-acp/src/transport.rs`
 - Create: `lib/crates/fabro-acp/src/error.rs`
 - Create: `lib/crates/fabro-acp/src/test_support.rs`
 - Modify: `lib/crates/fabro-acp/src/lib.rs`
@@ -451,17 +478,18 @@ Expected: FAIL because `run_acp_turn` does not exist.
 
 - [ ] **Step 3: Implement `AcpRunRequest` / `AcpRunResult`**
 
-Use a workflow-neutral API:
+Use an API that is neutral to `fabro-workflow` but allowed to depend on shared lower-level crates such as `fabro-agent` for the sandbox trait:
 
 ```rust
 pub struct AcpRunRequest {
     pub command: AcpCommand,
-    pub provider: Provider,
-    pub model: String,
     pub prompt: String,
     pub cwd: String,
     pub timeout_ms: Option<u64>,
     pub env: HashMap<String, String>,
+    pub sandbox: Arc<dyn fabro_agent::Sandbox>,
+    pub cancel_token: CancellationToken,
+    pub on_activity: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 pub struct AcpRunResult {
@@ -474,16 +502,28 @@ pub struct AcpRunResult {
 
 Keep usage optional/absent for now because stable ACP v1 does not provide portable token usage without unstable features.
 
-- [ ] **Step 4: Implement ACP lifecycle**
+- [ ] **Step 4: Implement sandbox-backed ACP transport**
+
+Implement a `SandboxAcpTransport` in `transport.rs` that implements `agent_client_protocol::ConnectTo<agent_client_protocol::Client>` by:
+
+- calling `request.sandbox.spawn_stdio_process(...)`
+- adapting process stdout/stdin into `agent_client_protocol::Lines` or `agent_client_protocol::ByteStreams`
+- collecting stderr concurrently into a bounded tail for errors
+- racing protocol completion against early process exit
+- terminating and waiting for the process on timeout/cancellation/error
+
+Use `tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt}` when converting Tokio IO to the `futures` IO traits used by `agent-client-protocol`. Do not use `agent_client_protocol_tokio::AcpAgent` for this connection because it launches the command on the host.
+
+- [ ] **Step 5: Implement ACP lifecycle**
 
 Use the official SDK:
 
 ```rust
 use agent_client_protocol::schema::{InitializeRequest, ProtocolVersion};
 
-Client::builder()
+Client.builder()
     .name("fabro")
-    .connect_with(transport, async |cx| {
+    .connect_with(SandboxAcpTransport::new(&request), async |cx| {
         cx.send_request(InitializeRequest::new(ProtocolVersion::V1))
             .block_task()
             .await?;
@@ -498,26 +538,16 @@ Client::builder()
     .await
 ```
 
-Use lower-level `read_update()` rather than only `read_to_string()` so the implementation can capture stop reasons, touch watchdog callbacks, and handle non-text updates deterministically.
+Use lower-level `read_update()` rather than only `read_to_string()` so the implementation can capture stop reasons, call `on_activity` for every update/response, and handle non-text updates deterministically.
 
-- [ ] **Step 5: Add cancellation and timeout tests**
+- [ ] **Step 6: Add cancellation and timeout tests**
 
 Tests must cover:
 
-- cancellation before prompt completion sends `session/cancel` when a session exists and returns `AcpError::Cancelled`
+- cancellation before prompt completion sends `CancelNotification::new(session_id)` / `session/cancel` when a session exists and returns `AcpError::Cancelled`
 - timeout terminates the stdio process and returns `AcpError::TimedOut`
 - malformed JSON-RPC from the agent returns a protocol error with stderr tail if present
 - early process exit returns an error that includes exit status/stderr
-
-- [ ] **Step 6: Implement env preparation**
-
-Mirror CLI credential behavior:
-
-- If a `CredentialResolver` exists, resolve `CredentialUsage::CliAgent(CliAgentKind::{Claude,Codex,Gemini})`.
-- Run any `login_command` in the sandbox before starting ACP.
-- Forward credential `env_vars`.
-- Merge workflow tool env provider values.
-- Preserve the GitHub token refresh notice behavior in the workflow adapter, not inside `fabro-acp`, because notices are workflow events.
 
 - [ ] **Step 7: Run ACP crate tests**
 
@@ -553,11 +583,17 @@ git commit -m "feat: implement ACP session client"
 **Files:**
 - Create: `lib/crates/fabro-workflow/src/handler/llm/acp.rs`
 - Create: `lib/crates/fabro-workflow/src/handler/llm/changed_files.rs`
+- Create: `lib/crates/fabro-workflow/src/handler/llm/node_runtime.rs`
 - Modify: `lib/crates/fabro-workflow/src/handler/llm/cli.rs`
 - Modify: `lib/crates/fabro-workflow/src/handler/llm/mod.rs`
 - Modify: `lib/crates/fabro-workflow/Cargo.toml`
+- Modify: `lib/crates/fabro-types/src/graph.rs`
+- Modify: `lib/crates/fabro-workflow/src/transforms/import.rs`
+- Create: `lib/crates/fabro-validate/src/rules/backend_valid.rs`
+- Modify: `lib/crates/fabro-validate/src/rules/mod.rs`
 - Test: `lib/crates/fabro-workflow/src/handler/llm/acp.rs`
 - Test: `lib/crates/fabro-workflow/src/handler/llm/cli.rs`
+- Test: `lib/crates/fabro-validate/src/rules/backend_valid.rs`
 
 - [ ] **Step 1: Write failing backend adapter tests**
 
@@ -566,6 +602,8 @@ Add tests that prove:
 - `AgentAcpBackend::run` sends the node prompt to `fabro-acp` and returns `CodergenResult::Text`
 - `AgentAcpBackend::run` honors node `acp_command` only when routing to ACP
 - `AgentAcpBackend::one_shot` combines `system_prompt` and `prompt` into a single ACP prompt
+- default ACP commands bootstrap Node/npx before launch when Node is absent
+- explicit `acp_command` does not trigger provider CLI installation and is still run inside the sandbox
 - stop reason `Cancelled` maps to `Error::Cancelled`
 - max-token/max-turn stop reasons map to handler errors
 - files touched are computed relative to pre-existing dirty files
@@ -584,17 +622,26 @@ router_routes_one_shot_to_acp_for_backend_acp
 router_routes_one_shot_to_api_by_default
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [ ] **Step 3: Write failing backend validation tests**
+
+Add a `backend_valid` rule test proving `backend="api"`, `backend="cli"`, `backend="acp"`, and absent backend are accepted, while `backend="codex"` returns an error diagnostic containing:
+
+```text
+unsupported LLM backend "codex"; expected one of: api, cli, acp
+```
+
+- [ ] **Step 4: Run tests to verify they fail**
 
 Run:
 
 ```bash
 ulimit -n 4096 && cargo nextest run -p fabro-workflow -E 'test(router_uses_acp_for_backend_acp) | test(router_routes_one_shot_to_acp_for_backend_acp) | test(acp_backend)'
+ulimit -n 4096 && cargo nextest run -p fabro-validate -E 'test(backend_valid)'
 ```
 
-Expected: FAIL because ACP adapter/router support does not exist.
+Expected: FAIL because ACP adapter/router support and backend validation do not exist.
 
-- [ ] **Step 4: Implement shared changed-file helpers**
+- [ ] **Step 5: Implement shared changed-file helpers**
 
 Move CLI duplicated logic into `changed_files.rs`:
 
@@ -608,9 +655,20 @@ pub async fn files_touched_since(
 
 Use `shell_quote()` for the `ls -t` command. Update CLI backend to call these helpers without behavior changes.
 
-- [ ] **Step 5: Implement `AgentAcpBackend`**
+- [ ] **Step 6: Implement ACP env preparation and Node bootstrap**
 
-The adapter owns model/provider/resolver/tool env configuration like `AgentCliBackend`, builds `AcpRunRequest`, emits workflow events, and delegates to `fabro_acp`.
+Mirror CLI credential behavior in the workflow adapter before calling `fabro_acp`:
+
+- If a `CredentialResolver` exists, resolve `CredentialUsage::CliAgent(CliAgentKind::{Claude,Codex,Gemini})`.
+- Run any credential `login_command` in the sandbox before starting ACP.
+- Forward credential `env_vars`.
+- Merge workflow tool env provider values.
+- Preserve the GitHub token refresh notice behavior in the workflow adapter, because notices are workflow events.
+- Ensure Node/npm/npx exist before running the default `npx` ACP commands. Extract the existing Node installation shell from `ensure_cli` into a shared helper instead of duplicating a second hardcoded tarball command.
+
+- [ ] **Step 7: Implement `AgentAcpBackend`**
+
+The adapter owns model/provider/resolver/tool env configuration like `AgentCliBackend`, builds `AcpRunRequest` with the active sandbox, cancellation token, and an `on_activity` callback that calls `Emitter::touch`, emits workflow events, and delegates to `fabro_acp`.
 
 For `one_shot`, build the ACP prompt as:
 
@@ -624,7 +682,7 @@ User:
 
 If `system_prompt` is `None` or empty, send only `{prompt}`.
 
-- [ ] **Step 6: Implement three-way `BackendRouter`**
+- [ ] **Step 8: Implement three-way `BackendRouter`**
 
 Change router fields to:
 
@@ -650,32 +708,37 @@ Selection rules:
 
 For `one_shot`, route `"acp"` to ACP and all other valid values to API. Keep the existing `backend="cli"` prompt-node API fallback for backward compatibility, but add a test documenting that legacy behavior so it is no longer accidental. Do not silently route `backend="acp"` to API.
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [ ] **Step 9: Implement backend validation**
+
+Add `backend_valid::rule()` to `fabro-validate` and register it in `built_in_rules()`. This complements router runtime errors and makes `fabro validate` catch misspellings before execution.
+
+- [ ] **Step 10: Run tests to verify they pass**
 
 Run:
 
 ```bash
 ulimit -n 4096 && cargo nextest run -p fabro-workflow -E 'test(router_uses_cli_for_backend_attr) | test(router_uses_api_by_default) | test(router_uses_acp_for_backend_acp) | test(router_routes_one_shot_to_acp_for_backend_acp) | test(agent_cli_backend_run_writes_prompt_and_calls_exec) | test(acp_backend)'
+ulimit -n 4096 && cargo nextest run -p fabro-validate -E 'test(backend_valid)'
 ```
 
 Expected: PASS.
 
-- [ ] **Step 8: Refactor and verify**
+- [ ] **Step 11: Refactor and verify**
 
 Keep ACP-specific protocol code out of `fabro-workflow`; the adapter should translate workflow concepts to `fabro-acp` requests and back.
 
 Run:
 
 ```bash
-cargo build -p fabro-workflow
+cargo build -p fabro-workflow -p fabro-validate
 ```
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
-git add lib/crates/fabro-workflow lib/crates/fabro-workflow/Cargo.toml
+git add lib/crates/fabro-workflow lib/crates/fabro-workflow/Cargo.toml lib/crates/fabro-types/src/graph.rs lib/crates/fabro-validate/src/rules
 git commit -m "feat: route workflow stages to ACP backend"
 ```
 
@@ -976,6 +1039,7 @@ Run:
 ulimit -n 4096 && cargo nextest run -p fabro-acp
 ulimit -n 4096 && cargo nextest run -p fabro-sandbox -E 'test(stdio)'
 ulimit -n 4096 && cargo nextest run -p fabro-workflow -E 'test(router_) | test(acp_backend) | test(agent_acp) | test(initialize.*acp)'
+ulimit -n 4096 && cargo nextest run -p fabro-validate -E 'test(backend_valid)'
 ulimit -n 4096 && cargo nextest run -p fabro-store -E 'test(agent_acp)'
 ulimit -n 4096 && cargo nextest run -p fabro-cli -E 'test(acp_backend_workflow)'
 ```
@@ -1031,6 +1095,8 @@ Expected: clean worktree.
 ## Regression Risks
 
 - **Sandbox isolation bypass:** using `agent-client-protocol-tokio::AcpAgent` directly would spawn host processes. The implementation must instead run ACP stdio through the sandbox abstraction.
+- **SDK transport mismatch:** the ACP SDK expects futures-style line/byte streams; Fabro's sandbox API must expose stdin/stdout in a form `fabro-acp` can adapt to `agent_client_protocol::Lines` or `ByteStreams`. A write-line/read-line-only sandbox API is insufficient if it cannot be converted into a real transport.
+- **Missing Node runtime:** default ACP commands use `npx`. Without the shared Node bootstrap, fresh local/Docker sandboxes that currently work with `backend="cli"` may fail immediately with `npx: command not found`.
 - **Crate cycle:** `fabro-acp` cannot implement workflow's `CodergenBackend` directly without making `fabro-workflow` and `fabro-acp` depend on each other. Keep protocol implementation in `fabro-acp` and the trait adapter in workflow.
 - **PTY corruption:** ACP JSON-RPC must not use terminal sessions. Docker stdio uses `tty=false`; Daytona remains unsupported until raw stdio exists.
 - **Prompt backend ambiguity:** `backend="acp"` on prompt nodes must route to ACP or fail clearly. It must not silently use API.
