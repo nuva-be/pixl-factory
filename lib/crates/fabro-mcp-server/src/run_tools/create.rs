@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use fabro_client::Client;
 use fabro_types::RunId;
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -23,7 +24,7 @@ pub(crate) struct CreateRunSpec {
     pub(crate) run_id:           Option<String>,
     pub(crate) goal:             Option<String>,
     #[serde(default)]
-    pub(crate) inputs:           HashMap<String, Value>,
+    pub(crate) inputs:           HashMap<String, RunInputValue>,
     #[serde(default)]
     pub(crate) labels:           HashMap<String, String>,
     pub(crate) dry_run:          Option<bool>,
@@ -33,6 +34,44 @@ pub(crate) struct CreateRunSpec {
     pub(crate) sandbox:          Option<String>,
     pub(crate) preserve_sandbox: Option<bool>,
     pub(crate) start:            Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct RunInputValue(Value);
+
+impl From<Value> for RunInputValue {
+    fn from(value: Value) -> Self {
+        Self(value)
+    }
+}
+
+impl RunInputValue {
+    fn into_inner(self) -> Value {
+        self.0
+    }
+}
+
+impl JsonSchema for RunInputValue {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        "RunInputValue".into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "Run input override value. Inputs are TOML-compatible scalar values: string, boolean, integer, or float.",
+            "anyOf": [
+                { "type": "string" },
+                { "type": "boolean" },
+                { "type": "integer" },
+                { "type": "number" }
+            ]
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -85,9 +124,10 @@ impl TryFrom<CreateRunSpec> for ValidatedCreateRunSpec {
             })?;
         let inputs = spec
             .inputs
-            .iter()
+            .into_iter()
             .map(|(key, value)| {
-                manifest::json_to_toml_value(key, value).map(|value| (key.clone(), value))
+                let value = value.into_inner();
+                manifest::json_to_toml_value(&key, &value).map(|value| (key, value))
             })
             .collect::<ToolResult<HashMap<_, _>>>()?;
         Ok(Self {
@@ -163,4 +203,29 @@ pub(crate) fn create_runs_text(result: &CreateRunsResult) -> String {
         "created {} Fabro run(s), started {started}",
         result.runs.len()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use schemars::SchemaGenerator;
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn run_input_value_schema_allows_only_json_scalars() {
+        let mut generator = SchemaGenerator::default();
+        let schema = RunInputValue::json_schema(&mut generator);
+        let schema = serde_json::to_value(schema).expect("schema should serialize");
+
+        assert_eq!(
+            schema["anyOf"],
+            json!([
+                { "type": "string" },
+                { "type": "boolean" },
+                { "type": "integer" },
+                { "type": "number" },
+            ])
+        );
+    }
 }

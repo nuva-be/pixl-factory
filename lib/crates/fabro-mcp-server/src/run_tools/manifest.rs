@@ -36,7 +36,7 @@ pub(super) fn build_mcp_run_manifest(
 pub(super) fn json_to_toml_value(key: &str, value: &Value) -> ToolResult<toml::Value> {
     match value {
         Value::Null => Err(ToolError::message(format!(
-            "input `{key}` cannot be null; use a string, boolean, number, array, or object"
+            "input `{key}` cannot be null; use a string, boolean, or number"
         ))),
         Value::Bool(value) => Ok(toml::Value::Boolean(*value)),
         Value::Number(value) => {
@@ -51,18 +51,12 @@ pub(super) fn json_to_toml_value(key: &str, value: &Value) -> ToolResult<toml::V
             }
         }
         Value::String(value) => Ok(toml::Value::String(value.clone())),
-        Value::Array(values) => values
-            .iter()
-            .map(|value| json_to_toml_value(key, value))
-            .collect::<ToolResult<Vec<_>>>()
-            .map(toml::Value::Array),
-        Value::Object(values) => {
-            let mut table = toml::Table::new();
-            for (child_key, child_value) in values {
-                table.insert(child_key.clone(), json_to_toml_value(key, child_value)?);
-            }
-            Ok(toml::Value::Table(table))
-        }
+        Value::Array(_) => Err(ToolError::message(format!(
+            "input `{key}` does not support array values; use a string, boolean, or number",
+        ))),
+        Value::Object(_) => Err(ToolError::message(format!(
+            "input `{key}` does not support object values; use a string, boolean, or number",
+        ))),
     }
 }
 
@@ -118,26 +112,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_inputs_convert_to_toml_values() {
+    fn json_inputs_convert_scalar_values_to_toml_values() {
         let cases = [
             (json!("hello"), toml::Value::String("hello".to_string())),
             (json!(true), toml::Value::Boolean(true)),
             (json!(42), toml::Value::Integer(42)),
             (json!(0.5), toml::Value::Float(0.5)),
-            (
-                json!(["a", 1]),
-                toml::Value::Array(vec![
-                    toml::Value::String("a".to_string()),
-                    toml::Value::Integer(1),
-                ]),
-            ),
-            (
-                json!({ "enabled": true, "count": 2 }),
-                toml::Value::Table(toml::Table::from_iter([
-                    ("enabled".to_string(), toml::Value::Boolean(true)),
-                    ("count".to_string(), toml::Value::Integer(2)),
-                ])),
-            ),
         ];
 
         for (json, expected) in cases {
@@ -146,11 +126,28 @@ mod tests {
     }
 
     #[test]
+    fn json_input_arrays_and_objects_are_rejected() {
+        let array_err = json_to_toml_value("matrix", &json!(["a", 1])).unwrap_err();
+        assert_eq!(
+            array_err.as_str(),
+            "input `matrix` does not support array values; use a string, boolean, or number",
+        );
+
+        let object_err = json_to_toml_value("settings", &json!({ "enabled": true })).unwrap_err();
+        assert_eq!(
+            object_err.as_str(),
+            "input `settings` does not support object values; use a string, boolean, or number",
+        );
+    }
+
+    #[test]
     fn json_input_null_is_rejected_with_key_name() {
         let err = json_to_toml_value("goal", &Value::Null).unwrap_err();
 
-        assert!(err.as_str().contains("goal"));
-        assert!(err.as_str().contains("null"));
+        assert_eq!(
+            err.as_str(),
+            "input `goal` cannot be null; use a string, boolean, or number",
+        );
     }
 
     #[test]
@@ -161,8 +158,8 @@ mod tests {
             cwd:              None,
             goal:             None,
             inputs:           HashMap::from([
-                ("count".to_string(), json!(3)),
-                ("decision".to_string(), json!("approve")),
+                ("count".to_string(), json!(3).into()),
+                ("decision".to_string(), json!("approve").into()),
             ]),
             labels:           HashMap::new(),
             model:            None,
