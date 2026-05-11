@@ -354,6 +354,9 @@ struct FabroRunEventsParams {
 - Modify: `lib/crates/fabro-cli/src/main.rs`
 - Modify: `lib/crates/fabro-cli/src/commands/mod.rs`
 - Create: `lib/crates/fabro-cli/src/commands/mcp/mod.rs`
+- Create: `lib/crates/fabro-cli/src/commands/mcp/config.rs`
+- Create: `lib/crates/fabro-cli/src/commands/mcp/run_tools.rs`
+- Create: `lib/crates/fabro-cli/src/commands/mcp/server.rs`
 - Create: `lib/crates/fabro-cli/tests/it/cmd/mcp.rs`
 - Modify: `lib/crates/fabro-cli/tests/it/cmd/mod.rs`
 
@@ -499,7 +502,12 @@ pub(crate) async fn dispatch(ns: McpNamespace, base_ctx: &CommandContext) -> Res
 }
 ```
 
-Use stub implementations that return `Ok(())` for now, except `start` can `anyhow::bail!("fabro mcp start is not implemented yet")` until Task 3.
+Create `commands/mcp/config.rs`, `commands/mcp/run_tools.rs`, and
+`commands/mcp/server.rs` in this task. Use stub implementations that return
+`Ok(())` for config/init for now, except `server::start` can
+`anyhow::bail!("fabro mcp start is not implemented yet")` until Task 3.
+`run_tools.rs` can contain only a placeholder module comment until Task 3 adds
+the first types/helpers.
 
 In `main.rs`, dispatch:
 
@@ -536,7 +544,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add lib/crates/fabro-cli/Cargo.toml lib/crates/fabro-cli/src/args.rs lib/crates/fabro-cli/src/main.rs lib/crates/fabro-cli/src/commands/mod.rs lib/crates/fabro-cli/src/commands/mcp/mod.rs lib/crates/fabro-cli/tests/it/cmd/mod.rs lib/crates/fabro-cli/tests/it/cmd/mcp.rs
+git add lib/crates/fabro-cli/Cargo.toml lib/crates/fabro-cli/src/args.rs lib/crates/fabro-cli/src/main.rs lib/crates/fabro-cli/src/commands/mod.rs lib/crates/fabro-cli/src/commands/mcp/mod.rs lib/crates/fabro-cli/src/commands/mcp/config.rs lib/crates/fabro-cli/src/commands/mcp/run_tools.rs lib/crates/fabro-cli/src/commands/mcp/server.rs lib/crates/fabro-cli/tests/it/cmd/mod.rs lib/crates/fabro-cli/tests/it/cmd/mcp.rs
 git commit -m "feat(cli): add mcp command surface"
 ```
 
@@ -746,7 +754,7 @@ For `claude`, use `dirs::home_dir()` plus platform cfgs:
 
 - macOS: `Library/Application Support/Claude/claude_desktop_config.json`
 - Linux: `.config/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`, falling back to the home-relative equivalent only in tests when `APPDATA` is absent
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`, falling back to `~/AppData/Roaming/Claude/claude_desktop_config.json` when `APPDATA` is absent. The fallback is needed because integration tests run the compiled binary under `fabro_test::apply_test_isolation`, which clears ambient `APPDATA`.
 
 - [ ] **Step 4: Run config/init tests and accept snapshots**
 
