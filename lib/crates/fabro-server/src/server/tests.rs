@@ -8143,7 +8143,10 @@ async fn cancel_run_overwrites_pending_pause_request() {
     assert_eq!(run_json_pending_control(&body).as_str(), Some("cancel"));
 
     let summary = state.store.runs().find(&run_id).await.unwrap().unwrap();
-    assert_eq!(summary.pending_control, Some(RunControlAction::Cancel));
+    assert_eq!(
+        summary.lifecycle.pending_control,
+        Some(RunControlAction::Cancel)
+    );
 }
 
 #[tokio::test]
@@ -8172,7 +8175,10 @@ async fn pause_run_rejects_when_control_is_already_pending() {
     assert_status!(response, StatusCode::CONFLICT).await;
 
     let summary = state.store.runs().find(&run_id).await.unwrap().unwrap();
-    assert_eq!(summary.pending_control, Some(RunControlAction::Cancel));
+    assert_eq!(
+        summary.lifecycle.pending_control,
+        Some(RunControlAction::Cancel)
+    );
 }
 
 #[tokio::test]
@@ -8290,10 +8296,10 @@ async fn pause_run_immediately_pauses_blocked_run() {
     assert_eq!(run_json_pending_control(&body), &serde_json::Value::Null);
 
     let summary = state.store.runs().find(&run_id).await.unwrap().unwrap();
-    assert_eq!(summary.status, RunStatus::Paused {
+    assert_eq!(summary.lifecycle.status, RunStatus::Paused {
         prior_block: Some(BlockedReason::HumanInputRequired),
     });
-    assert_eq!(summary.pending_control, None);
+    assert_eq!(summary.lifecycle.pending_control, None);
 }
 
 #[tokio::test]
@@ -8321,7 +8327,10 @@ async fn unpause_run_sets_pending_control() {
     assert_eq!(run_json_pending_control(&body).as_str(), Some("unpause"));
 
     let summary = state.store.runs().find(&run_id).await.unwrap().unwrap();
-    assert_eq!(summary.pending_control, Some(RunControlAction::Unpause));
+    assert_eq!(
+        summary.lifecycle.pending_control,
+        Some(RunControlAction::Unpause)
+    );
 }
 
 #[tokio::test]
@@ -8396,10 +8405,10 @@ async fn unpause_run_returns_blocked_when_human_gate_is_still_unresolved() {
     assert_eq!(run_json_pending_control(&body), &serde_json::Value::Null);
 
     let summary = state.store.runs().find(&run_id).await.unwrap().unwrap();
-    assert_eq!(summary.status, RunStatus::Blocked {
+    assert_eq!(summary.lifecycle.status, RunStatus::Blocked {
         blocked_reason: BlockedReason::HumanInputRequired,
     });
-    assert_eq!(summary.pending_control, None);
+    assert_eq!(summary.lifecycle.pending_control, None);
 }
 
 #[tokio::test]

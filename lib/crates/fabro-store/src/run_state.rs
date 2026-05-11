@@ -10,9 +10,10 @@ use fabro_types::settings::run::RunSandboxSettings;
 use fabro_types::{
     BilledModelUsage, Checkpoint, CheckpointRecord, CommandTermination, Conclusion, EventBody,
     FailureSignature, InterviewQuestionRecord, Outcome, PendingInterviewRecord, PullRequestRecord,
-    RunControlAction, RunDiff, RunEvent, RunId, RunModel, RunParts, RunProjection, RunSandbox,
-    RunSandboxRuntime, RunSpec, RunStatus, RunSummary, SandboxProvider, StageCompletion,
-    StageHandler, StageId, StageOutcome, StageProjection, StageState, StartRecord, first_event_seq,
+    RepositoryRef, RunBillingSummary, RunControlAction, RunDiff, RunEvent, RunId, RunLifecycle,
+    RunLinks, RunModel, RunOrigin, RunProjection, RunSandbox, RunSandboxRuntime, RunSpec,
+    RunStatus, RunSummary, RunTimestamps, SandboxProvider, StageCompletion, StageHandler, StageId,
+    StageOutcome, StageProjection, StageState, StartRecord, WorkflowRef, first_event_seq,
 };
 use fabro_util::error::render_with_causes;
 use serde_json::Value;
@@ -566,11 +567,11 @@ fn stage_at_completed_visit<'a>(
 }
 
 pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> RunSummary {
-    let workflow_name = Some(if state.spec.graph.name.is_empty() {
+    let workflow_name = if state.spec.graph.name.is_empty() {
         "unnamed".to_string()
     } else {
         state.spec.graph.name.clone()
-    });
+    };
     let goal = state.spec.graph.goal().to_string();
     let diff_summary = state
         .conclusion
@@ -599,43 +600,69 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> RunSummary
         .provenance
         .as_ref()
         .and_then(|provenance| provenance.subject.clone());
+    let source_directory = state.spec.source_directory.clone();
+    let repo_origin_url = state.spec.git.as_ref().map(|git| git.origin_url.clone());
+    let start_time = state.start.as_ref().map(|start| start.start_time);
+    let completed_at = state
+        .conclusion
+        .as_ref()
+        .map(|conclusion| conclusion.timestamp);
+    let duration_ms = state
+        .conclusion
+        .as_ref()
+        .map(|conclusion| conclusion.duration_ms);
+    let total_usd_micros = state
+        .conclusion
+        .as_ref()
+        .and_then(|conclusion| conclusion.billing.as_ref())
+        .and_then(|billing| billing.total_usd_micros);
 
-    RunSummary::from_parts(RunParts {
-        run_id: *run_id,
-        workflow_name,
-        workflow_slug: state.spec.workflow_slug.clone(),
-        goal,
+    RunSummary {
+        id: *run_id,
         title: state.title().into_owned(),
-        labels: state.spec.labels.clone(),
-        source_directory: state.spec.source_directory.clone(),
-        repo_origin_url: state.spec.git.as_ref().map(|git| git.origin_url.clone()),
+        goal,
+        workflow: WorkflowRef {
+            slug: state.spec.workflow_slug.clone(),
+            name: workflow_name,
+        },
+        automation: None,
+        repository: Some(RepositoryRef::from_origin_and_source(
+            repo_origin_url,
+            source_directory.as_deref(),
+        )),
         created_by,
-        start_time: state.start.as_ref().map(|start| start.start_time),
-        last_event_at: Some(state.last_event_at),
-        completed_at: state
-            .conclusion
-            .as_ref()
-            .map(|conclusion| conclusion.timestamp),
-        status: state.status,
-        pending_control: state.pending_control,
-        duration_ms: state
-            .conclusion
-            .as_ref()
-            .map(|conclusion| conclusion.duration_ms),
-        total_usd_micros: state
-            .conclusion
-            .as_ref()
-            .and_then(|conclusion| conclusion.billing.as_ref())
-            .and_then(|billing| billing.total_usd_micros),
-        superseded_by: state.superseded_by,
-        diff_summary,
-        pull_request: state.pull_request.clone(),
-        archived_at: state.archived_at,
+        origin: RunOrigin::default(),
+        labels: state.spec.labels.clone(),
+        lifecycle: RunLifecycle {
+            status:          state.status,
+            pending_control: state.pending_control,
+            queue_position:  None,
+            error:           None,
+            archived:        state.archived_at.is_some(),
+            archived_at:     state.archived_at,
+        },
         sandbox: state.sandbox.clone(),
         models,
+        source_directory,
+        timestamps: RunTimestamps {
+            created_at: run_id.created_at(),
+            started_at: start_time,
+            last_event_at: Some(state.last_event_at),
+            completed_at,
+            duration_ms,
+            elapsed_secs: elapsed_secs(duration_ms),
+        },
+        billing: total_usd_micros.map(|total_usd_micros| RunBillingSummary {
+            total_usd_micros: Some(total_usd_micros),
+        }),
+        diff: diff_summary,
+        pull_request: state.pull_request.clone(),
         current_question,
-        web_url: state.web_url.clone(),
-    })
+        superseded_by: state.superseded_by,
+        links: RunLinks {
+            web: state.web_url.clone(),
+        },
+    }
 }
 
 fn run_models(state: &RunProjection) -> Vec<RunModel> {
@@ -654,6 +681,10 @@ fn run_models(state: &RunProjection) -> Vec<RunModel> {
     });
     models.dedup_by(|left, right| left.provider == right.provider && left.name == right.name);
     models
+}
+
+fn elapsed_secs(duration_ms: Option<u64>) -> Option<f64> {
+    duration_ms.map(|ms| ms as f64 / 1000.0)
 }
 
 fn checkpoint_from_props(props: &CheckpointCompletedProps, timestamp: DateTime<Utc>) -> Checkpoint {

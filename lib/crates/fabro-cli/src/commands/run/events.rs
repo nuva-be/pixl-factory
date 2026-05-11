@@ -34,7 +34,7 @@ pub(crate) async fn run(
 ) -> Result<()> {
     let ctx = base_ctx.with_target(&args.server)?;
     let client = ctx.server().await?;
-    let run_id = client.resolve_run(&args.run).await?.run_id;
+    let run_id = client.resolve_run(&args.run).await?.id;
     info!(run_id = %run_id, "Showing events");
 
     let since_cutoff = match &args.since {

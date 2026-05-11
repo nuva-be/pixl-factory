@@ -26,7 +26,7 @@ pub(crate) async fn run(args: &WaitArgs, styles: &Styles, base_ctx: &CommandCont
     let printer = base_ctx.printer();
     let ctx = base_ctx.with_target(&args.server)?;
     let client = ctx.server().await?;
-    let run_id = client.resolve_run(&args.run).await?.run_id;
+    let run_id = client.resolve_run(&args.run).await?.id;
     info!(run_id = %run_id, "Waiting for run to complete");
 
     let deadline = args
@@ -34,7 +34,7 @@ pub(crate) async fn run(args: &WaitArgs, styles: &Styles, base_ctx: &CommandCont
         .map(|secs| std::time::Instant::now() + std::time::Duration::from_secs(secs));
     let interval = std::time::Duration::from_millis(args.interval);
     let final_status = loop {
-        let status = client.retrieve_run(&run_id).await?.status;
+        let status = client.retrieve_run(&run_id).await?.lifecycle.status;
 
         if status.is_terminal() {
             break status;

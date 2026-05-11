@@ -83,7 +83,7 @@ pub use run_projection::{
 pub use run_sandbox::{RunSandbox, RunSandboxRuntime};
 pub use run_summary::{
     AutomationRef, Run, RunBillingSummary, RunError, RunLifecycle, RunLinks, RunModel, RunOrigin,
-    RunOriginKind, RunParts, RunTimestamps, WorkflowRef,
+    RunOriginKind, RunTimestamps, WorkflowRef,
 };
 pub type RunSummary = Run;
 pub type PullRequestRecord = PullRequest;

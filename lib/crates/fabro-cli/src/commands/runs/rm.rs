@@ -84,7 +84,7 @@ async fn resolve_target(
             return Ok(run_id);
         }
     }
-    Ok(client.resolve_run(identifier).await?.run_id)
+    Ok(client.resolve_run(identifier).await?.id)
 }
 
 async fn delete_server_run(

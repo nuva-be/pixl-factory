@@ -52,7 +52,7 @@ pub(crate) async fn dispatch(
         RunCommands::Start(StartArgs { server, run }) => {
             let ctx = base_ctx.with_target(&server)?;
             let client = ctx.server().await?;
-            let run_id = client.resolve_run(&run).await?.run_id;
+            let run_id = client.resolve_run(&run).await?.id;
             start::start_run_with_client(client.as_ref(), &run_id, false).await?;
             if ctx.json_output() {
                 print_json_pretty(&serde_json::json!({ "run_id": run_id }))?;
@@ -63,7 +63,7 @@ pub(crate) async fn dispatch(
             let styles: &'static Styles = Box::leak(Box::new(Styles::detect_stderr()));
             let ctx = base_ctx.with_target(&server)?;
             let client = ctx.server().await?;
-            let run_id = client.resolve_run(&run).await?.run_id;
+            let run_id = client.resolve_run(&run).await?.id;
             let json = ctx.json_output();
             let exit_code = Box::pin(attach::attach_run_with_client(
                 client.as_ref(),

@@ -592,11 +592,11 @@ mod tests {
 
         let summary = store.list_runs(&ListRunsQuery::default()).await.unwrap();
         assert_eq!(summary.len(), 2);
-        assert_eq!(summary[0].run_id, test_run_id("run-2"));
-        assert_eq!(summary[1].run_id, test_run_id("run-1"));
-        assert_eq!(summary[1].workflow_name, Some("night-sky".to_string()));
+        assert_eq!(summary[0].id, test_run_id("run-2"));
+        assert_eq!(summary[1].id, test_run_id("run-1"));
+        assert_eq!(summary[1].workflow.name, "night-sky");
         assert_eq!(summary[1].goal, "map the constellations");
-        assert_eq!(summary[1].status, RunStatus::Succeeded {
+        assert_eq!(summary[1].lifecycle.status, RunStatus::Succeeded {
             reason: SuccessReason::Completed,
         });
 
@@ -608,7 +608,7 @@ mod tests {
         assert!(store.open_run(&test_run_id("run-1")).await.is_err());
         let remaining = store.list_runs(&ListRunsQuery::default()).await.unwrap();
         assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].run_id, test_run_id("run-2"));
+        assert_eq!(remaining[0].id, test_run_id("run-2"));
         assert!(!list_paths(object_store, "runs/").await.is_empty());
     }
 
@@ -666,8 +666,11 @@ mod tests {
 
         let summary = store.list_runs(&ListRunsQuery::default()).await.unwrap();
         assert_eq!(summary.len(), 1);
-        assert_eq!(summary[0].status, RunStatus::Running);
-        assert_eq!(summary[0].pending_control, Some(RunControlAction::Pause));
+        assert_eq!(summary[0].lifecycle.status, RunStatus::Running);
+        assert_eq!(
+            summary[0].lifecycle.pending_control,
+            Some(RunControlAction::Pause)
+        );
     }
 
     #[tokio::test]
@@ -731,10 +734,10 @@ mod tests {
 
         let summary = store.list_runs(&ListRunsQuery::default()).await.unwrap();
         assert_eq!(summary.len(), 1);
-        assert_eq!(summary[0].status, RunStatus::Failed {
+        assert_eq!(summary[0].lifecycle.status, RunStatus::Failed {
             reason: FailureReason::Cancelled,
         });
-        assert_eq!(summary[0].pending_control, None);
+        assert_eq!(summary[0].lifecycle.pending_control, None);
     }
 
     #[tokio::test]
@@ -792,8 +795,8 @@ mod tests {
         let reopened = Database::new(object_store, "runs", Duration::from_millis(1), None);
         let summary = reopened.list_runs(&ListRunsQuery::default()).await.unwrap();
         assert_eq!(summary.len(), 1);
-        assert_eq!(summary[0].run_id, test_run_id("run-1"));
-        assert_eq!(summary[0].status, RunStatus::Succeeded {
+        assert_eq!(summary[0].id, test_run_id("run-1"));
+        assert_eq!(summary[0].lifecycle.status, RunStatus::Succeeded {
             reason: SuccessReason::Completed,
         });
     }
@@ -817,7 +820,7 @@ mod tests {
             entries.iter().map(|entry| entry.run_id).collect::<Vec<_>>(),
             vec![test_run_id("run-2"), test_run_id("run-1")]
         );
-        assert_eq!(entries[0].summary.status, RunStatus::Running);
+        assert_eq!(entries[0].summary.lifecycle.status, RunStatus::Running);
         assert_eq!(entries[0].projection.spec().run_id, test_run_id("run-2"));
         assert_eq!(entries[0].last_seq, 3);
 
@@ -836,7 +839,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(cached.summary.status, RunStatus::Succeeded {
+        assert_eq!(cached.summary.lifecycle.status, RunStatus::Succeeded {
             reason: SuccessReason::Completed,
         });
     }
@@ -1021,7 +1024,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(cached.summary.status, RunStatus::Running);
+        assert_eq!(cached.summary.lifecycle.status, RunStatus::Running);
         assert_eq!(cached.last_seq, 6);
         assert_eq!(
             cached
@@ -1152,7 +1155,7 @@ mod tests {
 
         let cached = reopened.get_cached_run(&run_id).await.unwrap().unwrap();
         assert_eq!(cached.summary.title, "Renamed failed run");
-        assert_eq!(cached.summary.status, RunStatus::Failed {
+        assert_eq!(cached.summary.lifecycle.status, RunStatus::Failed {
             reason: FailureReason::WorkflowError,
         });
     }

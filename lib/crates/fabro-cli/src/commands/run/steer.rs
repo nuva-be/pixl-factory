@@ -8,7 +8,7 @@ use crate::command_context::CommandContext;
 pub(crate) async fn run(args: SteerArgs, base_ctx: &CommandContext) -> Result<()> {
     let ctx = base_ctx.with_target(&args.server)?;
     let client = ctx.server().await?;
-    let run_id = client.resolve_run(&args.run).await?.run_id;
+    let run_id = client.resolve_run(&args.run).await?.id;
 
     let text = match (args.text_stdin, args.text.clone()) {
         (true, _) => {

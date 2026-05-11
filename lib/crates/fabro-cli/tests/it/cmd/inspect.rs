@@ -4,29 +4,21 @@ use insta::assert_snapshot;
 use serde_json::json;
 
 use super::support::{
-    compact_git_inspect, compact_inspect, run_success, setup_seeded_completed_dry_run,
-    setup_seeded_created_dry_run, setup_seeded_git_backed_changed_run,
+    compact_git_inspect, compact_inspect, remote_run_summary_json, run_success,
+    setup_seeded_completed_dry_run, setup_seeded_created_dry_run,
+    setup_seeded_git_backed_changed_run,
 };
 use crate::support::{run_projection_json, unique_run_id};
 
 fn remote_run_summary(run_id: &str, status: &serde_json::Value) -> serde_json::Value {
-    json!({
-        "run_id": run_id,
-        "workflow_name": "Nightly Build",
-        "workflow_slug": "nightly-build",
-        "goal": "Inspect remote state",
-        "title": "Inspect remote state",
-        "labels": {},
-        "source_directory": "/srv/repo",
-        "repository": { "name": "repo" },
-        "start_time": "2026-04-19T12:00:00Z",
-        "created_at": "2026-04-19T12:00:00Z",
-        "status": status,
-        "pending_control": null,
-        "duration_ms": null,
-        "elapsed_secs": null,
-        "total_usd_micros": null
-    })
+    remote_run_summary_json(
+        run_id,
+        "Nightly Build",
+        "nightly-build",
+        "Inspect remote state",
+        status,
+        "2026-04-19T12:00:00Z",
+    )
 }
 
 #[test]

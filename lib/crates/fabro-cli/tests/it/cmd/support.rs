@@ -120,26 +120,71 @@ pub(crate) fn mock_resolved_run<'a>(
             .query_param("selector", selector);
         then.status(200)
             .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "run_id": run_id,
-                "workflow_name": "Nightly Build",
-                "workflow_slug": "nightly-build",
-                "goal": "Nightly run",
-                "title": "Nightly run",
-                "labels": {},
-                "source_directory": null,
-                "repository": { "name": "unknown" },
-                "start_time": "2026-04-05T12:00:00Z",
-                "created_at": "2026-04-05T12:00:00Z",
-                "status": {
+            .json_body(remote_run_summary_json(
+                run_id,
+                "Nightly Build",
+                "nightly-build",
+                "Nightly run",
+                &serde_json::json!({
                     "kind": "succeeded",
                     "reason": "completed"
-                },
-                "pending_control": null,
-                "duration_ms": 123,
-                "elapsed_secs": 0,
-                "total_usd_micros": null
-            }));
+                }),
+                "2026-04-05T12:00:00Z",
+            ));
+    })
+}
+
+pub(crate) fn remote_run_summary_json(
+    run_id: &str,
+    workflow_name: &str,
+    workflow_slug: &str,
+    goal: &str,
+    status: &Value,
+    timestamp: &str,
+) -> Value {
+    serde_json::json!({
+        "id": run_id,
+        "title": goal,
+        "goal": goal,
+        "workflow": {
+            "slug": workflow_slug,
+            "name": workflow_name
+        },
+        "repository": {
+            "name": "repo",
+            "origin_url": null,
+            "provider": "unknown"
+        },
+        "origin": {
+            "kind": "api"
+        },
+        "labels": {},
+        "lifecycle": {
+            "status": status,
+            "pending_control": null,
+            "queue_position": null,
+            "error": null,
+            "archived": false,
+            "archived_at": null
+        },
+        "models": [],
+        "source_directory": "/srv/repo",
+        "timestamps": {
+            "created_at": timestamp,
+            "started_at": timestamp,
+            "last_event_at": null,
+            "completed_at": null,
+            "duration_ms": null,
+            "elapsed_secs": null
+        },
+        "billing": null,
+        "diff": null,
+        "pull_request": null,
+        "current_question": null,
+        "superseded_by": null,
+        "links": {
+            "web": null
+        }
     })
 }
 

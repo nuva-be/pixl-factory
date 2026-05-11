@@ -32,7 +32,7 @@ pub mod types {
         AuthMethod, BilledTokenCounts, CommandTermination, DiffStats, DiffSummary, DirtyStatus,
         EventEnvelope, GitContext, IdpIdentity, InterviewOption, InterviewQuestionRecord,
         PendingInterviewRecord, PreRunPushOutcome, Principal, PullRequest, PullRequestDetails,
-        QuestionType, RepositoryRef, Run, RunClientProvenance, RunEvent, RunParts, RunProjection,
+        QuestionType, RepositoryRef, Run, RunClientProvenance, RunEvent, RunProjection,
         RunProvenance, RunSandbox, RunSandboxRuntime, RunServerProvenance, SandboxDetails,
         SandboxProvider, SandboxResources, SandboxService, SandboxServiceListResponse,
         SandboxState, SandboxTimestamps, SecretMetadata, SecretType, ServerSettings,

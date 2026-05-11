@@ -20,7 +20,7 @@ pub(crate) async fn run(args: &LogsArgs, base_ctx: &CommandContext) -> Result<()
 
     let ctx = base_ctx.with_target(&args.server)?;
     let client = ctx.server().await?;
-    let run_id = client.resolve_run(&args.run).await?.run_id;
+    let run_id = client.resolve_run(&args.run).await?.id;
     info!(run_id = %run_id, "Showing raw run log");
 
     let bytes = client

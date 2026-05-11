@@ -2307,7 +2307,7 @@ async fn load_pending_control(
         .runs()
         .find(&run_id)
         .await?
-        .and_then(|summary| summary.pending_control))
+        .and_then(|summary| summary.lifecycle.pending_control))
 }
 
 fn fail_managed_run(state: &Arc<AppState>, run_id: RunId, reason: FailureReason, message: String) {

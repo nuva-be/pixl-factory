@@ -95,7 +95,7 @@ fn load_run_checkpoint(run_dir: &Path) -> Result<Checkpoint, Box<dyn std::error:
                         .into_iter()
                         .next()
                         .ok_or("test store should contain one run")?
-                        .run_id
+                        .id
                 };
                 let run = runtime.block_on(store.open_run_reader(&run_id))?;
                 let state = runtime.block_on(async {
@@ -133,7 +133,7 @@ fn load_run_checkpoint(run_dir: &Path) -> Result<Checkpoint, Box<dyn std::error:
                 .into_iter()
                 .next()
                 .ok_or("test store should contain one run")?
-                .run_id
+                .id
         };
         let run = runtime.block_on(store.open_run_reader(&run_id))?;
         runtime.block_on(async {

@@ -99,12 +99,16 @@ pub(crate) async fn resolve_run(
     match resolve_run_by_selector(
         &runs,
         &params.selector,
-        |run| run.run_id.to_string(),
-        |run| run.workflow_slug.clone(),
-        |run| run.workflow_name.clone(),
-        |run| run.created_at,
-        |run| run.created_at.to_rfc3339(),
-        |run| run.repo_origin_url.clone(),
+        |run| run.id.to_string(),
+        |run| run.workflow.slug.clone(),
+        |run| Some(run.workflow.name.clone()),
+        |run| run.timestamps.created_at,
+        |run| run.timestamps.created_at.to_rfc3339(),
+        |run| {
+            run.repository
+                .as_ref()
+                .and_then(|repository| repository.origin_url.clone())
+        },
     ) {
         Ok(run) => (StatusCode::OK, Json(run.clone())).into_response(),
         Err(ResolveRunError::InvalidSelector | ResolveRunError::AmbiguousPrefix { .. }) => {
@@ -455,7 +459,7 @@ pub(crate) async fn get_run_status(
 ) -> Response {
     match runs::summaries()
         .into_iter()
-        .find(|run| run.run_id.to_string() == id)
+        .find(|run| run.id.to_string() == id)
     {
         Some(run) => (StatusCode::OK, Json(run)).into_response(),
         None => ApiError::not_found("Run not found.").into_response(),
@@ -804,7 +808,7 @@ pub(crate) async fn list_workflow_runs(
 
     let runs = runs::summaries()
         .into_iter()
-        .filter(|run| run.workflow_slug.as_deref() == Some(&name))
+        .filter(|run| run.workflow.slug.as_deref() == Some(&name))
         .collect();
     paginated_response(runs, &pagination)
 }
@@ -989,7 +993,10 @@ mod runs {
         RunPrepareSettings, RunSandboxSettings,
     };
     use fabro_types::settings::{InterpString, ProjectNamespace, WorkflowNamespace};
-    use fabro_types::{RunId, StageId, WorkflowSettings};
+    use fabro_types::{
+        RepositoryRef, RunBillingSummary, RunId, RunLifecycle, RunLinks, RunOrigin, RunTimestamps,
+        StageId, WorkflowRef, WorkflowSettings,
+    };
 
     use super::ts;
     use crate::server::run_stage_from_stage_id;
@@ -1036,33 +1043,54 @@ mod runs {
     ) -> RunSummary {
         let created_at = ts(created_at);
         let run_id = RunId::with_timestamp(created_at, sequence);
-        RunSummary::from_parts(RunParts {
-            run_id,
-            workflow_name: Some(workflow_name.into()),
-            workflow_slug: Some(workflow_slug.into()),
-            goal: goal.into(),
+        let source_directory = Some(format!("/demo/{repo_name}"));
+        let repo_origin_url = Some(format!("https://github.com/demo/{repo_name}.git"));
+        let duration_ms = elapsed_secs.and_then(duration_ms_from_secs);
+        RunSummary {
+            id: run_id,
             title: fabro_types::infer_run_title(goal),
-            labels: labels(entries),
-            source_directory: Some(format!("/demo/{repo_name}")),
-            repo_origin_url: Some(format!("https://github.com/demo/{repo_name}.git")),
+            goal: goal.into(),
+            workflow: WorkflowRef {
+                slug: Some(workflow_slug.into()),
+                name: workflow_name.into(),
+            },
+            automation: None,
+            repository: Some(RepositoryRef::from_origin_and_source(
+                repo_origin_url,
+                source_directory.as_deref(),
+            )),
             created_by: None,
-            start_time: Some(created_at),
-            last_event_at: Some(created_at),
-            completed_at: Some(created_at),
-            status: parse_run_status(status, status_reason)
-                .unwrap_or_else(|| panic!("invalid demo run status: {status}")),
-            pending_control,
-            duration_ms: elapsed_secs.and_then(duration_ms_from_secs),
-            total_usd_micros,
-            superseded_by: None,
-            diff_summary: None,
-            pull_request: None,
-            archived_at: None,
+            origin: RunOrigin::default(),
+            labels: labels(entries),
+            lifecycle: RunLifecycle {
+                status: parse_run_status(status, status_reason)
+                    .unwrap_or_else(|| panic!("invalid demo run status: {status}")),
+                pending_control,
+                queue_position: None,
+                error: None,
+                archived: false,
+                archived_at: None,
+            },
             sandbox: None,
             models: Vec::new(),
+            source_directory,
+            timestamps: RunTimestamps {
+                created_at,
+                started_at: Some(created_at),
+                last_event_at: Some(created_at),
+                completed_at: Some(created_at),
+                duration_ms,
+                elapsed_secs,
+            },
+            billing: total_usd_micros.map(|total_usd_micros| RunBillingSummary {
+                total_usd_micros: Some(total_usd_micros),
+            }),
+            diff: None,
+            pull_request: None,
             current_question: None,
-            web_url: None,
-        })
+            superseded_by: None,
+            links: RunLinks { web: None },
+        }
     }
 
     fn parse_run_status(status: &str, status_reason: Option<&str>) -> Option<RunStatus> {
@@ -1678,7 +1706,7 @@ mod runs {
                 &[],
             );
 
-            assert_eq!(summary.status, RunStatus::Failed {
+            assert_eq!(summary.lifecycle.status, RunStatus::Failed {
                 reason: FailureReason::Cancelled,
             });
         }
@@ -1700,7 +1728,7 @@ mod runs {
                 &[],
             );
 
-            assert_eq!(summary.status, RunStatus::Failed {
+            assert_eq!(summary.lifecycle.status, RunStatus::Failed {
                 reason: FailureReason::WorkflowError,
             });
         }

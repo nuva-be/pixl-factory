@@ -21,7 +21,7 @@ pub(crate) async fn run(args: DiffArgs, base_ctx: &CommandContext) -> Result<()>
     info!(run_id = %args.run, "Showing diff");
     let ctx = base_ctx.with_target(&args.server)?;
     let client = ctx.server().await?;
-    let run_id = client.resolve_run(&args.run).await?.run_id;
+    let run_id = client.resolve_run(&args.run).await?.id;
     let state = client.get_run_state(&run_id).await?;
 
     let patch = resolve_diff(&state, &args)?;

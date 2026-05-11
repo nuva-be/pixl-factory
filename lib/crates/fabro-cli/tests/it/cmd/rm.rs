@@ -3,7 +3,8 @@ use httpmock::MockServer;
 use serde_json::Value;
 
 use super::support::{
-    setup_local_sandbox_run, setup_seeded_completed_dry_run, setup_seeded_created_dry_run,
+    remote_run_summary_json, setup_local_sandbox_run, setup_seeded_completed_dry_run,
+    setup_seeded_created_dry_run,
 };
 use crate::support::unique_run_id;
 
@@ -189,25 +190,16 @@ fn rm_without_force_uses_resolve_then_surfaces_server_conflict() {
         then.status(200)
             .header("Content-Type", "application/json")
             .body(
-                serde_json::json!({
-                    "run_id": run_id,
-                    "workflow_name": "Active Workflow",
-                    "workflow_slug": "active-workflow",
-                    "goal": "Active goal",
-                    "title": "Active goal",
-                    "labels": {},
-                    "source_directory": null,
-                    "repository": { "name": "unknown" },
-                    "start_time": "2026-04-05T12:00:00Z",
-                    "created_at": "2026-04-05T12:00:00Z",
-                    "status": {
+                remote_run_summary_json(
+                    &run_id,
+                    "Active Workflow",
+                    "active-workflow",
+                    "Active goal",
+                    &serde_json::json!({
                         "kind": "running"
-                    },
-                    "pending_control": null,
-                    "duration_ms": 123,
-                    "elapsed_secs": 0,
-                    "total_usd_micros": null
-                })
+                    }),
+                    "2026-04-05T12:00:00Z",
+                )
                 .to_string(),
             );
     });
@@ -317,24 +309,17 @@ fn rm_uses_configured_server_target_without_local_run_dir() {
         then.status(200)
             .header("Content-Type", "application/json")
             .body(
-                serde_json::json!({
-                    "run_id": run_id,
-                    "workflow_name": "Remote Workflow",
-                    "workflow_slug": "remote-workflow",
-                    "goal": "Remote goal",
-                    "title": "Remote goal",
-                    "labels": {},
-                    "source_directory": null,
-                    "repository": { "name": "unknown" },
-                    "start_time": "2026-04-05T12:00:00Z",
-                    "created_at": "2026-04-05T12:00:00Z",
-                    "status": {
+                remote_run_summary_json(
+                    &run_id,
+                    "Remote Workflow",
+                    "remote-workflow",
+                    "Remote goal",
+                    &serde_json::json!({
                         "kind": "succeeded",
                         "reason": "completed"
-                    },
-                    "duration_ms": 123,
-                    "total_usd_micros": null
-                })
+                    }),
+                    "2026-04-05T12:00:00Z",
+                )
                 .to_string(),
             );
     });

@@ -5,7 +5,8 @@ use chrono::{TimeZone, Utc};
 use fabro_api::types::{RepositoryRef as ApiRepositoryRef, RunSummary as ApiRunSummary};
 use fabro_types::status::{RunStatus, SuccessReason};
 use fabro_types::{
-    DiffSummary, PullRequest, RepositoryProvider, RepositoryRef, RunId, RunParts, RunSummary,
+    DiffSummary, PullRequest, RepositoryProvider, RepositoryRef, RunBillingSummary, RunId,
+    RunLifecycle, RunLinks, RunOrigin, RunSummary, RunTimestamps, WorkflowRef,
 };
 use serde_json::json;
 
@@ -21,32 +22,53 @@ fn run_summary_json_matches_openapi_shape() {
     let run_id = RunId::with_timestamp(created_at, 7);
     let last_event_at = Utc.with_ymd_and_hms(2026, 4, 20, 12, 0, 42).unwrap();
     let archived_at = Utc.with_ymd_and_hms(2026, 4, 20, 12, 1, 0).unwrap();
-    let summary = RunSummary::from_parts(RunParts {
-        run_id,
-        workflow_name: Some("workflow".to_string()),
-        workflow_slug: Some("workflow".to_string()),
-        goal: String::new(),
-        title: "API title".to_string(),
-        labels: HashMap::from([("team".to_string(), "core".to_string())]),
-        source_directory: Some("/tmp/fabro".to_string()),
-        repo_origin_url: None,
-        created_by: None,
-        start_time: Some(created_at),
-        last_event_at: Some(last_event_at),
-        completed_at: None,
-        status: RunStatus::Succeeded {
-            reason: SuccessReason::PartialSuccess,
+    let summary = RunSummary {
+        id:               run_id,
+        title:            "API title".to_string(),
+        goal:             String::new(),
+        workflow:         WorkflowRef {
+            slug: Some("workflow".to_string()),
+            name: "workflow".to_string(),
         },
-        pending_control: None,
-        duration_ms: Some(42_000),
-        total_usd_micros: Some(123),
-        superseded_by: None,
-        diff_summary: Some(DiffSummary {
+        automation:       None,
+        repository:       Some(RepositoryRef {
+            name:       "fabro".to_string(),
+            origin_url: None,
+            provider:   RepositoryProvider::Unknown,
+        }),
+        created_by:       None,
+        origin:           RunOrigin::default(),
+        labels:           HashMap::from([("team".to_string(), "core".to_string())]),
+        lifecycle:        RunLifecycle {
+            status:          RunStatus::Succeeded {
+                reason: SuccessReason::PartialSuccess,
+            },
+            pending_control: None,
+            queue_position:  None,
+            error:           None,
+            archived:        true,
+            archived_at:     Some(archived_at),
+        },
+        sandbox:          None,
+        models:           vec![],
+        source_directory: Some("/tmp/fabro".to_string()),
+        timestamps:       RunTimestamps {
+            created_at,
+            started_at: Some(created_at),
+            last_event_at: Some(last_event_at),
+            completed_at: None,
+            duration_ms: Some(42_000),
+            elapsed_secs: Some(42.0),
+        },
+        billing:          Some(RunBillingSummary {
+            total_usd_micros: Some(123),
+        }),
+        diff:             Some(DiffSummary {
             files_changed: 3,
             additions:     12,
             deletions:     4,
         }),
-        pull_request: Some(PullRequest {
+        pull_request:     Some(PullRequest {
             provider:    "github".to_string(),
             html_url:    "https://github.com/fabro-sh/fabro/pull/123".to_string(),
             number:      123,
@@ -56,12 +78,10 @@ fn run_summary_json_matches_openapi_shape() {
             head_branch: "fabro/run/demo".to_string(),
             title:       "Add run PR chip".to_string(),
         }),
-        archived_at: Some(archived_at),
-        sandbox: None,
-        models: vec![],
         current_question: None,
-        web_url: None,
-    });
+        superseded_by:    None,
+        links:            RunLinks { web: None },
+    };
 
     assert_eq!(
         serde_json::to_value(&summary).unwrap(),
@@ -201,6 +221,22 @@ fn run_summary_deserializes_when_optional_fields_are_absent() {
     assert_eq!(summary.superseded_by, None);
     assert_eq!(summary.diff, None);
     assert_eq!(summary.pull_request, None);
+}
+
+#[test]
+fn run_summary_rejects_legacy_flat_json() {
+    let created_at = Utc.with_ymd_and_hms(2026, 4, 20, 12, 0, 0).unwrap();
+    let run_id = RunId::with_timestamp(created_at, 7);
+
+    let result = serde_json::from_value::<RunSummary>(json!({
+        "run_id": run_id.to_string(),
+        "workflow_name": "legacy",
+        "status": {
+            "kind": "running"
+        }
+    }));
+
+    assert!(result.is_err());
 }
 
 fn assert_same_type<T: 'static, U: 'static>() {

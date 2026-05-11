@@ -281,12 +281,16 @@ async fn resolve_run(
     match resolve_run_by_selector(
         &runs,
         &query.selector,
-        |run| run.run_id.to_string(),
-        |run| run.workflow_slug.clone(),
-        |run| run.workflow_name.clone(),
-        |run| run.run_id.created_at(),
-        |run| run.run_id.created_at().to_rfc3339(),
-        |run| run.repo_origin_url.clone(),
+        |run| run.id.to_string(),
+        |run| run.workflow.slug.clone(),
+        |run| Some(run.workflow.name.clone()),
+        |run| run.id.created_at(),
+        |run| run.id.created_at().to_rfc3339(),
+        |run| {
+            run.repository
+                .as_ref()
+                .and_then(|repository| repository.origin_url.clone())
+        },
     ) {
         Ok(run) => (StatusCode::OK, Json(run.clone())).into_response(),
         Err(err @ (ResolveRunError::InvalidSelector | ResolveRunError::AmbiguousPrefix { .. })) => {
