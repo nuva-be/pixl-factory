@@ -2,9 +2,18 @@
     clippy::disallowed_methods,
     reason = "integration tests stage MCP config files with sync std::fs"
 )]
+#![expect(
+    clippy::disallowed_types,
+    reason = "raw stdio regression test intentionally uses blocking std pipes outside Tokio"
+)]
 
+use std::collections::HashMap;
+use std::io::{BufRead as _, Write as _};
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
+use fabro_mcp::client::McpClient;
+use fabro_mcp::config::{McpServerSettings, McpTransport};
 use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
 
 #[test]
@@ -336,6 +345,78 @@ fn init_invalid_json_fails_without_overwrite() {
     assert_eq!(std::fs::read_to_string(config_path).unwrap(), "{not json");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn stdio_server_initializes_and_lists_run_tools() {
+    let context = test_context!();
+    let client = spawn_mcp_client(&context, &[]).await;
+
+    let tools = client.list_tools().await.unwrap();
+    let names: Vec<_> = tools.iter().map(|(name, _, _)| name.as_str()).collect();
+    assert_eq!(names, vec![
+        "fabro_run_create",
+        "fabro_run_events",
+        "fabro_run_gather",
+        "fabro_run_interact",
+        "fabro_run_search",
+    ]);
+    for (_, _, schema) in tools {
+        assert!(
+            schema.is_object(),
+            "tool should have input schema: {schema}"
+        );
+    }
+}
+
+#[test]
+fn stdio_start_writes_only_json_rpc_to_stdout() {
+    let context = test_context!();
+    let fixture = mcp_stdio_fixture(&context, &[]);
+    let mut cmd = std::process::Command::new(&fixture.command[0]);
+    cmd.args(&fixture.command[1..])
+        .env_clear()
+        .envs(&fixture.env)
+        .current_dir(&fixture.current_dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2025-06-18","capabilities":{{}},"clientInfo":{{"name":"fabro-test","version":"0.0.0"}}}}}}"#
+    )
+    .unwrap();
+
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let result = std::io::BufReader::new(stdout).read_line(&mut line);
+        let _ = tx.send(result.map(|_| line));
+    });
+
+    let line = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("initialize response should arrive")
+        .expect("stdout should be readable");
+    let value: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+    assert_eq!(value["jsonrpc"], "2.0");
+
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stdio_startup_and_list_tools_is_fast() {
+    let context = test_context!();
+    let start = std::time::Instant::now();
+    let client = spawn_mcp_client(&context, &[]).await;
+    let tools = client.list_tools().await.unwrap();
+    assert_eq!(tools.len(), 5);
+    assert!(start.elapsed() < std::time::Duration::from_secs(2));
+}
+
 fn expected_claude_config_path(home_dir: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
@@ -360,4 +441,50 @@ fn expected_claude_config_path(home_dir: &Path) -> PathBuf {
             .join("Claude")
             .join("claude_desktop_config.json")
     }
+}
+
+struct McpStdioFixture {
+    command:     Vec<String>,
+    env:         HashMap<String, String>,
+    current_dir: PathBuf,
+}
+
+fn mcp_stdio_fixture(context: &fabro_test::TestContext, extra_args: &[&str]) -> McpStdioFixture {
+    let mut command = vec![
+        env!("CARGO_BIN_EXE_fabro").to_string(),
+        "mcp".to_string(),
+        "start".to_string(),
+    ];
+    command.extend(extra_args.iter().map(|arg| (*arg).to_string()));
+
+    let mut env = fabro_test::isolated_env(&context.home_dir);
+    env.insert(
+        "FABRO_HOME".to_string(),
+        context.home_dir.join(".fabro").display().to_string(),
+    );
+
+    McpStdioFixture {
+        command,
+        env,
+        current_dir: context.temp_dir.clone(),
+    }
+}
+
+async fn spawn_mcp_client(context: &fabro_test::TestContext, extra_args: &[&str]) -> McpClient {
+    let fixture = mcp_stdio_fixture(context, extra_args);
+    let config = McpServerSettings {
+        name:                 "fabro-under-test".to_string(),
+        transport:            McpTransport::Stdio {
+            command: fixture.command,
+            env:     fixture.env,
+        },
+        startup_timeout_secs: 10,
+        tool_timeout_secs:    30,
+    };
+    let client = McpClient::new(&config).expect("MCP client should build");
+    client
+        .initialize(config.startup_timeout())
+        .await
+        .expect("MCP server should initialize");
+    client
 }
