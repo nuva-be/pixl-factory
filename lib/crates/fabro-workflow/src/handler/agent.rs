@@ -28,10 +28,20 @@ pub enum CodergenResult {
     Full(Outcome),
 }
 
+pub struct OneShotRequest<'a> {
+    pub node:          &'a Node,
+    pub prompt:        &'a str,
+    pub system_prompt: Option<&'a str>,
+    pub emitter:       &'a Arc<Emitter>,
+    pub stage_scope:   &'a StageScope,
+    pub sandbox:       &'a Arc<dyn Sandbox>,
+    pub cancel_token:  CancellationToken,
+}
+
 /// Backend interface for LLM execution in codergen nodes.
 #[allow(
     clippy::too_many_arguments,
-    reason = "Codergen backends need the node, prompt, context, and runtime handles separately."
+    reason = "Codergen run mode needs the node, prompt, context, and runtime handles separately."
 )]
 #[async_trait]
 pub trait CodergenBackend: Send + Sync {
@@ -49,16 +59,7 @@ pub trait CodergenBackend: Send + Sync {
     ) -> Result<CodergenResult, Error>;
 
     /// Run a single LLM call with no tools (one_shot mode).
-    async fn one_shot(
-        &self,
-        _node: &Node,
-        _prompt: &str,
-        _system_prompt: Option<&str>,
-        _emitter: &Arc<Emitter>,
-        _stage_scope: &StageScope,
-        _sandbox: &Arc<dyn Sandbox>,
-        _cancel_token: CancellationToken,
-    ) -> Result<CodergenResult, Error> {
+    async fn one_shot(&self, _request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
         Err(Error::Validation(
             "one_shot mode not supported by this backend".into(),
         ))

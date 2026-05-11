@@ -38,7 +38,7 @@ fn cli_failure_detail(stdout: &str, stderr: &str, command: &str) -> String {
     }
 }
 
-use super::super::agent::{CodergenBackend, CodergenResult};
+use super::super::agent::{CodergenBackend, CodergenResult, OneShotRequest};
 use super::acp::AgentAcpBackend;
 use super::changed_files;
 use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
@@ -779,43 +779,10 @@ impl CodergenBackend for BackendRouter {
         }
     }
 
-    async fn one_shot(
-        &self,
-        node: &Node,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        emitter: &Arc<Emitter>,
-        stage_scope: &StageScope,
-        sandbox: &Arc<dyn Sandbox>,
-        cancel_token: CancellationToken,
-    ) -> Result<CodergenResult, Error> {
-        match Self::select_one_shot_backend(node)? {
-            LlmBackend::Acp => {
-                self.acp
-                    .one_shot(
-                        node,
-                        prompt,
-                        system_prompt,
-                        emitter,
-                        stage_scope,
-                        sandbox,
-                        cancel_token,
-                    )
-                    .await
-            }
-            LlmBackend::Api | LlmBackend::Cli => {
-                self.api
-                    .one_shot(
-                        node,
-                        prompt,
-                        system_prompt,
-                        emitter,
-                        stage_scope,
-                        sandbox,
-                        cancel_token,
-                    )
-                    .await
-            }
+    async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
+        match Self::select_one_shot_backend(request.node)? {
+            LlmBackend::Acp => self.acp.one_shot(request).await,
+            LlmBackend::Api | LlmBackend::Cli => self.api.one_shot(request).await,
         }
     }
 
@@ -862,6 +829,7 @@ mod tests {
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
+    use fabro_acp::test_support::fake_acp_agent_script;
     use fabro_agent::sandbox::{DirEntry, GrepOptions};
 
     /// Mock sandbox that returns pre-configured ExecResults in FIFO order.
@@ -1286,16 +1254,18 @@ mod tests {
 
         let context = Context::new();
         let router = test_router();
+        let emitter = Arc::new(Emitter::default());
+        let stage_scope = StageScope::for_handler(&context, "test");
         let result = router
-            .one_shot(
-                &node,
-                "prompt",
-                None,
-                &Arc::new(Emitter::default()),
-                &StageScope::for_handler(&context, "test"),
-                &sandbox,
-                CancellationToken::new(),
-            )
+            .one_shot(OneShotRequest {
+                node:          &node,
+                prompt:        "prompt",
+                system_prompt: None,
+                emitter:       &emitter,
+                stage_scope:   &stage_scope,
+                sandbox:       &sandbox,
+                cancel_token:  CancellationToken::new(),
+            })
             .await
             .unwrap();
 
@@ -1313,17 +1283,19 @@ mod tests {
         ));
         let context = Context::new();
         let router = test_router();
+        let emitter = Arc::new(Emitter::default());
+        let stage_scope = StageScope::for_handler(&context, "test");
 
         let result = router
-            .one_shot(
-                &node,
-                "prompt",
-                None,
-                &Arc::new(Emitter::default()),
-                &StageScope::for_handler(&context, "test"),
-                &sandbox,
-                CancellationToken::new(),
-            )
+            .one_shot(OneShotRequest {
+                node:          &node,
+                prompt:        "prompt",
+                system_prompt: None,
+                emitter:       &emitter,
+                stage_scope:   &stage_scope,
+                sandbox:       &sandbox,
+                cancel_token:  CancellationToken::new(),
+            })
             .await
             .unwrap();
 
@@ -1343,17 +1315,19 @@ mod tests {
         ));
         let context = Context::new();
         let router = test_router();
+        let emitter = Arc::new(Emitter::default());
+        let stage_scope = StageScope::for_handler(&context, "test");
 
         let result = router
-            .one_shot(
-                &node,
-                "prompt",
-                None,
-                &Arc::new(Emitter::default()),
-                &StageScope::for_handler(&context, "test"),
-                &sandbox,
-                CancellationToken::new(),
-            )
+            .one_shot(OneShotRequest {
+                node:          &node,
+                prompt:        "prompt",
+                system_prompt: None,
+                emitter:       &emitter,
+                stage_scope:   &stage_scope,
+                sandbox:       &sandbox,
+                cancel_token:  CancellationToken::new(),
+            })
             .await
             .unwrap();
 
@@ -1367,43 +1341,6 @@ mod tests {
         let cli_backend = AgentCliBackend::new_from_env("model".into(), Provider::Anthropic);
         let acp_backend = AgentAcpBackend::new_from_env("model".into(), Provider::Anthropic);
         BackendRouter::new(Box::new(StubBackend), cli_backend, acp_backend)
-    }
-
-    fn fake_acp_agent_script() -> &'static str {
-        r#"
-import json
-import sys
-
-session_id = "sess-1"
-
-def send(message):
-    print(json.dumps(message), flush=True)
-
-def respond(message, result):
-    send({"jsonrpc": "2.0", "id": message["id"], "result": result})
-
-for line in sys.stdin:
-    message = json.loads(line)
-    method = message.get("method")
-    if method == "initialize":
-        respond(message, {"protocolVersion": 1, "agentCapabilities": {}})
-    elif method == "session/new":
-        respond(message, {"sessionId": session_id})
-    elif method == "session/prompt":
-        send({
-            "jsonrpc": "2.0",
-            "method": "session/update",
-            "params": {
-                "sessionId": session_id,
-                "update": {
-                    "sessionUpdate": "agent_message_chunk",
-                    "content": {"type": "text", "text": "hello from acp"}
-                }
-            }
-        })
-        respond(message, {"stopReason": "end_turn"})
-        break
-"#
     }
 
     /// Minimal stub backend for testing routing logic.
@@ -1430,16 +1367,7 @@ for line in sys.stdin:
             })
         }
 
-        async fn one_shot(
-            &self,
-            _node: &Node,
-            _prompt: &str,
-            _system_prompt: Option<&str>,
-            _emitter: &Arc<Emitter>,
-            _stage_scope: &StageScope,
-            _sandbox: &Arc<dyn Sandbox>,
-            _cancel_token: CancellationToken,
-        ) -> Result<CodergenResult, Error> {
+        async fn one_shot(&self, _request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
             Ok(CodergenResult::Text {
                 text:              "api one-shot".to_string(),
                 usage:             None,

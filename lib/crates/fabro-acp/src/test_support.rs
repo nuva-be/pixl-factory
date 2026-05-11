@@ -54,6 +54,9 @@ for line in sys.stdin:
                 record.write(json.dumps(message.get("params", {}), separators=(",", ":")))
         respond(message, {"sessionId": session_id})
     elif method == "session/prompt":
+        if os.environ.get("ACP_PROMPT_RECORD"):
+            with open(os.environ["ACP_PROMPT_RECORD"], "w", encoding="utf-8") as record:
+                record.write(json.dumps(message.get("params", {})))
         mode = os.environ.get("ACP_MODE", "normal")
         if mode == "timeout":
             time.sleep(60)

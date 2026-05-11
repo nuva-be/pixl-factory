@@ -6,7 +6,8 @@ use fabro_graphviz::graph::{Graph, Node};
 use fabro_model::Provider;
 
 use super::agent::{
-    CodergenBackend, CodergenResult, expand_variables, extract_status_fields, truncate,
+    CodergenBackend, CodergenResult, OneShotRequest, expand_variables, extract_status_fields,
+    truncate,
 };
 use super::{EngineServices, Handler};
 use crate::context::{Context, WorkflowContext, keys};
@@ -120,15 +121,15 @@ impl Handler for PromptHandler {
         let (response_text, stage_usage, backend_files_touched) =
             if let Some(backend) = &self.backend {
                 let result = backend
-                    .one_shot(
+                    .one_shot(OneShotRequest {
                         node,
-                        &prompt,
-                        system_prompt.as_deref(),
-                        &services.run.emitter,
-                        &stage_scope,
-                        &services.run.sandbox,
-                        services.run.cancel_token(),
-                    )
+                        prompt: &prompt,
+                        system_prompt: system_prompt.as_deref(),
+                        emitter: &services.run.emitter,
+                        stage_scope: &stage_scope,
+                        sandbox: &services.run.sandbox,
+                        cancel_token: services.run.cancel_token(),
+                    })
                     .await;
                 match result {
                     Ok(CodergenResult::Full(outcome)) => return Ok(outcome),
@@ -332,13 +333,7 @@ mod tests {
 
             async fn one_shot(
                 &self,
-                _node: &Node,
-                _prompt: &str,
-                _system_prompt: Option<&str>,
-                _emitter: &Arc<Emitter>,
-                _stage_scope: &StageScope,
-                _sandbox: &Arc<dyn Sandbox>,
-                _cancel_token: CancellationToken,
+                _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
                     text:              "one-shot response".to_string(),
@@ -397,13 +392,7 @@ mod tests {
 
             async fn one_shot(
                 &self,
-                _node: &Node,
-                _prompt: &str,
-                _system_prompt: Option<&str>,
-                _emitter: &Arc<Emitter>,
-                _stage_scope: &StageScope,
-                _sandbox: &Arc<dyn Sandbox>,
-                _cancel_token: CancellationToken,
+                _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
                     text:              "one-shot response".to_string(),
@@ -457,18 +446,10 @@ mod tests {
             panic!("run() should not be called for prompt handler");
         }
 
-        async fn one_shot(
-            &self,
-            _node: &Node,
-            prompt: &str,
-            system_prompt: Option<&str>,
-            _emitter: &Arc<Emitter>,
-            _stage_scope: &StageScope,
-            _sandbox: &Arc<dyn fabro_agent::Sandbox>,
-            _cancel_token: CancellationToken,
-        ) -> Result<CodergenResult, Error> {
-            *self.captured_prompt.lock().unwrap() = Some(prompt.to_string());
-            *self.captured_system_prompt.lock().unwrap() = Some(system_prompt.map(String::from));
+        async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
+            *self.captured_prompt.lock().unwrap() = Some(request.prompt.to_string());
+            *self.captured_system_prompt.lock().unwrap() =
+                Some(request.system_prompt.map(String::from));
             Ok(CodergenResult::Text {
                 text:              "classified".to_string(),
                 usage:             None,

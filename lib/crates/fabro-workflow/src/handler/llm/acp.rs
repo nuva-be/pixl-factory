@@ -12,7 +12,7 @@ use fabro_model::Provider;
 use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
-use super::super::agent::{CodergenBackend, CodergenResult};
+use super::super::agent::{CodergenBackend, CodergenResult, OneShotRequest};
 use super::changed_files;
 use super::cli::AgentCli;
 use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
@@ -222,22 +222,20 @@ impl CodergenBackend for AgentAcpBackend {
         .await
     }
 
-    async fn one_shot(
-        &self,
-        node: &Node,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        emitter: &Arc<Emitter>,
-        stage_scope: &StageScope,
-        sandbox: &Arc<dyn Sandbox>,
-        cancel_token: CancellationToken,
-    ) -> Result<CodergenResult, Error> {
-        let prompt = match system_prompt.filter(|prompt| !prompt.is_empty()) {
-            Some(system_prompt) => format!("System:\n{system_prompt}\n\nUser:\n{prompt}"),
-            None => prompt.to_string(),
+    async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
+        let prompt = match request.system_prompt.filter(|prompt| !prompt.is_empty()) {
+            Some(system_prompt) => format!("System:\n{system_prompt}\n\nUser:\n{}", request.prompt),
+            None => request.prompt.to_string(),
         };
-        self.run_turn(node, prompt, emitter, stage_scope, sandbox, cancel_token)
-            .await
+        self.run_turn(
+            request.node,
+            prompt,
+            request.emitter,
+            request.stage_scope,
+            request.sandbox,
+            request.cancel_token,
+        )
+        .await
     }
 }
 
@@ -285,6 +283,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
+    use fabro_acp::test_support::fake_acp_agent_script;
     use fabro_agent::{LocalSandbox, Sandbox, shell_quote};
     use fabro_graphviz::graph::{AttrValue, Node};
     use fabro_model::Provider;
@@ -295,14 +294,14 @@ mod tests {
     use super::AgentAcpBackend;
     use crate::context::Context;
     use crate::event::{Emitter, StageScope};
-    use crate::handler::agent::{CodergenBackend, CodergenResult};
+    use crate::handler::agent::{CodergenBackend, CodergenResult, OneShotRequest};
 
     #[tokio::test]
     async fn acp_backend_run_sends_prompt_and_returns_text() {
         let tempdir = tempfile::tempdir().unwrap();
         init_git(tempdir.path());
         let script_path = tempdir.path().join("fake_acp_agent.py");
-        tokio::fs::write(&script_path, fake_agent_script())
+        tokio::fs::write(&script_path, fake_acp_agent_script())
             .await
             .unwrap();
 
@@ -325,7 +324,10 @@ mod tests {
             )),
         );
 
-        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), Provider::OpenAi);
+        let backend =
+            AgentAcpBackend::new_from_env("fake-acp".to_string(), Provider::OpenAi).with_env(
+                HashMap::from([("ACP_MODE".to_string(), "write_file".to_string())]),
+            );
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
         let result = backend
             .run(
@@ -358,7 +360,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let script_path = tempdir.path().join("fake_acp_agent.py");
         let prompt_record_path = tempdir.path().join("prompt.json");
-        tokio::fs::write(&script_path, fake_agent_script())
+        tokio::fs::write(&script_path, fake_acp_agent_script())
             .await
             .unwrap();
 
@@ -378,21 +380,27 @@ mod tests {
         );
 
         let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), Provider::OpenAi)
-            .with_env(HashMap::from([(
-                "ACP_PROMPT_RECORD".to_string(),
-                prompt_record_path.to_string_lossy().into_owned(),
-            )]));
+            .with_env(HashMap::from([
+                (
+                    "ACP_PROMPT_RECORD".to_string(),
+                    prompt_record_path.to_string_lossy().into_owned(),
+                ),
+                ("ACP_MODE".to_string(), "write_file".to_string()),
+            ]));
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
+        let emitter = Arc::new(Emitter::default());
+        let context = Context::new();
+        let stage_scope = StageScope::for_handler(&context, "prompt");
         let result = backend
-            .one_shot(
-                &node,
-                "User prompt",
-                Some("System prompt"),
-                &Arc::new(Emitter::default()),
-                &StageScope::for_handler(&Context::new(), "prompt"),
-                &sandbox,
-                CancellationToken::new(),
-            )
+            .one_shot(OneShotRequest {
+                node:          &node,
+                prompt:        "User prompt",
+                system_prompt: Some("System prompt"),
+                emitter:       &emitter,
+                stage_scope:   &stage_scope,
+                sandbox:       &sandbox,
+                cancel_token:  CancellationToken::new(),
+            })
             .await
             .unwrap();
 
@@ -411,7 +419,7 @@ mod tests {
     async fn acp_backend_cancelled_stop_reason_maps_to_cancelled_error() {
         let tempdir = tempfile::tempdir().unwrap();
         let script_path = tempdir.path().join("fake_acp_agent.py");
-        tokio::fs::write(&script_path, fake_agent_script())
+        tokio::fs::write(&script_path, fake_acp_agent_script())
             .await
             .unwrap();
 
@@ -456,7 +464,7 @@ mod tests {
     async fn acp_started_event_omits_json_command_env_values() {
         let tempdir = tempfile::tempdir().unwrap();
         let script_path = tempdir.path().join("fake_acp_agent.py");
-        tokio::fs::write(&script_path, fake_agent_script())
+        tokio::fs::write(&script_path, fake_acp_agent_script())
             .await
             .unwrap();
 
@@ -559,50 +567,6 @@ mod tests {
                 .is_none(),
             "ACP process should not launch when acp_command is missing"
         );
-    }
-
-    fn fake_agent_script() -> &'static str {
-        r#"
-import json
-import os
-import sys
-
-session_id = "sess-1"
-
-def send(message):
-    print(json.dumps(message), flush=True)
-
-def respond(message, result):
-    send({"jsonrpc": "2.0", "id": message["id"], "result": result})
-
-for line in sys.stdin:
-    message = json.loads(line)
-    method = message.get("method")
-    if method == "initialize":
-        respond(message, {"protocolVersion": 1, "agentCapabilities": {}})
-    elif method == "session/new":
-        respond(message, {"sessionId": session_id})
-    elif method == "session/prompt":
-        if os.environ.get("ACP_PROMPT_RECORD"):
-            with open(os.environ["ACP_PROMPT_RECORD"], "w", encoding="utf-8") as record:
-                record.write(json.dumps(message.get("params", {})))
-        with open("hello.txt", "w", encoding="utf-8") as file:
-            file.write("hello from sandbox\n")
-        for text in ["hello ", "from acp"]:
-            send({
-                "jsonrpc": "2.0",
-                "method": "session/update",
-                "params": {
-                    "sessionId": session_id,
-                    "update": {
-                        "sessionUpdate": "agent_message_chunk",
-                        "content": {"type": "text", "text": text}
-                    }
-                }
-            })
-        respond(message, {"stopReason": os.environ.get("ACP_STOP_REASON", "end_turn")})
-        break
-"#
     }
 
     #[expect(

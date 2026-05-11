@@ -219,17 +219,15 @@ impl DockerSandbox {
             ..Default::default()
         };
 
-        let exec_instance = self
-            .docker
-            .create_exec(container_id, exec_opts)
-            .await
-            .map_err(|e| crate::Error::context("Failed to create exec", e))?;
-
-        let start_result = self
-            .docker
-            .start_exec(&exec_instance.id, None)
-            .await
-            .map_err(|e| crate::Error::context("Failed to start exec", e))?;
+        let (exec_id, start_result) = create_and_start_exec(
+            &self.docker,
+            container_id,
+            exec_opts,
+            None,
+            "Failed to create exec",
+            "Failed to start exec",
+        )
+        .await?;
 
         let mut stdout = String::new();
         let mut stderr = String::new();
@@ -253,7 +251,7 @@ impl DockerSandbox {
 
         let inspect = self
             .docker
-            .inspect_exec(&exec_instance.id)
+            .inspect_exec(&exec_id)
             .await
             .map_err(|e| crate::Error::context("Failed to inspect exec", e))?;
 
@@ -281,15 +279,15 @@ impl DockerSandbox {
             ..Default::default()
         };
 
-        let exec_instance = docker
-            .create_exec(&container_id, exec_opts)
-            .await
-            .map_err(|e| crate::Error::context("Failed to create exec", e))?;
-
-        let start_result = docker
-            .start_exec(&exec_instance.id, None)
-            .await
-            .map_err(|e| crate::Error::context("Failed to start exec", e))?;
+        let (exec_id, start_result) = create_and_start_exec(
+            &docker,
+            &container_id,
+            exec_opts,
+            None,
+            "Failed to create exec",
+            "Failed to start exec",
+        )
+        .await?;
 
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
@@ -314,7 +312,7 @@ impl DockerSandbox {
         }
 
         let inspect = docker
-            .inspect_exec(&exec_instance.id)
+            .inspect_exec(&exec_id)
             .await
             .map_err(|e| crate::Error::context("Failed to inspect exec", e))?;
 
@@ -820,6 +818,27 @@ fn docker_stdio_exec_options(
     )
 }
 
+async fn create_and_start_exec(
+    docker: &Docker,
+    container_id: &str,
+    exec_options: CreateExecOptions<String>,
+    start_options: Option<StartExecOptions>,
+    create_context: &'static str,
+    start_context: &'static str,
+) -> crate::Result<(String, StartExecResults)> {
+    let exec_instance = docker
+        .create_exec(container_id, exec_options)
+        .await
+        .map_err(|err| crate::Error::context(create_context, err))?;
+    let exec_id = exec_instance.id;
+    let start_result = docker
+        .start_exec(&exec_id, start_options)
+        .await
+        .map_err(|err| crate::Error::context(start_context, err))?;
+
+    Ok((exec_id, start_result))
+}
+
 async fn request_docker_exec_stop_with(
     docker: &Docker,
     container_id: &str,
@@ -833,14 +852,15 @@ async fn request_docker_exec_stop_with(
         working_dir: Some("/".to_string()),
         ..Default::default()
     };
-    let exec_instance = docker
-        .create_exec(container_id, exec_opts)
-        .await
-        .map_err(|e| crate::Error::context("Failed to create Docker exec stop request", e))?;
-    let start_result = docker
-        .start_exec(&exec_instance.id, None)
-        .await
-        .map_err(|e| crate::Error::context("Failed to start Docker exec stop request", e))?;
+    let (exec_id, start_result) = create_and_start_exec(
+        docker,
+        container_id,
+        exec_opts,
+        None,
+        "Failed to create Docker exec stop request",
+        "Failed to start Docker exec stop request",
+    )
+    .await?;
 
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -865,7 +885,7 @@ async fn request_docker_exec_stop_with(
     }
 
     let inspect = docker
-        .inspect_exec(&exec_instance.id)
+        .inspect_exec(&exec_id)
         .await
         .map_err(|e| crate::Error::context("Failed to inspect Docker exec stop request", e))?;
     let exit_code = inspect
@@ -1529,17 +1549,15 @@ impl Sandbox for DockerSandbox {
             docker_stdio_exec_options(controlled_command, effective_dir, env);
 
         let container_id = self.container_id()?.to_string();
-        let exec_instance = self
-            .docker
-            .create_exec(&container_id, create_opts)
-            .await
-            .map_err(|e| crate::Error::context("Failed to create Docker stdio exec", e))?;
-        let exec_id = exec_instance.id.clone();
-        let start_result = self
-            .docker
-            .start_exec(&exec_id, Some(start_opts))
-            .await
-            .map_err(|e| crate::Error::context("Failed to start Docker stdio exec", e))?;
+        let (exec_id, start_result) = create_and_start_exec(
+            &self.docker,
+            &container_id,
+            create_opts,
+            Some(start_opts),
+            "Failed to create Docker stdio exec",
+            "Failed to start Docker stdio exec",
+        )
+        .await?;
 
         let StartExecResults::Attached { mut output, input } = start_result else {
             return Err(crate::Error::message(

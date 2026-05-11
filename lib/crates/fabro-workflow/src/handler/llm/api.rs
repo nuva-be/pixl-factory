@@ -19,7 +19,7 @@ use tokio::sync::Mutex as TokioMutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use super::super::agent::{CodergenBackend, CodergenResult};
+use super::super::agent::{CodergenBackend, CodergenResult, OneShotRequest};
 use super::activation_lease::{ActivationLease, ActivationLeaseOptions};
 use crate::context::keys::Fidelity;
 use crate::context::{Context, WorkflowContext};
@@ -476,16 +476,13 @@ impl CodergenBackend for AgentApiBackend {
         self.shutdown_cached_sessions(emitter);
     }
 
-    async fn one_shot(
-        &self,
-        node: &Node,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        emitter: &Arc<Emitter>,
-        stage_scope: &StageScope,
-        _sandbox: &Arc<dyn Sandbox>,
-        _cancel_token: CancellationToken,
-    ) -> Result<CodergenResult, Error> {
+    async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
+        let node = request.node;
+        let prompt = request.prompt;
+        let system_prompt = request.system_prompt;
+        let emitter = request.emitter;
+        let stage_scope = request.stage_scope;
+
         let client = Client::from_source(self.source.as_ref())
             .await
             .map_err(|e| Error::handler_with_source("Failed to create LLM client", &e))?;

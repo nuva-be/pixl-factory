@@ -709,6 +709,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use fabro_acp::test_support::fake_acp_agent_script;
     use fabro_auth::{AuthCredential, AuthDetails};
     use fabro_graphviz::graph::{AttrValue, Edge, Graph, Node};
     use fabro_interview::AutoApproveInterviewer;
@@ -1192,7 +1193,7 @@ mod tests {
 
         assert_eq!(
             outcome.context_updates.get(&keys::response_key("writer")),
-            Some(&serde_json::json!("hello from initialized acp"))
+            Some(&serde_json::json!("hello from acp"))
         );
         assert!(
             seen.lock()
@@ -1276,43 +1277,6 @@ mod tests {
                 .iter()
                 .any(|event| event == "sandbox.initialized")
         );
-    }
-
-    fn fake_acp_agent_script() -> &'static str {
-        r#"
-import json
-import sys
-
-session_id = "sess-1"
-
-def send(message):
-    print(json.dumps(message), flush=True)
-
-def respond(message, result):
-    send({"jsonrpc": "2.0", "id": message["id"], "result": result})
-
-for line in sys.stdin:
-    message = json.loads(line)
-    method = message.get("method")
-    if method == "initialize":
-        respond(message, {"protocolVersion": 1, "agentCapabilities": {}})
-    elif method == "session/new":
-        respond(message, {"sessionId": session_id})
-    elif method == "session/prompt":
-        send({
-            "jsonrpc": "2.0",
-            "method": "session/update",
-            "params": {
-                "sessionId": session_id,
-                "update": {
-                    "sessionUpdate": "agent_message_chunk",
-                    "content": {"type": "text", "text": "hello from initialized acp"}
-                }
-            }
-        })
-        respond(message, {"stopReason": "end_turn"})
-        break
-"#
     }
 
     #[tokio::test]

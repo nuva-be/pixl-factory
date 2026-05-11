@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use fabro_acp::test_support::fake_acp_agent_script;
 use fabro_config::RunScratch;
 use fabro_graphviz::graph::{AttrValue, Edge, Graph, Node};
 use fabro_graphviz::parser::parse;
@@ -6284,7 +6285,9 @@ mod real_llm {
     use fabro_types::WorkflowSettings;
     use fabro_workflow::context::Context;
     use fabro_workflow::error::Error;
-    use fabro_workflow::handler::agent::{AgentHandler, CodergenBackend, CodergenResult};
+    use fabro_workflow::handler::agent::{
+        AgentHandler, CodergenBackend, CodergenResult, OneShotRequest,
+    };
     use tokio_util::sync::CancellationToken;
 
     struct LlmCodergenBackend {
@@ -6309,17 +6312,8 @@ mod real_llm {
             self.complete(prompt).await
         }
 
-        async fn one_shot(
-            &self,
-            _node: &Node,
-            prompt: &str,
-            _system_prompt: Option<&str>,
-            _emitter: &Arc<Emitter>,
-            _stage_scope: &fabro_workflow::event::StageScope,
-            _sandbox: &Arc<dyn fabro_agent::Sandbox>,
-            _cancel_token: tokio_util::sync::CancellationToken,
-        ) -> Result<CodergenResult, Error> {
-            self.complete(prompt).await
+        async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
+            self.complete(request.prompt).await
         }
     }
 
@@ -10420,7 +10414,7 @@ async fn backend_router_delegates_to_cli_for_backend_attr() {
 async fn backend_router_delegates_to_acp_for_acp_node() {
     let tempdir = tempfile::tempdir().unwrap();
     let script_path = tempdir.path().join("fake_acp_agent.py");
-    tokio::fs::write(&script_path, fake_router_acp_agent_script())
+    tokio::fs::write(&script_path, fake_acp_agent_script())
         .await
         .unwrap();
     let env: Arc<dyn fabro_agent::Sandbox> =
@@ -10471,49 +10465,12 @@ async fn backend_router_delegates_to_acp_for_acp_node() {
     match result {
         CodergenResult::Text { text, .. } => {
             assert_eq!(
-                text, "ACP response",
+                text, "hello from acp",
                 "should route to ACP backend for backend=acp"
             );
         }
         CodergenResult::Full(_) => panic!("expected Text result"),
     }
-}
-
-fn fake_router_acp_agent_script() -> &'static str {
-    r#"
-import json
-import sys
-
-session_id = "sess-1"
-
-def send(message):
-    print(json.dumps(message), flush=True)
-
-def respond(message, result):
-    send({"jsonrpc": "2.0", "id": message["id"], "result": result})
-
-for line in sys.stdin:
-    message = json.loads(line)
-    method = message.get("method")
-    if method == "initialize":
-        respond(message, {"protocolVersion": 1, "agentCapabilities": {}})
-    elif method == "session/new":
-        respond(message, {"sessionId": session_id})
-    elif method == "session/prompt":
-        send({
-            "jsonrpc": "2.0",
-            "method": "session/update",
-            "params": {
-                "sessionId": session_id,
-                "update": {
-                    "sessionUpdate": "agent_message_chunk",
-                    "content": {"type": "text", "text": "ACP response"}
-                }
-            }
-        })
-        respond(message, {"stopReason": "end_turn"})
-        break
-"#
 }
 
 // -- Full pipeline e2e with BackendRouter --
