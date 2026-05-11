@@ -1,10 +1,19 @@
 use std::collections::HashMap;
+use std::io::Result as IoResult;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
-use agent_client_protocol::{Client, ConnectTo, Lines};
-use fabro_sandbox::{Sandbox, StderrCollector, StdioProcessHandle};
-use futures::{AsyncBufReadExt, AsyncWriteExt};
+use agent_client_protocol::util::internal_error;
+use agent_client_protocol::{
+    Agent, Client, ConnectTo, Error as ProtocolError, Lines, Result as AcpProtocolResult,
+};
+use fabro_sandbox::{Result as SandboxResult, Sandbox, StderrCollector, StdioProcessHandle};
+use futures::io::BufReader;
+use futures::sink::unfold;
+use futures::{AsyncBufReadExt, AsyncWriteExt, Stream};
+use tokio::sync::Mutex as TokioMutex;
+use tokio::time::timeout;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tokio_util::sync::CancellationToken;
 
@@ -12,15 +21,15 @@ use crate::command::AcpCommand;
 
 #[derive(Clone)]
 pub(crate) struct TransportState {
-    handle: Arc<tokio::sync::Mutex<Option<StdioProcessHandle>>>,
-    stderr: Arc<tokio::sync::Mutex<Option<StderrCollector>>>,
+    handle: Arc<TokioMutex<Option<StdioProcessHandle>>>,
+    stderr: Arc<TokioMutex<Option<StderrCollector>>>,
 }
 
 impl TransportState {
     pub(crate) fn new() -> Self {
         Self {
-            handle: Arc::new(tokio::sync::Mutex::new(None)),
-            stderr: Arc::new(tokio::sync::Mutex::new(None)),
+            handle: Arc::new(TokioMutex::new(None)),
+            stderr: Arc::new(TokioMutex::new(None)),
         }
     }
 
@@ -29,7 +38,7 @@ impl TransportState {
         *self.stderr.lock().await = Some(stderr);
     }
 
-    pub(crate) async fn terminate(&self) -> fabro_sandbox::Result<()> {
+    pub(crate) async fn terminate(&self) -> SandboxResult<()> {
         if let Some(handle) = self.handle.lock().await.as_ref().cloned() {
             handle.terminate().await?;
         }
@@ -74,10 +83,7 @@ impl SandboxAcpTransport {
 }
 
 impl ConnectTo<Client> for SandboxAcpTransport {
-    async fn connect_to(
-        self,
-        client: impl ConnectTo<agent_client_protocol::Agent>,
-    ) -> agent_client_protocol::Result<()> {
+    async fn connect_to(self, client: impl ConnectTo<Agent>) -> AcpProtocolResult<()> {
         let mut env = self.command.env().clone();
         env.extend(self.env);
 
@@ -90,15 +96,15 @@ impl ConnectTo<Client> for SandboxAcpTransport {
                 Some(self.cancel_token),
             )
             .await
-            .map_err(agent_client_protocol::Error::into_internal_error)?;
+            .map_err(ProtocolError::into_internal_error)?;
 
         let handle = process.handle.clone();
         let stderr = process.stderr.clone();
         self.state.set_process(handle.clone(), stderr.clone()).await;
 
-        let incoming_lines = Box::pin(futures::io::BufReader::new(process.stdout.compat()).lines())
-            as Pin<Box<dyn futures::Stream<Item = std::io::Result<String>> + Send>>;
-        let outgoing_sink = Box::pin(futures::sink::unfold(
+        let incoming_lines = Box::pin(BufReader::new(process.stdout.compat()).lines())
+            as Pin<Box<dyn Stream<Item = IoResult<String>> + Send>>;
+        let outgoing_sink = Box::pin(unfold(
             process.stdin.compat_write(),
             async move |mut writer, line: String| {
                 let mut bytes = line.into_bytes();
@@ -114,13 +120,13 @@ impl ConnectTo<Client> for SandboxAcpTransport {
         );
         tokio::select! {
             result = protocol => {
-                let _ = tokio::time::timeout(std::time::Duration::from_millis(500), handle.wait()).await;
+                let _ = timeout(Duration::from_millis(500), handle.wait()).await;
                 result
             }
             termination = handle.wait() => {
-                let termination = termination.map_err(agent_client_protocol::Error::into_internal_error)?;
+                let termination = termination.map_err(ProtocolError::into_internal_error)?;
                 let stderr = stderr.tail_string().await;
-                Err(agent_client_protocol::util::internal_error(format!(
+                Err(internal_error(format!(
                     "ACP process exited before protocol completed: termination={termination:?}, stderr={stderr}"
                 )))
             }

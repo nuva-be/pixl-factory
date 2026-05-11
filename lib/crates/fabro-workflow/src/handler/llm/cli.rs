@@ -781,9 +781,9 @@ pub(crate) fn process_env_var(name: &str) -> Option<String> {
 /// Routes codergen invocations to API, CLI, or ACP backends based on node
 /// attributes and model type.
 pub struct BackendRouter {
-    api_backend: Box<dyn CodergenBackend>,
-    cli_backend: AgentCliBackend,
-    acp_backend: AgentAcpBackend,
+    api: Box<dyn CodergenBackend>,
+    cli: AgentCliBackend,
+    acp: AgentAcpBackend,
 }
 
 impl BackendRouter {
@@ -794,13 +794,13 @@ impl BackendRouter {
         acp_backend: AgentAcpBackend,
     ) -> Self {
         Self {
-            api_backend,
-            cli_backend,
-            acp_backend,
+            api: api_backend,
+            cli: cli_backend,
+            acp: acp_backend,
         }
     }
 
-    fn select_backend(&self, node: &Node) -> Result<SelectedBackend, Error> {
+    fn select_backend(node: &Node) -> Result<SelectedBackend, Error> {
         match node.backend() {
             None => {
                 if node.model().is_some_and(is_cli_only_model) {
@@ -818,7 +818,7 @@ impl BackendRouter {
         }
     }
 
-    fn select_one_shot_backend(&self, node: &Node) -> Result<SelectedBackend, Error> {
+    fn select_one_shot_backend(node: &Node) -> Result<SelectedBackend, Error> {
         match node.backend() {
             Some("acp") => Ok(SelectedBackend::Acp),
             Some("api" | "cli") | None => Ok(SelectedBackend::Api),
@@ -829,8 +829,8 @@ impl BackendRouter {
     }
 
     #[cfg(test)]
-    fn should_use_cli(&self, node: &Node) -> bool {
-        matches!(self.select_backend(node), Ok(SelectedBackend::Cli))
+    fn should_use_cli(node: &Node) -> bool {
+        matches!(Self::select_backend(node), Ok(SelectedBackend::Cli))
     }
 }
 
@@ -854,9 +854,9 @@ impl CodergenBackend for BackendRouter {
         tool_hooks: Option<Arc<dyn fabro_agent::ToolHookCallback>>,
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
-        match self.select_backend(node)? {
+        match Self::select_backend(node)? {
             SelectedBackend::Api => {
-                self.api_backend
+                self.api
                     .run(
                         node,
                         prompt,
@@ -870,7 +870,7 @@ impl CodergenBackend for BackendRouter {
                     .await
             }
             SelectedBackend::Cli => {
-                self.cli_backend
+                self.cli
                     .run(
                         node,
                         prompt,
@@ -884,7 +884,7 @@ impl CodergenBackend for BackendRouter {
                     .await
             }
             SelectedBackend::Acp => {
-                self.acp_backend
+                self.acp
                     .run(
                         node,
                         prompt,
@@ -910,9 +910,9 @@ impl CodergenBackend for BackendRouter {
         sandbox: &Arc<dyn Sandbox>,
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
-        match self.select_one_shot_backend(node)? {
+        match Self::select_one_shot_backend(node)? {
             SelectedBackend::Acp => {
-                self.acp_backend
+                self.acp
                     .one_shot(
                         node,
                         prompt,
@@ -925,7 +925,7 @@ impl CodergenBackend for BackendRouter {
                     .await
             }
             SelectedBackend::Api | SelectedBackend::Cli => {
-                self.api_backend
+                self.api
                     .one_shot(
                         node,
                         prompt,
@@ -941,7 +941,7 @@ impl CodergenBackend for BackendRouter {
     }
 
     async fn shutdown(&self, emitter: &Arc<Emitter>) {
-        self.api_backend.shutdown(emitter).await;
+        self.api.shutdown(emitter).await;
     }
 }
 
@@ -1387,16 +1387,14 @@ mod tests {
         node.attrs
             .insert("backend".to_string(), AttrValue::String("cli".to_string()));
 
-        let router = test_router();
-        assert!(router.should_use_cli(&node));
+        assert!(BackendRouter::should_use_cli(&node));
     }
 
     #[test]
     fn router_uses_api_by_default() {
         let node = Node::new("test");
 
-        let router = test_router();
-        assert!(!router.should_use_cli(&node));
+        assert!(!BackendRouter::should_use_cli(&node));
     }
 
     #[test]
@@ -1407,8 +1405,7 @@ mod tests {
             AttrValue::String("claude-opus-4-6".to_string()),
         );
 
-        let router = test_router();
-        assert!(!router.should_use_cli(&node));
+        assert!(!BackendRouter::should_use_cli(&node));
     }
 
     #[test]
@@ -1417,8 +1414,10 @@ mod tests {
         node.attrs
             .insert("backend".to_string(), AttrValue::String("api".to_string()));
 
-        let router = test_router();
-        assert_eq!(router.select_backend(&node).unwrap(), SelectedBackend::Api);
+        assert_eq!(
+            BackendRouter::select_backend(&node).unwrap(),
+            SelectedBackend::Api
+        );
     }
 
     #[test]
@@ -1427,8 +1426,10 @@ mod tests {
         node.attrs
             .insert("backend".to_string(), AttrValue::String("cli".to_string()));
 
-        let router = test_router();
-        assert_eq!(router.select_backend(&node).unwrap(), SelectedBackend::Cli);
+        assert_eq!(
+            BackendRouter::select_backend(&node).unwrap(),
+            SelectedBackend::Cli
+        );
     }
 
     #[test]
@@ -1437,8 +1438,10 @@ mod tests {
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
 
-        let router = test_router();
-        assert_eq!(router.select_backend(&node).unwrap(), SelectedBackend::Acp);
+        assert_eq!(
+            BackendRouter::select_backend(&node).unwrap(),
+            SelectedBackend::Acp
+        );
     }
 
     #[test]
@@ -1449,8 +1452,7 @@ mod tests {
             AttrValue::String("codex".to_string()),
         );
 
-        let router = test_router();
-        let err = router.select_backend(&node).unwrap_err();
+        let err = BackendRouter::select_backend(&node).unwrap_err();
         assert_eq!(
             err.to_string(),
             "Validation error: unsupported LLM backend \"codex\"; expected one of: api, cli, acp"

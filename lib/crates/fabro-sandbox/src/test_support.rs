@@ -4,8 +4,10 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use fabro_types::CommandTermination;
 use tokio::fs;
+use tokio::io::duplex;
 use tokio_util::sync::CancellationToken;
 
+use crate::sandbox::StdioProcessControl;
 use crate::{
     DEFAULT_EXEC_OUTPUT_TAIL_BYTES, DirEntry, ExecResult, GrepOptions, Sandbox, SandboxEvent,
     SandboxEventCallback, StderrCollector, StdioProcess, StdioProcessHandle,
@@ -110,7 +112,7 @@ impl Default for MockSandbox {
 struct MockStdioProcessControl;
 
 #[async_trait]
-impl crate::sandbox::StdioProcessControl for MockStdioProcessControl {
+impl StdioProcessControl for MockStdioProcessControl {
     async fn terminate(&self) -> crate::Result<()> {
         Ok(())
     }
@@ -224,8 +226,8 @@ impl Sandbox for MockSandbox {
             .lock()
             .expect("captured_env_vars lock poisoned") = env_vars.cloned();
 
-        let (stdin, _stdin_read) = tokio::io::duplex(1024);
-        let (_stdout_write, stdout) = tokio::io::duplex(1024);
+        let (stdin, _stdin_read) = duplex(1024);
+        let (_stdout_write, stdout) = duplex(1024);
         Ok(StdioProcess {
             stdin:  Box::pin(stdin),
             stdout: Box::pin(stdout),

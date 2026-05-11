@@ -687,6 +687,7 @@ mod tests {
     use fabro_types::{EventBody, RunEvent, RunId, WorkflowSettings, fixtures};
     use fabro_vault::{SecretType, Vault};
     use object_store::memory::InMemory;
+    use tokio::fs::{create_dir_all, write};
     use tokio::sync::RwLock as AsyncRwLock;
 
     use super::*;
@@ -1015,9 +1016,9 @@ mod tests {
     async fn initialize_executes_acp_backend_node_from_registry() {
         let temp = tempfile::tempdir().unwrap();
         let run_dir = temp.path().join("run");
-        std::fs::create_dir_all(&run_dir).unwrap();
+        create_dir_all(&run_dir).await.unwrap();
         let script_path = temp.path().join("fake_acp_agent.py");
-        std::fs::write(&script_path, fake_acp_agent_script()).unwrap();
+        write(&script_path, fake_acp_agent_script()).await.unwrap();
 
         let source = format!(
             r#"digraph test {{

@@ -7,10 +7,11 @@ use agent_client_protocol::schema::{
     ProtocolVersion, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
     SelectedPermissionOutcome, SessionNotification, SessionUpdate, StopReason,
 };
-use agent_client_protocol::util::MatchDispatch;
-use agent_client_protocol::{ActiveSession, Agent, Client, SessionMessage};
+use agent_client_protocol::util::{MatchDispatch, internal_error};
+use agent_client_protocol::{ActiveSession, Agent, Client, Error as ProtocolError, SessionMessage};
 use fabro_sandbox::Sandbox;
 use fabro_util::time::elapsed_ms;
+use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
 use crate::command::AcpCommand;
@@ -90,14 +91,13 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
 
     let outcome = match request.timeout_ms {
         Some(timeout_ms) => {
-            match tokio::time::timeout(Duration::from_millis(timeout_ms), run).await {
-                Ok(result) => result,
-                Err(_) => {
-                    state.terminate().await?;
-                    return Err(AcpError::TimedOut {
-                        stderr: state.stderr_tail().await,
-                    });
-                }
+            if let Ok(result) = timeout(Duration::from_millis(timeout_ms), run).await {
+                result
+            } else {
+                state.terminate().await?;
+                return Err(AcpError::TimedOut {
+                    stderr: state.stderr_tail().await,
+                });
             }
         }
         None => run.await,
@@ -113,7 +113,7 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
     })
 }
 
-fn map_protocol_error(error: agent_client_protocol::Error) -> AcpError {
+fn map_protocol_error(error: ProtocolError) -> AcpError {
     let message = error.to_string();
     if message.contains("ACP turn was cancelled") {
         AcpError::Cancelled
@@ -160,7 +160,7 @@ async fn read_turn(
     cancel_token: &CancellationToken,
     on_activity: Option<&Arc<dyn Fn() + Send + Sync>>,
     state: &TransportState,
-) -> Result<(String, StopReason), agent_client_protocol::Error> {
+) -> Result<(String, StopReason), ProtocolError> {
     let mut text = String::new();
     let mut cancel_sent = false;
 
@@ -188,16 +188,16 @@ async fn read_turn(
                     SessionMessage::StopReason(stop_reason) => {
                         return match stop_reason {
                             StopReason::EndTurn | StopReason::Refusal => Ok((text, stop_reason)),
-                            StopReason::Cancelled => Err(agent_client_protocol::util::internal_error(
-                                "ACP turn was cancelled",
-                            )),
+                            StopReason::Cancelled => {
+                                Err(internal_error("ACP turn was cancelled"))
+                            }
                             StopReason::MaxTokens | StopReason::MaxTurnRequests => {
-                                Err(agent_client_protocol::util::internal_error(format!(
+                                Err(internal_error(format!(
                                     "ACP prompt stopped with {}: {text}",
                                     stop_reason_name(stop_reason)
                                 )))
                             }
-                            _ => Err(agent_client_protocol::util::internal_error(format!(
+                            _ => Err(internal_error(format!(
                                 "ACP prompt stopped with {}: {text}",
                                 stop_reason_name(stop_reason)
                             ))),
@@ -213,9 +213,9 @@ async fn read_turn(
                     CancelNotification::new(session.session_id().clone()),
                 )?;
             }
-            () = tokio::time::sleep(Duration::from_millis(500)), if cancel_sent => {
-                state.terminate().await.map_err(agent_client_protocol::Error::into_internal_error)?;
-                return Err(agent_client_protocol::util::internal_error("ACP turn was cancelled"));
+            () = sleep(Duration::from_millis(500)), if cancel_sent => {
+                state.terminate().await.map_err(ProtocolError::into_internal_error)?;
+                return Err(internal_error("ACP turn was cancelled"));
             }
         }
     }

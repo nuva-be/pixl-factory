@@ -1,23 +1,28 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agent_client_protocol::schema::StopReason;
-use fabro_acp::{AcpError, AcpRunRequest, resolve_acp_command, run_acp_turn};
+use fabro_acp::{AcpError, AcpRunRequest, AcpRunResult, resolve_acp_command, run_acp_turn};
 use fabro_model::Provider;
 use fabro_sandbox::{LocalSandbox, Sandbox, shell_quote};
+use tokio::fs::{read_to_string, write};
+use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test]
 async fn session_lifecycle_initializes_sends_prompt_and_aggregates_text() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
     let script_path = tempdir.path().join("fake_acp_agent.py");
     let record_path = tempdir.path().join("methods.txt");
-    tokio::fs::write(&script_path, fake_agent_script())
+    write(&script_path, fake_agent_script())
         .await
-        .unwrap();
+        .expect("write fake ACP agent");
 
     let raw_command = format!("python3 {}", shell_quote(&script_path.to_string_lossy()));
-    let command = resolve_acp_command(Provider::OpenAi, Some(&raw_command)).unwrap();
+    let command =
+        resolve_acp_command(Provider::OpenAi, Some(&raw_command)).expect("resolve ACP command");
     let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
 
     let result = run_acp_turn(AcpRunRequest {
@@ -34,19 +39,21 @@ async fn session_lifecycle_initializes_sends_prompt_and_aggregates_text() {
         on_activity: None,
     })
     .await
-    .unwrap();
+    .expect("run ACP turn");
 
     assert_eq!(result.text, "hello from acp");
     assert_eq!(result.stop_reason, StopReason::EndTurn);
     assert_eq!(
-        tokio::fs::read_to_string(record_path).await.unwrap(),
+        read_to_string(record_path)
+            .await
+            .expect("read method record"),
         "initialize\nsession/new\nsession/prompt\n"
     );
 }
 
 #[tokio::test]
 async fn permission_request_selects_allow_always() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
     let permission_path = tempdir.path().join("permission.json");
 
     let result = run_fake_agent(
@@ -62,17 +69,19 @@ async fn permission_request_selects_allow_always() {
         CancellationToken::new(),
     )
     .await
-    .unwrap();
+    .expect("run ACP turn");
 
     assert_eq!(result.text, "hello from acp");
-    let permission = tokio::fs::read_to_string(permission_path).await.unwrap();
+    let permission = read_to_string(permission_path)
+        .await
+        .expect("read permission record");
     assert!(permission.contains(r#""outcome":"selected""#));
     assert!(permission.contains(r#""optionId":"always""#));
 }
 
 #[tokio::test]
 async fn runs_inside_sandbox_and_uses_requested_cwd() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
     let cwd_path = tempdir.path().join("session_new.json");
 
     let result = run_fake_agent(
@@ -88,26 +97,26 @@ async fn runs_inside_sandbox_and_uses_requested_cwd() {
         CancellationToken::new(),
     )
     .await
-    .unwrap();
+    .expect("run ACP turn");
 
     assert_eq!(result.text, "hello from acp");
     assert_eq!(
-        tokio::fs::read_to_string(tempdir.path().join("hello.txt"))
+        read_to_string(tempdir.path().join("hello.txt"))
             .await
-            .unwrap(),
+            .expect("read sandbox output file"),
         "hello from sandbox\n"
     );
     assert!(
-        tokio::fs::read_to_string(cwd_path)
+        read_to_string(cwd_path)
             .await
-            .unwrap()
+            .expect("read session/new params")
             .contains(&tempdir.path().to_string_lossy().into_owned())
     );
 }
 
 #[tokio::test]
 async fn cancellation_sends_session_cancel_and_returns_cancelled() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
     let cancel_path = tempdir.path().join("cancel.txt");
     let cancel_token = CancellationToken::new();
     let cancel_for_task = cancel_token.clone();
@@ -128,16 +137,19 @@ async fn cancellation_sends_session_cancel_and_returns_cancelled() {
         .await
     });
 
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(100)).await;
     cancel_token.cancel();
-    let err = task.await.unwrap().unwrap_err();
+    let err = task
+        .await
+        .expect("join cancellation task")
+        .expect_err("cancelled turn should error");
 
     assert!(matches!(err, AcpError::Cancelled));
 }
 
 #[tokio::test]
 async fn refusal_stop_reason_returns_text() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
 
     let result = run_fake_agent(
         tempdir.path(),
@@ -146,7 +158,7 @@ async fn refusal_stop_reason_returns_text() {
         CancellationToken::new(),
     )
     .await
-    .unwrap();
+    .expect("run ACP turn");
 
     assert_eq!(result.text, "hello from acp");
     assert_eq!(result.stop_reason, StopReason::Refusal);
@@ -154,7 +166,7 @@ async fn refusal_stop_reason_returns_text() {
 
 #[tokio::test]
 async fn max_tokens_stop_reason_returns_partial_text_error() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
 
     let err = run_fake_agent(
         tempdir.path(),
@@ -163,7 +175,7 @@ async fn max_tokens_stop_reason_returns_partial_text_error() {
         CancellationToken::new(),
     )
     .await
-    .unwrap_err();
+    .expect_err("max_tokens should return stop reason error");
 
     let AcpError::StopReason { stop_reason, text } = err else {
         panic!("expected stop reason error");
@@ -174,7 +186,7 @@ async fn max_tokens_stop_reason_returns_partial_text_error() {
 
 #[tokio::test]
 async fn max_turn_requests_stop_reason_returns_partial_text_error() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
 
     let err = run_fake_agent(
         tempdir.path(),
@@ -186,7 +198,7 @@ async fn max_turn_requests_stop_reason_returns_partial_text_error() {
         CancellationToken::new(),
     )
     .await
-    .unwrap_err();
+    .expect_err("max_turn_requests should return stop reason error");
 
     let AcpError::StopReason { stop_reason, text } = err else {
         panic!("expected stop reason error");
@@ -197,7 +209,7 @@ async fn max_turn_requests_stop_reason_returns_partial_text_error() {
 
 #[tokio::test]
 async fn timeout_terminates_process_and_returns_timeout() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
 
     let err = run_fake_agent(
         tempdir.path(),
@@ -206,14 +218,14 @@ async fn timeout_terminates_process_and_returns_timeout() {
         CancellationToken::new(),
     )
     .await
-    .unwrap_err();
+    .expect_err("timeout should error");
 
     assert!(matches!(err, AcpError::TimedOut { .. }));
 }
 
 #[tokio::test]
 async fn malformed_json_returns_protocol_error() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
 
     let err = run_fake_agent(
         tempdir.path(),
@@ -222,14 +234,14 @@ async fn malformed_json_returns_protocol_error() {
         CancellationToken::new(),
     )
     .await
-    .unwrap_err();
+    .expect_err("malformed JSON should error");
 
     assert!(matches!(err, AcpError::Protocol(_)));
 }
 
 #[tokio::test]
 async fn early_exit_returns_protocol_error_with_stderr() {
-    let tempdir = tempfile::tempdir().unwrap();
+    let tempdir = tempfile::tempdir().expect("create tempdir");
 
     let err = run_fake_agent(
         tempdir.path(),
@@ -238,23 +250,24 @@ async fn early_exit_returns_protocol_error_with_stderr() {
         CancellationToken::new(),
     )
     .await
-    .unwrap_err();
+    .expect_err("early exit should error");
 
     assert!(matches!(err, AcpError::Protocol(_)));
 }
 
 async fn run_fake_agent(
-    tempdir: &std::path::Path,
+    tempdir: &Path,
     env: HashMap<String, String>,
     timeout_ms: Option<u64>,
     cancel_token: CancellationToken,
-) -> Result<fabro_acp::AcpRunResult, AcpError> {
+) -> Result<AcpRunResult, AcpError> {
     let script_path = tempdir.join("fake_acp_agent.py");
-    tokio::fs::write(&script_path, fake_agent_script())
+    write(&script_path, fake_agent_script())
         .await
-        .unwrap();
+        .expect("write fake ACP agent");
     let raw_command = format!("python3 {}", shell_quote(&script_path.to_string_lossy()));
-    let command = resolve_acp_command(Provider::OpenAi, Some(&raw_command)).unwrap();
+    let command =
+        resolve_acp_command(Provider::OpenAi, Some(&raw_command)).expect("resolve ACP command");
     let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.to_path_buf()));
 
     run_acp_turn(AcpRunRequest {
@@ -285,6 +298,11 @@ def send(message):
 
 def respond(message, result):
     send({"jsonrpc": "2.0", "id": message["id"], "result": result})
+
+def record_methods():
+    if os.environ.get("ACP_RECORD"):
+        with open(os.environ["ACP_RECORD"], "w", encoding="utf-8") as record:
+            record.write("\n".join(methods) + "\n")
 
 for line in sys.stdin:
     message = json.loads(line)
@@ -360,10 +378,8 @@ for line in sys.stdin:
                 }
             }
         })
+        record_methods()
         respond(message, {"stopReason": os.environ.get("ACP_STOP_REASON", "end_turn")})
-        if os.environ.get("ACP_RECORD"):
-            with open(os.environ["ACP_RECORD"], "w", encoding="utf-8") as record:
-                record.write("\n".join(methods) + "\n")
         break
     else:
         send({

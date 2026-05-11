@@ -10,6 +10,8 @@ use async_trait::async_trait;
 use fabro_types::{CommandOutputStream, CommandTermination};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio::sync::Mutex as TokioMutex;
+use tokio::task::JoinHandle;
 use tokio::time;
 use tokio_util::sync::CancellationToken;
 
@@ -688,7 +690,7 @@ pub struct StdioProcess {
 
 #[derive(Debug, Clone)]
 pub struct StderrCollector {
-    inner:     Arc<tokio::sync::Mutex<Vec<u8>>>,
+    inner:     Arc<TokioMutex<Vec<u8>>>,
     max_bytes: usize,
 }
 
@@ -696,7 +698,7 @@ impl StderrCollector {
     #[must_use]
     pub fn new(max_bytes: usize) -> Self {
         Self {
-            inner: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            inner: Arc::new(TokioMutex::new(Vec::new())),
             max_bytes,
         }
     }
@@ -715,7 +717,7 @@ impl StderrCollector {
         String::from_utf8_lossy(&tail).into_owned()
     }
 
-    pub fn spawn_reader<R>(&self, mut reader: R) -> tokio::task::JoinHandle<()>
+    pub fn spawn_reader<R>(&self, mut reader: R) -> JoinHandle<()>
     where
         R: AsyncRead + Unpin + Send + 'static,
     {

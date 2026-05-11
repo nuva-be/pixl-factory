@@ -19,14 +19,14 @@ use fabro_github::GitHubCredentials;
 use fabro_types::{CommandOutputStream, CommandTermination, RunId};
 use fabro_util::time::elapsed_ms;
 use futures::StreamExt;
-use tokio::io::AsyncWriteExt;
-use tokio::sync::OnceCell;
+use tokio::io::{AsyncWriteExt, duplex};
+use tokio::sync::{Mutex as TokioMutex, OnceCell};
 use tokio::{fs, time};
 use tokio_util::sync::CancellationToken;
 
 use crate::clone_source::{self, CloneDecision, EmptyWorkspaceReason};
 use crate::redact::redact_auth_url;
-use crate::sandbox::{optional_timeout, resolve_path};
+use crate::sandbox::{StdioProcessControl, optional_timeout, resolve_path};
 use crate::{
     CommandOutputCallback, DEFAULT_EXEC_OUTPUT_TAIL_BYTES, DirEntry, ExecResult,
     ExecStreamingResult, GrepOptions, Sandbox, SandboxEvent, SandboxEventCallback, StderrCollector,
@@ -882,11 +882,11 @@ struct DockerStdioProcessControl {
     container_id: String,
     exec_id:      String,
     stop_file:    String,
-    termination:  tokio::sync::Mutex<Option<CommandTermination>>,
+    termination:  TokioMutex<Option<CommandTermination>>,
 }
 
 #[async_trait]
-impl crate::sandbox::StdioProcessControl for DockerStdioProcessControl {
+impl StdioProcessControl for DockerStdioProcessControl {
     async fn terminate(&self) -> crate::Result<()> {
         if self.termination.lock().await.is_some() {
             return Ok(());
@@ -1452,9 +1452,10 @@ impl Sandbox for DockerSandbox {
         env_vars: Option<&HashMap<String, String>>,
         cancel_token: Option<CancellationToken>,
     ) -> crate::Result<StdioProcess> {
-        let effective_dir = working_dir
-            .map(Self::resolve_container_path)
-            .unwrap_or_else(|| WORKING_DIRECTORY.to_string());
+        let effective_dir = working_dir.map_or_else(
+            || WORKING_DIRECTORY.to_string(),
+            Self::resolve_container_path,
+        );
         let env: Option<Vec<String>> =
             env_vars.map(|vars| vars.iter().map(|(k, v)| format!("{k}={v}")).collect());
         let (stop_file, pid_file) = docker_exec_control_paths();
@@ -1483,7 +1484,7 @@ impl Sandbox for DockerSandbox {
 
         let stderr_collector = StderrCollector::new(DEFAULT_EXEC_OUTPUT_TAIL_BYTES);
         let stderr_for_output = stderr_collector.clone();
-        let (mut stdout_writer, stdout_reader) = tokio::io::duplex(64 * 1024);
+        let (mut stdout_writer, stdout_reader) = duplex(64 * 1024);
         tokio::spawn(async move {
             while let Some(chunk) = output.next().await {
                 match chunk {
@@ -1511,7 +1512,7 @@ impl Sandbox for DockerSandbox {
             container_id,
             exec_id,
             stop_file,
-            termination: tokio::sync::Mutex::new(None),
+            termination: TokioMutex::new(None),
         });
 
         if let Some(token) = cancel_token {

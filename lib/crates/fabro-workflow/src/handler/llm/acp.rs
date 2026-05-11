@@ -548,6 +548,10 @@ for line in sys.stdin:
 "#
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "unit test initializes an isolated git repository with the system git binary"
+    )]
     fn init_git(path: &std::path::Path) {
         let output = std::process::Command::new("git")
             .arg("init")

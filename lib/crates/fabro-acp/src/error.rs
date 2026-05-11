@@ -1,7 +1,9 @@
+use crate::command::AcpCommandError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AcpError {
     #[error(transparent)]
-    Command(#[from] crate::command::AcpCommandError),
+    Command(#[from] AcpCommandError),
 
     #[error(transparent)]
     Sandbox(#[from] fabro_sandbox::Error),

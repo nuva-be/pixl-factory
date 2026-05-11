@@ -14,13 +14,18 @@ use super::{find_run_dir, fixture, has_event, read_conclusion, run_events, run_s
 
 #[test]
 fn acp_backend_workflow() {
-    let context = test_context!();
+    let mut context = test_context!();
+    context.write_home(
+        ".fabro/settings.toml",
+        "[server.auth]\nmethods = [\"dev-token\"]\n",
+    );
+    context.isolated_server();
     seed_openai_vault(&context.storage_dir);
     let fake_agent = fixture("fake_acp_agent.py");
     let workflow = context.temp_dir.join("acp_backend.fabro");
     context.write_temp(
         "acp_backend.fabro",
-        &format!(
+        format!(
             r#"digraph ACP {{
   graph [goal="Exercise ACP backend"]
   start [shape=Mdiamond]

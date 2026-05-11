@@ -7,11 +7,12 @@ use fabro_types::{CommandOutputStream, CommandTermination};
 use fabro_util::time::elapsed_ms;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
+use tokio::sync::Mutex as TokioMutex;
 use tokio::task::spawn_blocking;
 use tokio::{fs, time};
 use tokio_util::sync::CancellationToken;
 
-use crate::sandbox::optional_timeout;
+use crate::sandbox::{StdioProcessControl, optional_timeout};
 use crate::{
     CommandOutputCallback, DEFAULT_EXEC_OUTPUT_TAIL_BYTES, DirEntry, ExecResult,
     ExecStreamingResult, GrepOptions, Sandbox, SandboxEvent, SandboxEventCallback, StderrCollector,
@@ -143,12 +144,12 @@ where
 }
 
 struct LocalStdioProcessControl {
-    child:       tokio::sync::Mutex<Child>,
-    termination: tokio::sync::Mutex<Option<CommandTermination>>,
+    child:       TokioMutex<Child>,
+    termination: TokioMutex<Option<CommandTermination>>,
 }
 
 #[async_trait]
-impl crate::sandbox::StdioProcessControl for LocalStdioProcessControl {
+impl StdioProcessControl for LocalStdioProcessControl {
     async fn terminate(&self) -> crate::Result<()> {
         if self.termination.lock().await.is_some() {
             return Ok(());
@@ -515,8 +516,8 @@ impl Sandbox for LocalSandbox {
         stderr_collector.spawn_reader(stderr);
 
         let handle = StdioProcessHandle::new(LocalStdioProcessControl {
-            child:       tokio::sync::Mutex::new(child),
-            termination: tokio::sync::Mutex::new(None),
+            child:       TokioMutex::new(child),
+            termination: TokioMutex::new(None),
         });
 
         if let Some(token) = cancel_token {

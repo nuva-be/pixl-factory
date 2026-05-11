@@ -36,6 +36,11 @@ def send(message):
 def respond(message, result):
     send({"jsonrpc": "2.0", "id": message["id"], "result": result})
 
+def record_methods():
+    if os.environ.get("ACP_RECORD"):
+        with open(os.environ["ACP_RECORD"], "w", encoding="utf-8") as record:
+            record.write("\n".join(methods) + "\n")
+
 for line in sys.stdin:
     message = json.loads(line)
     method = message.get("method")
@@ -100,10 +105,8 @@ for line in sys.stdin:
                     }
                 }
             })
+        record_methods()
         respond(message, {"stopReason": os.environ.get("ACP_STOP_REASON", "end_turn")})
-        if os.environ.get("ACP_RECORD"):
-            with open(os.environ["ACP_RECORD"], "w", encoding="utf-8") as record:
-                record.write("\n".join(methods) + "\n")
         break
     else:
         send({
