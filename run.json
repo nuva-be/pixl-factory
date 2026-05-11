@@ -408,7 +408,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-11T19:04:29.314925Z",
-  "last_event_at": "2026-05-11T19:04:36.785818Z",
+  "last_event_at": "2026-05-11T19:04:50.923387Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -1007,9 +1007,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 87,
       "checkpoint": {
-        "timestamp": "2026-05-11T19:04:43.882452Z",
+        "timestamp": "2026-05-11T19:04:50.923242Z",
         "current_node": "summarize",
         "completed_nodes": [
           "start",
@@ -1022,87 +1022,53 @@
         ],
         "node_retries": {},
         "context_values": {
-          "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
-          "human.gate.multiple_choice.answer": "R",
           "graph.goal": "answer-bug-probe",
+          "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
           "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
-          "human.gate.multi_select.answer": "S, B",
-          "human.gate.confirmation.label": "[Y] Continue",
-          "internal.retry_count.freeform": 0,
+          "human.gate.yes_no.answer": "yes",
           "last_stage": "summarize",
-          "internal.retry_count.yes_no": 0,
+          "outcome": "succeeded",
+          "internal.node_visit_count": 1,
+          "internal.run_id": "01KRC69K2GZ1HA51KK8276VB44",
+          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+          "internal.retry_count.freeform": 0,
+          "thread.multiple_choice.current_node": "multi_select",
+          "human.gate.label": "\"QA probe — testing the answer wire path\"",
+          "human.gate.text": "\"QA probe — testing the answer wire path\"",
+          "internal.fidelity": "summary:high",
           "internal.thread_id": "freeform",
           "thread.multi_select.current_node": "freeform",
-          "preferred_label": "[S] Success criteria, [B] Blockers",
-          "internal.retry_count.multi_select": 0,
-          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
-          "internal.fidelity": "summary:high",
-          "thread.multiple_choice.current_node": "multi_select",
-          "thread.confirmation.current_node": "multiple_choice",
-          "internal.retry_count.summarize": 0,
           "graph.rankdir": "LR",
-          "human.gate.yes_no.label": "[Y] Yes",
-          "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
-          "current_node": "summarize",
-          "internal.run_id": "01KRC69K2GZ1HA51KK8276VB44",
-          "human.gate.confirmation.answer": "yes",
-          "response.summarize": "## Interview Summary\n\n### Questions & Answers (in order)\n\n1. **Yes/No**\n   - **Q:** Is this interview workflow easy to follow so far?\n   - **A:** Yes\n\n2. **Confirmation**\n   - **Q:** Confirm that you want to continue into more structured questions.\n   - **A:** Yes — *[Y] Continue*\n\n3. **Multiple Choice**\n   - **Q:** Which theme should be the center of the final summary?\n   - **A:** R — *[R] Risks*\n\n4. **Multi-Select**\n   - **Q:** Which supporting areas should the final summary emphasize?\n   - **A:** S, B — *[S] Success criteria, [B] Blockers*\n\n5. **Freeform**\n   - **Q:** Add any final context, constraints, or nuance for the summary.\n   - **A:** \"QA probe — testing the answer wire path\"\n\n---\n\n### Synthesis\n\n**Priorities:**\n- The user confirmed the workflow is easy to follow and willingly proceeded through all structured stages.\n- The desired summary focus is **Risks** as the central theme, with **Success Criteria** and **Blockers** as the two supporting emphases.\n\n**Constraints:**\n- This is explicitly a **QA probe** — the run exists to validate that answer data flows correctly through the human gate pipeline, not to capture genuine product or project requirements.\n\n**Open Questions:**\n- None surfaced by the user during the interview.\n\n**Notable:** All five stages completed successfully with handler `human`, and the context keys are fully populated — consistent with the stated goal of verifying the answer wire path end-to-end.",
-          "human.gate.text": "\"QA probe — testing the answer wire path\"",
-          "internal.node_visit_count": 1,
-          "human.gate.selected": "freeform",
-          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
-          "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
-          "human.gate.freeform.answer": "\"QA probe — testing the answer wire path\"",
-          "failure_class": "",
-          "human.gate.label": "\"QA probe — testing the answer wire path\"",
-          "human.gate.yes_no.answer": "yes",
-          "internal.retry_count.multiple_choice": 0,
-          "thread.yes_no.current_node": "confirmation",
-          "last_response": "## Interview Summary\n\n### Questions & Answers (in order)\n\n1. **Yes/No**\n   - **Q:** Is this interview workflow easy to follow so far?\n   - **A:** Yes\n\n2. **Confirmation**\n   - **Q:** Confirm that you ",
           "internal.retry_count.confirmation": 0,
-          "outcome": "succeeded",
+          "thread.confirmation.current_node": "multiple_choice",
           "human.gate.multiple_choice.label": "[R] Risks",
+          "thread.yes_no.current_node": "confirmation",
+          "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+          "human.gate.multi_select.answer": "S, B",
+          "human.gate.yes_no.label": "[Y] Yes",
+          "failure_class": "",
+          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+          "last_response": "## Interview Summary\n\n### Questions & Answers (in order)\n\n1. **Yes/No**\n   - **Q:** Is this interview workflow easy to follow so far?\n   - **A:** Yes\n\n2. **Confirmation**\n   - **Q:** Confirm that you ",
+          "human.gate.freeform.answer": "\"QA probe — testing the answer wire path\"",
+          "internal.retry_count.summarize": 0,
           "thread.freeform.current_node": "summarize",
+          "preferred_label": "[S] Success criteria, [B] Blockers",
+          "human.gate.confirmation.label": "[Y] Continue",
+          "internal.retry_count.multi_select": 0,
+          "human.gate.confirmation.answer": "yes",
           "internal.work_dir": "/home/daytona/workspace",
-          "internal.retry_count.start": 0,
           "failure_signature": "",
-          "thread.start.current_node": "yes_no"
+          "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
+          "internal.retry_count.start": 0,
+          "internal.retry_count.yes_no": 0,
+          "response.summarize": "## Interview Summary\n\n### Questions & Answers (in order)\n\n1. **Yes/No**\n   - **Q:** Is this interview workflow easy to follow so far?\n   - **A:** Yes\n\n2. **Confirmation**\n   - **Q:** Confirm that you want to continue into more structured questions.\n   - **A:** Yes — *[Y] Continue*\n\n3. **Multiple Choice**\n   - **Q:** Which theme should be the center of the final summary?\n   - **A:** R — *[R] Risks*\n\n4. **Multi-Select**\n   - **Q:** Which supporting areas should the final summary emphasize?\n   - **A:** S, B — *[S] Success criteria, [B] Blockers*\n\n5. **Freeform**\n   - **Q:** Add any final context, constraints, or nuance for the summary.\n   - **A:** \"QA probe — testing the answer wire path\"\n\n---\n\n### Synthesis\n\n**Priorities:**\n- The user confirmed the workflow is easy to follow and willingly proceeded through all structured stages.\n- The desired summary focus is **Risks** as the central theme, with **Success Criteria** and **Blockers** as the two supporting emphases.\n\n**Constraints:**\n- This is explicitly a **QA probe** — the run exists to validate that answer data flows correctly through the human gate pipeline, not to capture genuine product or project requirements.\n\n**Open Questions:**\n- None surfaced by the user during the interview.\n\n**Notable:** All five stages completed successfully with handler `human`, and the context keys are fully populated — consistent with the stated goal of verifying the answer wire path end-to-end.",
+          "thread.start.current_node": "yes_no",
+          "human.gate.selected": "freeform",
+          "human.gate.multiple_choice.answer": "R",
+          "internal.retry_count.multiple_choice": 0,
+          "current_node": "summarize"
         },
         "node_outcomes": {
-          "confirmation": {
-            "status": "succeeded",
-            "preferred_label": "[Y] Continue",
-            "suggested_next_ids": [
-              "multiple_choice"
-            ],
-            "context_updates": {
-              "human.gate.confirmation.label": "[Y] Continue",
-              "human.gate.label": "[Y] Continue",
-              "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
-              "human.gate.confirmation.answer": "yes",
-              "human.gate.selected": "Y"
-            },
-            "usage": null
-          },
-          "start": {
-            "status": "succeeded",
-            "usage": null
-          },
-          "yes_no": {
-            "status": "succeeded",
-            "preferred_label": "[Y] Yes",
-            "suggested_next_ids": [
-              "confirmation"
-            ],
-            "context_updates": {
-              "human.gate.label": "[Y] Yes",
-              "human.gate.yes_no.answer": "yes",
-              "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
-              "human.gate.yes_no.label": "[Y] Yes",
-              "human.gate.selected": "Y"
-            },
-            "usage": null
-          },
           "freeform": {
             "status": "succeeded",
             "suggested_next_ids": [
@@ -1117,18 +1083,18 @@
             },
             "usage": null
           },
-          "multiple_choice": {
+          "multi_select": {
             "status": "succeeded",
-            "preferred_label": "[R] Risks",
+            "preferred_label": "[S] Success criteria, [B] Blockers",
             "suggested_next_ids": [
-              "multi_select"
+              "freeform"
             ],
             "context_updates": {
-              "human.gate.selected": "R",
-              "human.gate.label": "[R] Risks",
-              "human.gate.multiple_choice.answer": "R",
-              "human.gate.multiple_choice.label": "[R] Risks",
-              "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?"
+              "human.gate.label": "[S] Success criteria, [B] Blockers",
+              "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
+              "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
+              "human.gate.selected": "S,B",
+              "human.gate.multi_select.answer": "S, B"
             },
             "usage": null
           },
@@ -1164,37 +1130,139 @@
               "total_usd_micros": 27431
             }
           },
-          "multi_select": {
+          "yes_no": {
             "status": "succeeded",
-            "preferred_label": "[S] Success criteria, [B] Blockers",
+            "preferred_label": "[Y] Yes",
             "suggested_next_ids": [
-              "freeform"
+              "confirmation"
             ],
             "context_updates": {
-              "human.gate.label": "[S] Success criteria, [B] Blockers",
-              "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
-              "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
-              "human.gate.selected": "S,B",
-              "human.gate.multi_select.answer": "S, B"
+              "human.gate.label": "[Y] Yes",
+              "human.gate.yes_no.answer": "yes",
+              "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+              "human.gate.yes_no.label": "[Y] Yes",
+              "human.gate.selected": "Y"
+            },
+            "usage": null
+          },
+          "confirmation": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Continue",
+            "suggested_next_ids": [
+              "multiple_choice"
+            ],
+            "context_updates": {
+              "human.gate.confirmation.label": "[Y] Continue",
+              "human.gate.label": "[Y] Continue",
+              "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+              "human.gate.confirmation.answer": "yes",
+              "human.gate.selected": "Y"
+            },
+            "usage": null
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "multiple_choice": {
+            "status": "succeeded",
+            "preferred_label": "[R] Risks",
+            "suggested_next_ids": [
+              "multi_select"
+            ],
+            "context_updates": {
+              "human.gate.selected": "R",
+              "human.gate.label": "[R] Risks",
+              "human.gate.multiple_choice.answer": "R",
+              "human.gate.multiple_choice.label": "[R] Risks",
+              "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?"
             },
             "usage": null
           }
         },
         "next_node_id": "exit",
+        "git_commit_sha": "5334b2667f272ac646f561de41a03adf42288446",
         "node_visits": {
-          "yes_no": 1,
-          "multiple_choice": 1,
           "multi_select": 1,
-          "confirmation": 1,
           "summarize": 1,
+          "confirmation": 1,
+          "multiple_choice": 1,
           "start": 1,
-          "freeform": 1
+          "freeform": 1,
+          "yes_no": 1
         }
       },
-      "diff": {}
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
     }
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-11T19:04:50.954235Z",
+    "status": "succeeded",
+    "duration_ms": 544826,
+    "final_git_commit_sha": "5334b2667f272ac646f561de41a03adf42288446",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "duration_ms": 0,
+        "retries": 0
+      },
+      {
+        "stage_id": "yes_no",
+        "stage_label": "yes_no",
+        "duration_ms": 48447,
+        "retries": 0
+      },
+      {
+        "stage_id": "confirmation",
+        "stage_label": "confirmation",
+        "duration_ms": 52597,
+        "retries": 0
+      },
+      {
+        "stage_id": "multiple_choice",
+        "stage_label": "multiple_choice",
+        "duration_ms": 305050,
+        "retries": 0
+      },
+      {
+        "stage_id": "multi_select",
+        "stage_label": "multi_select",
+        "duration_ms": 46511,
+        "retries": 0
+      },
+      {
+        "stage_id": "freeform",
+        "stage_label": "freeform",
+        "duration_ms": 40455,
+        "retries": 0
+      },
+      {
+        "stage_id": "summarize",
+        "stage_label": "summarize",
+        "duration_ms": 7453,
+        "billing_usd_micros": 27431,
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 535,
+      "output_tokens": 384,
+      "total_tokens": 6270,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 5351,
+      "total_usd_micros": 27431
+    },
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "provider": "daytona",
     "image": "buildpack-deps:noble",
@@ -1211,6 +1279,35 @@
   "superseded_by": null,
   "pending_interviews": {},
   "stages": {
+    "exit@1": {
+      "first_event_seq": 90,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-11T19:04:50.923387Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-11T19:04:50.923363Z",
+      "handler": "exit",
+      "duration_ms": 0,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    },
     "multiple_choice@1": {
       "first_event_seq": 44,
       "prompt": null,
@@ -1244,7 +1341,12 @@
       "first_event_seq": 80,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Stage completed: summarize",
+        "failure_reason": null,
+        "timestamp": "2026-05-11T19:04:43.882303Z"
+      },
       "provider_used": {
         "mode": "prompt",
         "provider": "anthropic"
@@ -1256,15 +1358,21 @@
       "output": null,
       "started_at": "2026-05-11T19:04:36.428597Z",
       "handler": "prompt",
+      "duration_ms": 7453,
       "usage": {
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
+        "input_tokens": 535,
+        "output_tokens": 384,
+        "total_tokens": 6270,
         "reasoning_tokens": 0,
         "cache_read_tokens": 0,
-        "cache_write_tokens": 0
+        "cache_write_tokens": 5351,
+        "total_usd_micros": 27431
       },
-      "state": "running"
+      "model": {
+        "provider": "anthropic",
+        "model_id": "claude-sonnet-4-6"
+      },
+      "state": "succeeded"
     },
     "confirmation@1": {
       "first_event_seq": 32,
