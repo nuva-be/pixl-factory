@@ -327,7 +327,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-11T17:03:09.606775Z",
-  "last_event_at": "2026-05-11T17:03:19.628014Z",
+  "last_event_at": "2026-05-11T17:05:27.335478Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -425,9 +425,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 36,
       "checkpoint": {
-        "timestamp": "2026-05-11T17:05:22.652604Z",
+        "timestamp": "2026-05-11T17:05:27.334142Z",
         "current_node": "compile_rust",
         "completed_nodes": [
           "start",
@@ -436,23 +436,95 @@
         ],
         "node_retries": {},
         "context_values": {
+          "current_node": "compile_rust",
+          "internal.work_dir": "/home/daytona/workspace",
+          "internal.retry_count.compile_rust": 0,
+          "outcome": "succeeded",
+          "internal.retry_count.toolchain": 0,
+          "graph.retry_target": "exit",
+          "internal.fidelity": "compact",
+          "internal.retry_count.start": 0,
+          "thread.toolchain.current_node": "compile_rust",
+          "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "thread.start.current_node": "toolchain",
+          "internal.run_id": "01KRBZVQ9BKYYJ4N7TQEAYY0R0",
+          "internal.node_visit_count": 1,
+          "failure_class": "",
+          "failure_signature": "",
+          "graph.goal": "Verify the sandbox can lint and test the project",
+          "internal.thread_id": "toolchain",
+          "graph.rankdir": "LR"
+        },
+        "node_outcomes": {
+          "compile_rust": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+            },
+            "notes": "Script completed: cargo check -q --workspace 2>&1",
+            "usage": null
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "toolchain": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/0f445145c30db4edc762837f8ad7fdbcfcf07d57265b2bc38b6b276be718c75a"
+            },
+            "notes": "Script completed: rustc --version && cargo --version && bun --version 2>&1",
+            "usage": null
+          }
+        },
+        "next_node_id": "compile_typescript",
+        "git_commit_sha": "cff22c48a7e12e66413aaaadfdf804b0b5d922f6",
+        "node_visits": {
+          "start": 1,
+          "compile_rust": 1,
+          "toolchain": 1
+        }
+      },
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
+    },
+    {
+      "seq": 0,
+      "checkpoint": {
+        "timestamp": "2026-05-11T17:05:39.740789Z",
+        "current_node": "compile_typescript",
+        "completed_nodes": [
+          "start",
+          "toolchain",
+          "compile_rust",
+          "compile_typescript"
+        ],
+        "node_retries": {},
+        "context_values": {
           "internal.work_dir": "/home/daytona/workspace",
           "failure_signature": "",
           "internal.retry_count.toolchain": 0,
           "internal.retry_count.compile_rust": 0,
           "thread.start.current_node": "toolchain",
+          "thread.compile_rust.current_node": "compile_typescript",
           "failure_class": "",
           "graph.rankdir": "LR",
           "internal.run_id": "01KRBZVQ9BKYYJ4N7TQEAYY0R0",
-          "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "command.output": "blob://sha256/152ddaf238c3acbadff50ace568a5f060acbe5d428da8d2b5864aa7ce59d8e11",
           "internal.node_visit_count": 1,
           "graph.retry_target": "exit",
-          "internal.thread_id": "toolchain",
+          "internal.thread_id": "compile_rust",
           "internal.fidelity": "compact",
           "outcome": "succeeded",
           "thread.toolchain.current_node": "compile_rust",
           "internal.retry_count.start": 0,
-          "current_node": "compile_rust",
+          "current_node": "compile_typescript",
+          "internal.retry_count.compile_typescript": 0,
           "graph.goal": "Verify the sandbox can lint and test the project"
         },
         "node_outcomes": {
@@ -475,13 +547,22 @@
             },
             "notes": "Script completed: rustc --version && cargo --version && bun --version 2>&1",
             "usage": null
+          },
+          "compile_typescript": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/152ddaf238c3acbadff50ace568a5f060acbe5d428da8d2b5864aa7ce59d8e11"
+            },
+            "notes": "Script completed: cd apps/fabro-web && bun install && bun run typecheck 2>&1",
+            "usage": null
           }
         },
-        "next_node_id": "compile_typescript",
+        "next_node_id": "lint_rust",
         "node_visits": {
           "start": 1,
           "toolchain": 1,
-          "compile_rust": 1
+          "compile_rust": 1,
+          "compile_typescript": 1
         }
       },
       "diff": {}
@@ -504,6 +585,105 @@
   "superseded_by": null,
   "pending_interviews": {},
   "stages": {
+    "compile_typescript@1": {
+      "first_event_seq": 39,
+      "prompt": null,
+      "response": null,
+      "completion": null,
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": {
+        "script": "cd apps/fabro-web && bun install && bun run typecheck 2>&1",
+        "command": "exec 2>&1\ncd apps/fabro-web && bun install && bun run typecheck 2>&1",
+        "language": "shell"
+      },
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-11T17:05:27.335215Z",
+      "handler": "command",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "running"
+    },
+    "compile_rust@1": {
+      "first_event_seq": 29,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Script completed: cargo check -q --workspace 2>&1",
+        "failure_reason": null,
+        "timestamp": "2026-05-11T17:05:22.651852Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": {
+        "script": "cargo check -q --workspace 2>&1",
+        "command": "exec 2>&1\ncargo check -q --workspace 2>&1",
+        "language": "shell"
+      },
+      "script_timing": {
+        "output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "exit_code": 0,
+        "duration_ms": 123018,
+        "termination": "exited",
+        "output_bytes": 0,
+        "live_streaming": false
+      },
+      "parallel_results": null,
+      "output": null,
+      "output_bytes": 0,
+      "live_streaming": false,
+      "termination": "exited",
+      "started_at": "2026-05-11T17:03:19.627630Z",
+      "handler": "command",
+      "duration_ms": 123022,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    },
+    "start@1": {
+      "first_event_seq": 15,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-11T17:03:12.493700Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-11T17:03:12.493575Z",
+      "handler": "start",
+      "duration_ms": 0,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    },
     "toolchain@1": {
       "first_event_seq": 19,
       "prompt": null,
@@ -537,62 +717,6 @@
       "started_at": "2026-05-11T17:03:12.493998Z",
       "handler": "command",
       "duration_ms": 1527,
-      "usage": {
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
-        "reasoning_tokens": 0,
-        "cache_read_tokens": 0,
-        "cache_write_tokens": 0
-      },
-      "state": "succeeded"
-    },
-    "compile_rust@1": {
-      "first_event_seq": 29,
-      "prompt": null,
-      "response": null,
-      "completion": null,
-      "provider_used": null,
-      "diff": null,
-      "script_invocation": {
-        "script": "cargo check -q --workspace 2>&1",
-        "command": "exec 2>&1\ncargo check -q --workspace 2>&1",
-        "language": "shell"
-      },
-      "script_timing": null,
-      "parallel_results": null,
-      "output": null,
-      "started_at": "2026-05-11T17:03:19.627630Z",
-      "handler": "command",
-      "usage": {
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
-        "reasoning_tokens": 0,
-        "cache_read_tokens": 0,
-        "cache_write_tokens": 0
-      },
-      "state": "running"
-    },
-    "start@1": {
-      "first_event_seq": 15,
-      "prompt": null,
-      "response": null,
-      "completion": {
-        "outcome": "succeeded",
-        "notes": null,
-        "failure_reason": null,
-        "timestamp": "2026-05-11T17:03:12.493700Z"
-      },
-      "provider_used": null,
-      "diff": null,
-      "script_invocation": null,
-      "script_timing": null,
-      "parallel_results": null,
-      "output": null,
-      "started_at": "2026-05-11T17:03:12.493575Z",
-      "handler": "start",
-      "duration_ms": 0,
       "usage": {
         "input_tokens": 0,
         "output_tokens": 0,
