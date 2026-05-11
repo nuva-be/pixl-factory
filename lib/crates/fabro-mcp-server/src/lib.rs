@@ -9,9 +9,12 @@ pub use server::start;
 
 #[derive(Debug, Clone)]
 pub struct McpServerSettings {
-    pub config:   McpConfigSettings,
-    pub home_dir: PathBuf,
-    pub cwd:      PathBuf,
+    pub config:        McpConfigSettings,
+    pub server_target: Option<String>,
+    pub storage_dir:   PathBuf,
+    pub config_path:   PathBuf,
+    pub home_dir:      PathBuf,
+    pub cwd:           PathBuf,
 }
 
 #[derive(Debug, Clone, Default)]

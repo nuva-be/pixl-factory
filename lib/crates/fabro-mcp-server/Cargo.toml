@@ -19,6 +19,9 @@ dirs.workspace = true
 fabro-api = { path = "../fabro-api" }
 fabro-client = { path = "../fabro-client" }
 fabro-http.workspace = true
+fabro-manifest = { path = "../fabro-manifest" }
+fabro-config = { path = "../fabro-config" }
+fabro-server = { path = "../fabro-server" }
 fabro-types = { path = "../fabro-types" }
 fabro-util = { path = "../fabro-util" }
 rmcp = { workspace = true, features = ["server", "macros", "schemars", "transport-io"] }

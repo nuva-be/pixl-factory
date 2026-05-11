@@ -11,13 +11,20 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, NaiveDate, Utc};
 use fabro_api::types;
 use fabro_client::Client;
+use fabro_config::{
+    CliLayer, ReplaceMap, RunExecutionLayer, RunGoalLayer, RunLayer, RunModelLayer, RunSandboxLayer,
+};
+use fabro_manifest::{ManifestBuildInput, build_run_manifest as build_canonical_run_manifest};
+use fabro_server::manifest_validation;
+use fabro_types::settings::InterpString;
+use fabro_types::settings::run::{ApprovalMode, RunMode};
 use fabro_types::{EventEnvelope, Run, RunId, RunStatus};
 use fabro_util::exit::{self, ExitClass};
 use rmcp::model::{CallToolResult, Content};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tokio::{fs, time};
+use tokio::time;
 
 #[derive(Debug)]
 pub(crate) struct ToolError {
@@ -329,12 +336,13 @@ pub(crate) struct RunEventResult {
 pub(crate) async fn create_runs(
     client: Arc<Client>,
     base_cwd: &Path,
+    user_settings_path: &Path,
     params: ValidatedCreateRuns,
 ) -> ToolResult<CreateRunsResult> {
     let mut created = Vec::with_capacity(params.runs.len());
     for spec in params.runs {
         let cwd = spec.cwd.clone().unwrap_or_else(|| base_cwd.to_path_buf());
-        let manifest = build_run_manifest(&spec, &cwd).await?;
+        let manifest = build_mcp_run_manifest(&spec, &cwd, user_settings_path)?;
         let run_id = client
             .create_run_from_manifest(manifest)
             .await
@@ -565,7 +573,7 @@ pub(crate) async fn run_events(
         .map_err(|err| ToolError::from_anyhow(&err))?
         .id;
     let mut events = client
-        .list_run_events(&run_id, raw.after, Some(event_fetch_limit(&raw)))
+        .list_run_events(&run_id, raw.after, event_fetch_limit(&raw))
         .await
         .map_err(|err| ToolError::from_anyhow(&err))?;
     filter_events(&mut events, &raw)?;
@@ -715,13 +723,24 @@ fn answer_to_submit_request(answer: Value) -> ToolResult<types::SubmitAnswerRequ
         .map_err(|err| ToolError::message(format!("failed to build submit-answer request: {err}")))
 }
 
-fn event_fetch_limit(params: &FabroRunEventsParams) -> usize {
-    params
-        .first
-        .or(params.limit)
-        .unwrap_or(50)
-        .saturating_add(params.offset.unwrap_or(0))
-        .clamp(1, 200)
+fn event_fetch_limit(params: &FabroRunEventsParams) -> Option<usize> {
+    let needs_full_scan = params.event_ids.is_some()
+        || params.event_types.is_some()
+        || params.categories.is_some()
+        || params.created_after.is_some()
+        || params.created_before.is_some()
+        || matches!(
+            params.action,
+            RunEventsAction::Details | RunEventsAction::Search
+        );
+    (!needs_full_scan).then(|| {
+        params
+            .first
+            .or(params.limit)
+            .unwrap_or(50)
+            .saturating_add(params.offset.unwrap_or(0))
+            .clamp(1, 200)
+    })
 }
 
 fn filter_events(events: &mut Vec<EventEnvelope>, params: &FabroRunEventsParams) -> ToolResult<()> {
@@ -786,71 +805,45 @@ fn run_event_result(
     })
 }
 
-async fn build_run_manifest(spec: &CreateRunSpec, cwd: &Path) -> ToolResult<types::RunManifest> {
+fn build_mcp_run_manifest(
+    spec: &CreateRunSpec,
+    cwd: &Path,
+    user_settings_path: &Path,
+) -> ToolResult<types::RunManifest> {
     if let Some(run_id) = spec.run_id.as_deref() {
         run_id.parse::<RunId>().map_err(|err| {
             ToolError::message(format!("run_id must be a valid Fabro run id: {err}"))
         })?;
     }
-    let workflow_path = resolve_workflow_path(&spec.workflow, cwd);
-    let manifest_cwd = manifest_cwd_for_workflow(cwd, &workflow_path);
-    let workflow_key = workflow_path
-        .strip_prefix(&manifest_cwd)
-        .unwrap_or(&workflow_path)
-        .display()
-        .to_string();
-    let source = fs::read_to_string(&workflow_path).await.map_err(|err| {
-        ToolError::message(format!(
-            "failed to read workflow {}: {err}",
-            workflow_path.display()
-        ))
-    })?;
-    let workflows = HashMap::from([(workflow_key.clone(), types::ManifestWorkflow {
-        config: None,
-        files: HashMap::new(),
-        source,
-    })]);
-    Ok(types::RunManifest {
-        args: mcp_manifest_args(spec),
-        configs: Vec::new(),
-        cwd: manifest_cwd.display().to_string(),
-        git: None,
-        goal: Some(types::ManifestGoal {
-            path:  None,
-            text:  spec
-                .goal
-                .clone()
-                .unwrap_or_else(|| "Run the Fabro workflow.".to_string()),
-            type_: types::ManifestGoalType::Value,
-        }),
-        run_id: spec.run_id.clone(),
-        target: types::ManifestTarget {
-            identifier: spec.workflow.clone(),
-            path:       workflow_key,
-        },
-        title: None,
-        version: 1,
-        workflows,
+
+    let built = build_canonical_run_manifest(ManifestBuildInput {
+        workflow:           PathBuf::from(&spec.workflow),
+        cwd:                cwd.to_path_buf(),
+        run_overrides:      mcp_run_overrides(spec),
+        cli_overrides:      Some(CliLayer::default()),
+        input_overrides:    spec
+            .inputs
+            .iter()
+            .map(|(key, value)| json_to_toml_value(key, value).map(|value| (key.clone(), value)))
+            .collect::<ToolResult<HashMap<_, _>>>()?,
+        args:               mcp_manifest_args(spec),
+        run_id:             spec
+            .run_id
+            .as_deref()
+            .map(str::parse::<RunId>)
+            .transpose()
+            .map_err(|err| {
+                ToolError::message(format!("run_id must be a valid Fabro run id: {err}"))
+            })?,
+        user_settings_path: Some(user_settings_path.to_path_buf()),
     })
-}
-
-fn resolve_workflow_path(workflow: &str, cwd: &Path) -> PathBuf {
-    let path = PathBuf::from(workflow);
-    if path.is_absolute() {
-        path
-    } else {
-        cwd.join(path)
+    .map_err(|err| ToolError::from_anyhow(&err))?;
+    let validation = manifest_validation::validate_manifest(&RunLayer::default(), &built.manifest)
+        .map_err(|err| ToolError::from_anyhow(&err))?;
+    if !validation.ok {
+        return Err(ToolError::message("workflow manifest validation failed"));
     }
-}
-
-fn manifest_cwd_for_workflow(cwd: &Path, workflow_path: &Path) -> PathBuf {
-    if workflow_path.strip_prefix(cwd).is_ok() {
-        cwd.to_path_buf()
-    } else {
-        workflow_path
-            .parent()
-            .map_or_else(|| cwd.to_path_buf(), Path::to_path_buf)
-    }
+    Ok(built.manifest)
 }
 
 fn mcp_manifest_args(spec: &CreateRunSpec) -> Option<types::ManifestArgs> {
@@ -859,16 +852,11 @@ fn mcp_manifest_args(spec: &CreateRunSpec) -> Option<types::ManifestArgs> {
         .iter()
         .map(|(key, value)| format!("{key}={value}"))
         .collect::<Vec<_>>();
-    let input = spec
-        .inputs
-        .iter()
-        .map(|(key, value)| format!("{key}={value}"))
-        .collect::<Vec<_>>();
     let payload = types::ManifestArgs {
         auto_approve: spec.auto_approve.filter(|value| *value),
         docker_image: None,
         dry_run: spec.dry_run.filter(|value| *value),
-        input,
+        input: Vec::new(),
         label,
         model: spec.model.clone(),
         preserve_sandbox: spec.preserve_sandbox.filter(|value| *value),
@@ -877,6 +865,55 @@ fn mcp_manifest_args(spec: &CreateRunSpec) -> Option<types::ManifestArgs> {
         verbose: None,
     };
     (!mcp_manifest_args_is_empty(&payload)).then_some(payload)
+}
+
+fn mcp_run_overrides(spec: &CreateRunSpec) -> Option<RunLayer> {
+    let goal = spec
+        .goal
+        .as_ref()
+        .map(|goal| RunGoalLayer::Inline(InterpString::parse(goal)));
+    let model = (spec.model.is_some() || spec.provider.is_some()).then(|| RunModelLayer {
+        provider:  spec.provider.as_deref().map(InterpString::parse),
+        name:      spec.model.as_deref().map(InterpString::parse),
+        fallbacks: Vec::new(),
+    });
+    let sandbox =
+        (spec.sandbox.is_some() || spec.preserve_sandbox.is_some()).then(|| RunSandboxLayer {
+            provider: spec.sandbox.clone(),
+            preserve: spec.preserve_sandbox,
+            ..RunSandboxLayer::default()
+        });
+    let execution =
+        (spec.dry_run.is_some() || spec.auto_approve.is_some()).then(|| RunExecutionLayer {
+            mode:     spec.dry_run.map(|dry_run| {
+                if dry_run {
+                    RunMode::DryRun
+                } else {
+                    RunMode::Normal
+                }
+            }),
+            approval: spec.auto_approve.map(|auto_approve| {
+                if auto_approve {
+                    ApprovalMode::Auto
+                } else {
+                    ApprovalMode::Prompt
+                }
+            }),
+        });
+    let run = RunLayer {
+        goal,
+        metadata: ReplaceMap::from(spec.labels.clone()),
+        model,
+        sandbox,
+        execution,
+        ..RunLayer::default()
+    };
+    (run.goal.is_some()
+        || !run.metadata.is_empty()
+        || run.model.is_some()
+        || run.sandbox.is_some()
+        || run.execution.is_some())
+    .then_some(run)
 }
 
 fn mcp_manifest_args_is_empty(args: &types::ManifestArgs) -> bool {

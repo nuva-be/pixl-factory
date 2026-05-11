@@ -1678,6 +1678,7 @@ dependencies = [
  "fabro-interview",
  "fabro-llm",
  "fabro-macros",
+ "fabro-manifest",
  "fabro-mcp",
  "fabro-mcp-server",
  "fabro-model",
@@ -2005,6 +2006,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fabro-manifest"
+version = "0.230.0-nightly.0"
+dependencies = [
+ "anyhow",
+ "fabro-api",
+ "fabro-config",
+ "fabro-github",
+ "fabro-graphviz",
+ "fabro-template",
+ "fabro-types",
+ "fabro-workflow",
+ "git2",
+ "temp-env",
+ "tempfile",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "fabro-mcp"
 version = "0.230.0-nightly.0"
 dependencies = [
@@ -2029,7 +2048,10 @@ dependencies = [
  "dirs",
  "fabro-api",
  "fabro-client",
+ "fabro-config",
  "fabro-http",
+ "fabro-manifest",
+ "fabro-server",
  "fabro-types",
  "fabro-util",
  "rmcp",

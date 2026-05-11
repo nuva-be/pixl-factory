@@ -1,20 +1,30 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow};
 use fabro_client::{
     AuthEntry, AuthStore, Client, Credential, ServerTarget, TransportConnector,
     apply_bearer_token_auth,
 };
+use fabro_config::bind::Bind;
+use fabro_config::daemon::ServerDaemon;
+use fabro_config::{RuntimeDirectory, Storage};
+use fabro_util::dev_token;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
 use rmcp::transport::stdio;
 use rmcp::{ErrorData, ServerHandler, serve_server, tool, tool_handler, tool_router};
+use tokio::process::Command as TokioCommand;
 use tokio::sync::OnceCell;
 use tokio::task::yield_now;
+use tokio::time::sleep;
 
 use crate::{McpServerSettings, run_tools};
+
+const CLIENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const SERVER_START_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Clone)]
 pub(crate) struct FabroMcpServer {
@@ -67,7 +77,7 @@ impl FabroMcpServer {
             Ok(client) => client,
             Err(err) => return Ok(run_tools::error_result(err)),
         };
-        match run_tools::create_runs(client, &self.cwd, params).await {
+        match run_tools::create_runs(client, &self.cwd, &self.settings.config_path, params).await {
             Ok(result) => run_tools::success_result(&result, run_tools::create_runs_text(&result)),
             Err(err) => Ok(run_tools::error_result(err)),
         }
@@ -176,19 +186,27 @@ impl FabroMcpServer {
 
 async fn client_from_settings(settings: &McpServerSettings) -> Result<Client> {
     yield_now().await;
-    let Some(server) = settings.config.server.as_ref() else {
-        return Err(anyhow!(
-            "fabro mcp start requires --server for run tools in this release"
-        ));
-    };
+    if let Some(server) = settings.server_target.as_ref() {
+        return connect_target(server, settings).await;
+    }
+    connect_local_server(settings).await
+}
+
+async fn connect_target(server: &str, settings: &McpServerSettings) -> Result<Client> {
     let target: ServerTarget = server.parse()?;
-    let credential = AuthStore::new(settings.home_dir.join(".fabro").join("auth.json"))
+    let mut credential = AuthStore::new(settings.home_dir.join(".fabro").join("auth.json"))
         .get(&target)?
         .map(credential_from_auth_entry);
+    if credential.is_none() && target.is_unix_socket() {
+        let runtime_token_path = Storage::new(&settings.storage_dir)
+            .runtime_directory()
+            .dev_token_path();
+        credential = dev_token::read_dev_token_file(&runtime_token_path).map(Credential::DevToken);
+    }
     let mut builder = Client::builder()
         .target(target.clone())
         .transport_connector(target_transport_connector(target))
-        .request_timeout(std::time::Duration::from_secs(30));
+        .request_timeout(CLIENT_REQUEST_TIMEOUT);
     if let Some(credential) = credential {
         builder = builder.credential(credential);
     }
@@ -196,6 +214,89 @@ async fn client_from_settings(settings: &McpServerSettings) -> Result<Client> {
         .connect()
         .await
         .context("failed to connect Fabro API")
+}
+
+async fn connect_local_server(settings: &McpServerSettings) -> Result<Client> {
+    let bind = ensure_local_server_running(&settings.storage_dir, &settings.config_path).await?;
+    match bind {
+        Bind::Unix(path) => {
+            let token = wait_for_runtime_dev_token(
+                &Storage::new(&settings.storage_dir)
+                    .runtime_directory()
+                    .dev_token_path(),
+            )
+            .await?;
+            let http_client = connect_bind_http_client(&Bind::Unix(path), Some(&token)).await?;
+            Client::builder()
+                .transport("http://fabro", http_client)
+                .request_timeout(CLIENT_REQUEST_TIMEOUT)
+                .connect()
+                .await
+        }
+        Bind::Tcp(addr) => {
+            let target = ServerTarget::http_url(format!("http://{addr}"))?;
+            let credential = AuthStore::new(settings.home_dir.join(".fabro").join("auth.json"))
+                .get(&target)?
+                .map(credential_from_auth_entry);
+            let mut builder = Client::builder()
+                .target(target.clone())
+                .transport_connector(target_transport_connector(target))
+                .request_timeout(CLIENT_REQUEST_TIMEOUT);
+            if let Some(credential) = credential {
+                builder = builder.credential(credential);
+            }
+            builder.connect().await
+        }
+    }
+}
+
+async fn ensure_local_server_running(storage_dir: &Path, config_path: &Path) -> Result<Bind> {
+    let runtime_directory = RuntimeDirectory::new(storage_dir);
+    if let Some(existing) = ServerDaemon::load_running(&runtime_directory)? {
+        return Ok(existing.bind);
+    }
+
+    let exe = std::env::current_exe().context("resolving current fabro executable path")?;
+    let status = TokioCommand::new(exe)
+        .args(["server", "start", "--no-web", "--storage-dir"])
+        .arg(storage_dir)
+        .arg("--config")
+        .arg(config_path)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .stdin(std::process::Stdio::null())
+        .status()
+        .await
+        .context("starting local Fabro server")?;
+    if !status.success() {
+        return Err(anyhow!("fabro server start exited with status {status}"));
+    }
+
+    let deadline = std::time::Instant::now() + SERVER_START_TIMEOUT;
+    while std::time::Instant::now() < deadline {
+        if let Some(running) = ServerDaemon::load_running(&runtime_directory)? {
+            return Ok(running.bind);
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+    Err(anyhow!(
+        "Fabro server started but no active record was found for {}",
+        storage_dir.display()
+    ))
+}
+
+async fn wait_for_runtime_dev_token(path: &Path) -> Result<String> {
+    let deadline = std::time::Instant::now() + SERVER_START_TIMEOUT;
+    while std::time::Instant::now() < deadline {
+        if let Some(token) = dev_token::read_dev_token_file(path) {
+            return Ok(token);
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+    Err(anyhow!(
+        "runtime dev token did not become available at {}",
+        path.display()
+    ))
 }
 
 fn credential_from_auth_entry(entry: AuthEntry) -> Credential {
@@ -236,4 +337,39 @@ fn connect_target_transport(
         builder = apply_bearer_token_auth(builder, token)?;
     }
     Ok((builder.build()?, "http://fabro".to_string()))
+}
+
+async fn connect_bind_http_client(
+    bind: &Bind,
+    bearer_token: Option<&str>,
+) -> Result<fabro_http::HttpClient> {
+    let (client, health_url) = match bind {
+        Bind::Unix(path) => {
+            let mut builder = fabro_http::HttpClientBuilder::new()
+                .unix_socket(path)
+                .no_proxy();
+            if let Some(token) = bearer_token {
+                builder = apply_bearer_token_auth(builder, token)?;
+            }
+            (builder.build()?, "http://fabro/health".to_string())
+        }
+        Bind::Tcp(addr) => {
+            let mut builder = fabro_http::HttpClientBuilder::new().no_proxy();
+            if let Some(token) = bearer_token {
+                builder = apply_bearer_token_auth(builder, token)?;
+            }
+            (builder.build()?, format!("http://{addr}/health"))
+        }
+    };
+    let deadline = std::time::Instant::now() + SERVER_START_TIMEOUT;
+    let mut last_error = None;
+    while std::time::Instant::now() < deadline {
+        match client.get(&health_url).send().await {
+            Ok(response) if response.status().is_success() => return Ok(client),
+            Ok(response) => last_error = Some(anyhow!("health returned {}", response.status())),
+            Err(err) => last_error = Some(anyhow!(err)),
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("Fabro server did not become ready in time")))
 }
