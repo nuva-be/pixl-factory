@@ -51,6 +51,10 @@ impl std::fmt::Display for AcpCommand {
 pub enum AcpCommandError {
     #[error("acp_command must not be empty")]
     EmptyOverride,
+    #[error(
+        "acp_command is required for backend=\"acp\" because Fabro does not install ACP agents"
+    )]
+    MissingOverride,
     #[error("only stdio ACP commands are supported")]
     UnsupportedTransport,
     #[error("failed to parse acp_command")]
@@ -63,41 +67,8 @@ impl From<agent_client_protocol::Error> for AcpCommandError {
     }
 }
 
-#[must_use]
-pub fn default_acp_command(provider: Provider) -> AcpCommand {
-    match provider {
-        Provider::Anthropic => {
-            command_from_parts("npx -y @zed-industries/claude-code-acp@latest", "npx", [
-                "-y",
-                "@zed-industries/claude-code-acp@latest",
-            ])
-        }
-        Provider::Gemini => command_from_parts(
-            "npx -y -- @google/gemini-cli@latest --experimental-acp",
-            "npx",
-            [
-                "-y",
-                "--",
-                "@google/gemini-cli@latest",
-                "--experimental-acp",
-            ],
-        ),
-        Provider::OpenAi
-        | Provider::Kimi
-        | Provider::Zai
-        | Provider::Minimax
-        | Provider::Inception
-        | Provider::OpenAiCompatible => {
-            command_from_parts("npx -y @zed-industries/codex-acp@latest", "npx", [
-                "-y",
-                "@zed-industries/codex-acp@latest",
-            ])
-        }
-    }
-}
-
 pub fn resolve_acp_command(
-    provider: Provider,
+    _provider: Provider,
     override_command: Option<&str>,
 ) -> Result<AcpCommand, AcpCommandError> {
     if let Some(raw) = override_command {
@@ -108,7 +79,7 @@ pub fn resolve_acp_command(
         return parse_acp_command(trimmed);
     }
 
-    Ok(default_acp_command(provider))
+    Err(AcpCommandError::MissingOverride)
 }
 
 fn parse_acp_command(raw: &str) -> Result<AcpCommand, AcpCommandError> {
@@ -159,19 +130,6 @@ fn reject_non_stdio_json_transport(raw: &str) -> Result<(), AcpCommandError> {
     }
 }
 
-fn command_from_parts<const N: usize>(
-    display: impl Into<String>,
-    program: impl Into<PathBuf>,
-    args: [&str; N],
-) -> AcpCommand {
-    AcpCommand {
-        display: display.into(),
-        program: program.into(),
-        args:    args.into_iter().map(str::to_string).collect(),
-        env:     HashMap::new(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -181,35 +139,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_command_for_anthropic_uses_zed_claude_acp() {
-        assert_eq!(
-            default_acp_command(Provider::Anthropic).to_string(),
-            "npx -y @zed-industries/claude-code-acp@latest"
-        );
-    }
-
-    #[test]
-    fn default_command_for_openai_compatible_family_uses_zed_codex_acp() {
-        for provider in [
-            Provider::OpenAi,
-            Provider::Kimi,
-            Provider::Zai,
-            Provider::Minimax,
-            Provider::Inception,
-            Provider::OpenAiCompatible,
-        ] {
-            assert_eq!(
-                default_acp_command(provider).to_string(),
-                "npx -y @zed-industries/codex-acp@latest"
-            );
-        }
-    }
-
-    #[test]
-    fn default_command_for_gemini_uses_experimental_acp() {
-        assert_eq!(
-            default_acp_command(Provider::Gemini).to_string(),
-            "npx -y -- @google/gemini-cli@latest --experimental-acp"
+    fn missing_acp_command_is_rejected() {
+        let err = resolve_acp_command(Provider::OpenAi, None).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("acp_command is required for backend=\"acp\"")
         );
     }
 

@@ -4,7 +4,6 @@ pub mod api;
 pub mod changed_files;
 pub mod cli;
 pub mod launch_env;
-pub mod node_runtime;
 pub mod preamble;
 
 pub use acp::AgentAcpBackend;

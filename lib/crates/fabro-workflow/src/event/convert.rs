@@ -986,38 +986,6 @@ fn event_body_from_event(event: &Event) -> EventBody {
             to_model:      to_model.clone(),
             error:         error.clone(),
         }),
-        Event::CliEnsureStarted { cli_name, provider } => {
-            EventBody::CliEnsureStarted(fabro_types::CliEnsureStartedProps {
-                cli_name: cli_name.clone(),
-                provider: provider.clone(),
-            })
-        }
-        Event::CliEnsureCompleted {
-            cli_name,
-            provider,
-            already_installed,
-            node_installed,
-            duration_ms,
-        } => EventBody::CliEnsureCompleted(fabro_types::CliEnsureCompletedProps {
-            cli_name:          cli_name.clone(),
-            provider:          provider.clone(),
-            already_installed: *already_installed,
-            node_installed:    *node_installed,
-            duration_ms:       *duration_ms,
-        }),
-        Event::CliEnsureFailed {
-            cli_name,
-            provider,
-            error,
-            duration_ms,
-            exec_output_tail,
-        } => EventBody::CliEnsureFailed(fabro_types::CliEnsureFailedProps {
-            cli_name:         cli_name.clone(),
-            provider:         provider.clone(),
-            error:            error.clone(),
-            duration_ms:      *duration_ms,
-            exec_output_tail: exec_output_tail.clone(),
-        }),
         Event::CommandStarted {
             script,
             command,

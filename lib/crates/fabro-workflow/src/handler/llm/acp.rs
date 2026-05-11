@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use fabro_acp::{AcpError, AcpRunRequest, default_acp_command, resolve_acp_command};
+use fabro_acp::{AcpCommandError, AcpError, AcpRunRequest, resolve_acp_command};
 use fabro_agent::{Sandbox, StaticEnvProvider, ToolEnvProvider};
 use fabro_auth::CredentialResolver;
 use fabro_graphviz::graph::Node;
@@ -13,9 +13,9 @@ use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
 use super::super::agent::{CodergenBackend, CodergenResult};
+use super::changed_files;
 use super::cli::AgentCli;
 use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
-use super::{changed_files, node_runtime};
 use crate::context::Context;
 use crate::error::Error;
 use crate::event::{Emitter, Event, StageScope};
@@ -83,19 +83,10 @@ impl AgentAcpBackend {
             .provider()
             .and_then(|value| value.parse::<Provider>().ok())
             .unwrap_or(self.provider);
-        let explicit_command = node.acp_command();
-        let command = resolve_acp_command(provider, explicit_command)
-            .map_err(|err| Error::handler_with_source("Failed to resolve ACP command", &err))?;
+        let command = resolve_acp_command(provider, node.acp_command())
+            .map_err(acp_command_error_to_workflow)?;
 
-        let node_runtime_env = if explicit_command.is_none()
-            && command.program() == default_acp_command(provider).program()
-        {
-            Some(node_runtime::ensure_node_runtime(sandbox, &cancel_token).await?)
-        } else {
-            None
-        };
-
-        let mut launch_env = resolve_agent_launch_env(AgentLaunchEnvRequest {
+        let launch_env = resolve_agent_launch_env(AgentLaunchEnvRequest {
             provider,
             cli: AgentCli::for_provider(provider),
             resolver: self.resolver.as_ref(),
@@ -107,9 +98,6 @@ impl AgentAcpBackend {
             cancel_token: &cancel_token,
         })
         .await?;
-        if let Some(runtime_env) = node_runtime_env {
-            node_runtime::apply_node_runtime_env(&mut launch_env, runtime_env);
-        }
         let on_activity = {
             let emitter = Arc::clone(emitter);
             Arc::new(move || emitter.touch()) as Arc<dyn Fn() + Send + Sync>
@@ -258,6 +246,21 @@ fn stop_reason_to_string(stop_reason: &(impl serde::Serialize + std::fmt::Debug)
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
         .unwrap_or_else(|| format!("{stop_reason:?}"))
+}
+
+fn acp_command_error_to_workflow(error: AcpCommandError) -> Error {
+    match error {
+        AcpCommandError::EmptyOverride => Error::handler("acp_command must not be empty"),
+        AcpCommandError::MissingOverride => Error::handler(
+            "acp_command is required for backend=\"acp\" because Fabro does not install ACP agents",
+        ),
+        AcpCommandError::UnsupportedTransport => {
+            Error::handler("only stdio ACP commands are supported")
+        }
+        AcpCommandError::Parse(source) => {
+            Error::handler_with_source("Failed to resolve ACP command", &source)
+        }
+    }
 }
 
 fn acp_error_to_workflow(error: AcpError) -> Error {
@@ -515,10 +518,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn acp_default_command_launch_env_includes_bootstrapped_node_path() {
-        let mut sandbox = MockSandbox::linux();
-        sandbox.exec_result.stdout =
-            "__FABRO_NODE_RUNTIME_PATH=/home/test/.local/bin:/usr/local/bin:/usr/bin\n".to_string();
+    async fn acp_backend_requires_explicit_acp_command() {
+        let sandbox = MockSandbox::linux();
         let sandbox = Arc::new(sandbox);
         let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
 
@@ -543,20 +544,20 @@ mod tests {
                 CancellationToken::new(),
             )
             .await;
+        let Err(err) = result else {
+            panic!("ACP without acp_command should fail");
+        };
         assert!(
-            result.is_err(),
-            "mock stdio transport should not complete ACP"
+            err.to_string()
+                .contains("acp_command is required for backend=\"acp\"")
         );
-
-        let env = sandbox
-            .captured_env_vars
-            .lock()
-            .expect("captured env lock poisoned")
-            .clone()
-            .expect("ACP launch env should be captured");
-        assert_eq!(
-            env.get("PATH").map(String::as_str),
-            Some("/home/test/.local/bin:/usr/local/bin:/usr/bin")
+        assert!(
+            sandbox
+                .captured_env_vars
+                .lock()
+                .expect("captured env lock poisoned")
+                .is_none(),
+            "ACP process should not launch when acp_command is missing"
         );
     }
 

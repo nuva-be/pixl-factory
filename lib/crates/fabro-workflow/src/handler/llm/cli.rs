@@ -40,8 +40,8 @@ fn cli_failure_detail(stdout: &str, stderr: &str, command: &str) -> String {
 
 use super::super::agent::{CodergenBackend, CodergenResult};
 use super::acp::AgentAcpBackend;
+use super::changed_files;
 use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
-use super::{changed_files, node_runtime};
 use crate::context::Context;
 use crate::error::Error;
 use crate::event::{Emitter, Event, StageScope};
@@ -76,41 +76,20 @@ impl AgentCli {
             Self::Gemini => "gemini",
         }
     }
-
-    pub fn npm_package(self) -> &'static str {
-        match self {
-            Self::Claude => "@anthropic-ai/claude-code",
-            Self::Codex => "@openai/codex",
-            Self::Gemini => "@anthropic-ai/gemini-cli",
-        }
-    }
 }
 
-/// Ensure the CLI tool for the given provider is installed in the sandbox.
-///
-/// Checks if the CLI binary exists; if not, installs Node.js (if missing) and
-/// the CLI via npm. Emits `CliEnsure*` events for observability.
-async fn ensure_cli(
+/// Verify the provider CLI exists in the sandbox. Fabro does not install agent
+/// CLIs at runtime; sandbox images or setup steps own tool installation.
+async fn verify_cli_available(
     cli: AgentCli,
-    provider: Provider,
     sandbox: &Arc<dyn Sandbox>,
-    emitter: &Arc<Emitter>,
     cancel_token: &CancellationToken,
 ) -> Result<(), Error> {
-    let start = std::time::Instant::now();
     let cli_name = cli.name();
-    let provider_str = <&'static str>::from(provider);
 
-    emitter.emit(&Event::CliEnsureStarted {
-        cli_name: cli_name.to_string(),
-        provider: provider_str.to_string(),
-    });
-
-    // Check if the CLI is already installed (include ~/.local/bin for npm-installed
-    // CLIs)
-    let version_check = sandbox
+    let availability_check = sandbox
         .exec_command(
-            &format!("PATH=\"$HOME/.local/bin:$PATH\" {cli_name} --version"),
+            &format!("PATH=\"$HOME/.local/bin:$PATH\" command -v {cli_name}"),
             30_000,
             None,
             None,
@@ -118,66 +97,17 @@ async fn ensure_cli(
         )
         .await
         .map_err(|e| {
-            Error::handler_with_source(format!("Failed to check {cli_name} version"), &e)
+            Error::handler_with_source(format!("Failed to check {cli_name} availability"), &e)
         })?;
 
-    if version_check.is_success() {
-        let duration_ms = elapsed_ms(start);
-        emitter.emit(&Event::CliEnsureCompleted {
-            cli_name: cli_name.to_string(),
-            provider: provider_str.to_string(),
-            already_installed: true,
-            node_installed: false,
-            duration_ms,
-        });
+    if availability_check.is_success() {
         return Ok(());
     }
 
-    // Install Node.js (if needed) and the CLI in a single shell so PATH persists
-    let install_cmd = format!(
-        "{} && npm install -g {}",
-        node_runtime::ensure_node_runtime_shell(),
-        cli.npm_package()
-    );
-    let install_result = sandbox
-        .exec_command(
-            &install_cmd,
-            180_000,
-            None,
-            None,
-            Some(cancel_token.child_token()),
-        )
-        .await
-        .map_err(|e| Error::handler_with_source(format!("Failed to install {cli_name}"), &e))?;
-
-    let node_installed = true;
-    if !install_result.is_success() {
-        let duration_ms = elapsed_ms(start);
-        let exec_output_tail = install_result.default_redacted_output_tail();
-        let error_msg = format!(
-            "{cli_name} install exited with code {}",
-            install_result.display_exit_code()
-        );
-        emitter.emit(&Event::CliEnsureFailed {
-            cli_name: cli_name.to_string(),
-            provider: provider_str.to_string(),
-            error: error_msg.clone(),
-            duration_ms,
-            exec_output_tail,
-        });
-        return Err(Error::handler(error_msg));
-    }
-
-    let duration_ms = elapsed_ms(start);
-    emitter.emit(&Event::CliEnsureCompleted {
-        cli_name: cli_name.to_string(),
-        provider: provider_str.to_string(),
-        already_installed: false,
-        node_installed,
-        duration_ms,
-    });
-
-    Ok(())
+    Err(Error::handler(format!(
+        "CLI backend requires '{cli_name}' to be installed in the sandbox PATH. Install it in the \
+         sandbox image or setup steps before running backend=\"cli\"."
+    )))
 }
 
 /// Models that are only available through CLI tools (not via API).
@@ -492,9 +422,8 @@ impl CodergenBackend for AgentCliBackend {
             .and_then(|s| s.parse::<Provider>().ok())
             .unwrap_or(self.provider);
 
-        // Ensure the CLI tool is installed in the sandbox
         let cli = AgentCli::for_provider(provider);
-        ensure_cli(cli, provider, sandbox, emitter, &cancel_token).await?;
+        verify_cli_available(cli, sandbox, &cancel_token).await?;
 
         let command = cli_command_for_provider(provider, model, &prompt_path);
         let stage_scope = StageScope::for_handler(context, &node.id);
@@ -928,14 +857,7 @@ mod tests {
         assert_eq!(AgentCli::Gemini.name(), "gemini");
     }
 
-    #[test]
-    fn agent_cli_npm_package() {
-        assert_eq!(AgentCli::Claude.npm_package(), "@anthropic-ai/claude-code");
-        assert_eq!(AgentCli::Codex.npm_package(), "@openai/codex");
-        assert_eq!(AgentCli::Gemini.npm_package(), "@anthropic-ai/gemini-cli");
-    }
-
-    // -- ensure_cli --
+    // -- verify_cli_available --
 
     use std::collections::VecDeque;
     use std::sync::Mutex;
@@ -1072,113 +994,47 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ensure_cli_skips_install_when_present() {
+    async fn verify_cli_available_succeeds_when_present() {
         let commands = Arc::new(Mutex::new(Vec::new()));
         let sandbox: Arc<dyn Sandbox> = Arc::new(CliMockSandbox::new(
             vec![ok_result()],
             Arc::clone(&commands),
         ));
-        let emitter = Arc::new(Emitter::default());
-
-        let result = ensure_cli(
-            AgentCli::Claude,
-            Provider::Anthropic,
-            &sandbox,
-            &emitter,
-            &CancellationToken::new(),
-        )
-        .await;
+        let result =
+            verify_cli_available(AgentCli::Claude, &sandbox, &CancellationToken::new()).await;
         assert!(result.is_ok());
 
         let commands = commands.lock().unwrap();
         assert_eq!(commands.len(), 1);
-        assert!(commands[0].contains("claude --version"));
+        assert!(commands[0].contains("command -v claude"));
     }
 
     #[tokio::test]
-    async fn ensure_cli_installs_when_missing() {
+    async fn verify_cli_available_fails_when_missing_without_installing() {
         let commands = Arc::new(Mutex::new(Vec::new()));
-        // version check fails, combined install succeeds
         let sandbox: Arc<dyn Sandbox> = Arc::new(CliMockSandbox::new(
-            vec![
-                fail_result(127), // claude --version
-                ok_result(),      // combined node + npm install
-            ],
+            vec![fail_result(127)],
             Arc::clone(&commands),
         ));
-        let emitter = Arc::new(Emitter::default());
 
-        let result = ensure_cli(
-            AgentCli::Claude,
-            Provider::Anthropic,
-            &sandbox,
-            &emitter,
-            &CancellationToken::new(),
-        )
-        .await;
-        assert!(result.is_ok());
+        let result =
+            verify_cli_available(AgentCli::Claude, &sandbox, &CancellationToken::new()).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("CLI backend requires 'claude' to be installed")
+        );
 
         let commands = commands.lock().unwrap();
-        assert_eq!(commands.len(), 2);
-        assert!(commands[1].contains("npm install -g @anthropic-ai/claude-code"));
-    }
-
-    #[tokio::test]
-    async fn ensure_cli_fails_on_install_failure() {
-        let commands = Arc::new(Mutex::new(Vec::new()));
-        let sandbox: Arc<dyn Sandbox> = Arc::new(CliMockSandbox::new(
-            vec![
-                fail_result(127), // claude --version
-                fail_result_with_output(1, "install stdout detail", "install stderr detail"),
-            ],
-            Arc::clone(&commands),
-        ));
-        let emitter = Arc::new(Emitter::default());
-        let events = Arc::new(Mutex::new(Vec::<fabro_types::RunEvent>::new()));
-        emitter.on_event({
-            let events = Arc::clone(&events);
-            move |event| events.lock().unwrap().push(event.clone())
-        });
-
-        let result = ensure_cli(
-            AgentCli::Claude,
-            Provider::Anthropic,
-            &sandbox,
-            &emitter,
-            &CancellationToken::new(),
-        )
-        .await;
-        assert!(result.is_err());
-        let error = result.unwrap_err().to_string();
-        assert!(error.contains("install exited with code 1"));
-        assert!(!error.contains("install stdout detail"));
-        assert!(!error.contains("install stderr detail"));
-
-        let events = events.lock().unwrap();
-        let failed = events
-            .iter()
-            .find(|event| event.event_name() == "cli.ensure.failed")
-            .expect("cli ensure failed event");
-        match &failed.body {
-            fabro_types::EventBody::CliEnsureFailed(props) => {
-                assert_eq!(props.error, "claude install exited with code 1");
-                assert_eq!(
-                    props
-                        .exec_output_tail
-                        .as_ref()
-                        .and_then(|tail| tail.stdout.as_deref()),
-                    Some("install stdout detail")
-                );
-                assert_eq!(
-                    props
-                        .exec_output_tail
-                        .as_ref()
-                        .and_then(|tail| tail.stderr.as_deref()),
-                    Some("install stderr detail")
-                );
-            }
-            other => panic!("expected cli ensure failed body, got {other:?}"),
-        }
+        assert_eq!(commands.len(), 1);
+        assert!(commands[0].contains("command -v claude"));
+        assert!(
+            !commands
+                .iter()
+                .any(|command| command.contains("npm install"))
+        );
     }
 
     // -- Cycle 1: cli_command_for_provider --
@@ -1637,8 +1493,8 @@ for line in sys.stdin:
             _cancel_token: Option<CancellationToken>,
         ) -> fabro_sandbox::Result<ExecResult> {
             self.commands.lock().unwrap().push(command.to_string());
-            // Default: success for git/version/cat/rm/ls.
-            if command.contains("--version") {
+            // Default: success for CLI availability checks and lightweight setup.
+            if command.contains("command -v ") {
                 return Ok(ok_result());
             }
             Ok(ExecResult {

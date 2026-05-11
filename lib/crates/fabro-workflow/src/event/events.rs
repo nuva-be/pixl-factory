@@ -495,25 +495,6 @@ pub enum Event {
         to_model:      String,
         error:         String,
     },
-    CliEnsureStarted {
-        cli_name: String,
-        provider: String,
-    },
-    CliEnsureCompleted {
-        cli_name:          String,
-        provider:          String,
-        already_installed: bool,
-        node_installed:    bool,
-        duration_ms:       u64,
-    },
-    CliEnsureFailed {
-        cli_name:         String,
-        provider:         String,
-        error:            String,
-        duration_ms:      u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        exec_output_tail: Option<fabro_types::ExecOutputTail>,
-    },
     CommandStarted {
         node_id:    String,
         script:     String,
@@ -1266,48 +1247,6 @@ impl Event {
                     to_model,
                     error,
                     "LLM provider failover"
-                );
-            }
-            Self::CliEnsureStarted {
-                cli_name, provider, ..
-            } => {
-                debug!(cli_name, provider, "CLI ensure started");
-            }
-            Self::CliEnsureCompleted {
-                cli_name,
-                provider,
-                already_installed,
-                node_installed,
-                duration_ms,
-            } => {
-                info!(
-                    cli_name,
-                    provider,
-                    already_installed,
-                    node_installed,
-                    duration_ms,
-                    "CLI ensure completed"
-                );
-            }
-            Self::CliEnsureFailed {
-                cli_name,
-                provider,
-                error,
-                duration_ms,
-                exec_output_tail,
-            } => {
-                let tail = fabro_types::ExecOutputTail::trace_summary(exec_output_tail.as_ref());
-                error!(
-                    cli_name,
-                    provider,
-                    error,
-                    duration_ms,
-                    exec_output_tail_present = tail.present,
-                    exec_stdout_tail_bytes = tail.stdout_bytes,
-                    exec_stderr_tail_bytes = tail.stderr_bytes,
-                    exec_stdout_truncated = tail.stdout_truncated,
-                    exec_stderr_truncated = tail.stderr_truncated,
-                    "CLI ensure failed"
                 );
             }
             Self::CommandStarted {

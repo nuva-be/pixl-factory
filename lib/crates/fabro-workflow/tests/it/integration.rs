@@ -9692,11 +9692,10 @@ impl fabro_agent::Sandbox for CliTestEnv {
             });
         }
 
-        // CLI version check during ensure_cli — return success so install path
-        // is skipped.
-        if command.contains("--version") {
+        // CLI availability check.
+        if command.contains("command -v ") {
             return Ok(fabro_agent::ExecResult {
-                stdout:    "1.0.0\n".into(),
+                stdout:    "/usr/local/bin/agent-cli\n".into(),
                 stderr:    String::new(),
                 exit_code: Some(0),
 
@@ -10005,10 +10004,10 @@ async fn cli_backend_run_fails_on_nonzero_exit() {
                     duration_ms: 0,
                 });
             }
-            // CLI version check during ensure_cli — pretend already installed.
-            if command.contains("--version") {
+            // CLI availability check.
+            if command.contains("command -v ") {
                 return Ok(fabro_agent::ExecResult {
-                    stdout:    "1.0.0\n".into(),
+                    stdout:    "/usr/local/bin/agent-cli\n".into(),
                     stderr:    String::new(),
                     exit_code: Some(0),
 

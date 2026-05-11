@@ -1,4 +1,4 @@
-use fabro_graphviz::graph::{AttrValue, Graph};
+use fabro_graphviz::graph::{AttrValue, Graph, Node};
 use fabro_types::LlmBackend;
 
 use crate::{Diagnostic, LintRule, Severity};
@@ -18,22 +18,47 @@ impl LintRule for Rule {
         let mut diagnostics = Vec::new();
         for node in graph.nodes.values() {
             if let Some(backend) = node.attrs.get("backend").and_then(AttrValue::as_str) {
-                if backend.parse::<LlmBackend>().is_err() {
-                    diagnostics.push(Diagnostic {
-                        rule:     self.name().to_string(),
-                        severity: Severity::Error,
-                        message:  format!(
-                            "unsupported LLM backend \"{backend}\"; expected one of: {}",
-                            LlmBackend::EXPECTED
-                        ),
-                        node_id:  Some(node.id.clone()),
-                        edge:     None,
-                        fix:      Some(format!("Use one of: {}", LlmBackend::EXPECTED)),
-                    });
+                match backend.parse::<LlmBackend>() {
+                    Err(_) => {
+                        diagnostics.push(Diagnostic {
+                            rule:     self.name().to_string(),
+                            severity: Severity::Error,
+                            message:  format!(
+                                "unsupported LLM backend \"{backend}\"; expected one of: {}",
+                                LlmBackend::EXPECTED
+                            ),
+                            node_id:  Some(node.id.clone()),
+                            edge:     None,
+                            fix:      Some(format!("Use one of: {}", LlmBackend::EXPECTED)),
+                        });
+                    }
+                    Ok(LlmBackend::Acp) if acp_command_missing(node) => {
+                        diagnostics.push(Diagnostic {
+                            rule:     self.name().to_string(),
+                            severity: Severity::Error,
+                            message:  "backend=\"acp\" requires acp_command because Fabro does \
+                                       not install ACP agents"
+                                .to_string(),
+                            node_id:  Some(node.id.clone()),
+                            edge:     None,
+                            fix:      Some(
+                                "Set acp_command to a stdio ACP command available in the sandbox"
+                                    .to_string(),
+                            ),
+                        });
+                    }
+                    Ok(_) => {}
                 }
             }
         }
         diagnostics
+    }
+}
+
+fn acp_command_missing(node: &Node) -> bool {
+    match node.attrs.get("acp_command").and_then(AttrValue::as_str) {
+        Some(command) => command.trim().is_empty(),
+        None => true,
     }
 }
 
@@ -46,8 +71,8 @@ mod tests {
     use crate::{LintRule, Severity};
 
     #[test]
-    fn backend_valid_accepts_absent_api_cli_and_acp() {
-        for backend in [None, Some("api"), Some("cli"), Some("acp")] {
+    fn backend_valid_accepts_absent_api_and_cli() {
+        for backend in [None, Some("api"), Some("cli")] {
             let mut graph = minimal_graph();
             let mut node = Node::new("work");
             if let Some(backend) = backend {
@@ -80,5 +105,36 @@ mod tests {
                 .message
                 .contains("unsupported LLM backend \"codex\"; expected one of: api, cli, acp")
         );
+    }
+
+    #[test]
+    fn backend_valid_requires_acp_command_for_acp_backend() {
+        let mut graph = minimal_graph();
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        graph.nodes.insert("work".to_string(), node);
+
+        let diagnostics = Rule.apply(&graph);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].severity, Severity::Error);
+        assert!(diagnostics[0].message.contains(
+            "backend=\"acp\" requires acp_command because Fabro does not install ACP agents"
+        ));
+    }
+
+    #[test]
+    fn backend_valid_accepts_acp_backend_with_acp_command() {
+        let mut graph = minimal_graph();
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp_command".to_string(),
+            AttrValue::String("agent-acp".to_string()),
+        );
+        graph.nodes.insert("work".to_string(), node);
+
+        assert!(Rule.apply(&graph).is_empty());
     }
 }
