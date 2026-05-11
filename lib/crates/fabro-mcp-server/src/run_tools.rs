@@ -379,10 +379,9 @@ pub(crate) async fn search_runs(
         .await
         .map_err(|err| ToolError::from_anyhow(&err))?;
     runs.sort_by(|a, b| {
-        b.timestamps
-            .created_at
-            .cmp(&a.timestamps.created_at)
-            .then_with(|| b.id.to_string().cmp(&a.id.to_string()))
+        let a_sort_time = a.timestamps.started_at.unwrap_or_else(|| a.id.created_at());
+        let b_sort_time = b.timestamps.started_at.unwrap_or_else(|| b.id.created_at());
+        b_sort_time.cmp(&a_sort_time).then_with(|| b.id.cmp(&a.id))
     });
 
     if let Some(after) = raw.after.as_deref() {
@@ -730,6 +729,7 @@ fn event_fetch_limit(params: &FabroRunEventsParams) -> Option<usize> {
         || params.categories.is_some()
         || params.created_after.is_some()
         || params.created_before.is_some()
+        || params.direction.as_deref() == Some("desc")
         || matches!(
             params.action,
             RunEventsAction::Details | RunEventsAction::Search

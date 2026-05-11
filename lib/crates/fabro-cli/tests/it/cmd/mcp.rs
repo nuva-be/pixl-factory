@@ -660,6 +660,63 @@ async fn mcp_search_includes_archived_runs_by_default() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn mcp_search_orders_by_started_timestamp_before_created_timestamp() {
+    let context = test_context!();
+    let server = MockServer::start();
+    let target_url = format!("{}/api/v1", server.base_url());
+    let target: fabro_client::ServerTarget = target_url.parse().unwrap();
+    seed_dev_token_auth(&context.home_dir, &target, TEST_DEV_TOKEN);
+    let submitted_id = unique_run_id();
+    let running_id = unique_run_id();
+    let submitted = remote_run_summary_json(
+        &submitted_id,
+        "Simple",
+        "simple",
+        "Submitted later",
+        &serde_json::json!({ "kind": "submitted" }),
+        "2026-04-05T12:10:00Z",
+    );
+    let mut running = remote_run_summary_json(
+        &running_id,
+        "Simple",
+        "simple",
+        "Started later",
+        &serde_json::json!({ "kind": "running" }),
+        "2026-04-05T12:00:00Z",
+    );
+    running["timestamps"]["started_at"] = serde_json::json!("2026-04-05T12:20:00Z");
+    let list_runs = server.mock(|when, then| {
+        when.method(GET)
+            .path("/api/v1/runs")
+            .query_param("include_archived", "true")
+            .query_param("page[limit]", "100")
+            .query_param("page[offset]", "0");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(serde_json::json!({
+                "data": [submitted, running],
+                "meta": { "has_more": false }
+            }));
+    });
+
+    let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
+    let result = call_tool_json(
+        &client,
+        "fabro_run_search",
+        serde_json::json!({ "run_ids": [submitted_id, running_id], "first": 2 }),
+    )
+    .await;
+
+    assert_eq!(result["runs"][0]["run_id"], running_id);
+    assert_eq!(result["runs"][1]["run_id"], submitted_id);
+    list_runs.assert();
+    client
+        .shutdown()
+        .await
+        .expect("MCP client should shut down");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn mcp_lifecycle_tools_manage_real_run() {
     let context = test_context!();
     let harness =
@@ -706,6 +763,12 @@ async fn mcp_lifecycle_tools_manage_real_run() {
         serde_json::json!({ "run_id": run_id, "action": "archive" }),
     )
     .await;
+    let archived_search = call_tool_json(
+        &client,
+        "fabro_run_search",
+        serde_json::json!({ "run_ids": [run_id], "archived": true }),
+    )
+    .await;
     let unarchive = call_tool_json(
         &client,
         "fabro_run_interact",
@@ -727,6 +790,8 @@ async fn mcp_lifecycle_tools_manage_real_run() {
             "get_status": get["result"]["summary"]["status"],
             "events_nonempty": events["events"].as_array().is_some_and(|events| !events.is_empty()),
             "archive_action": archive["action"],
+            "archived_search_count": archived_search["runs"].as_array().unwrap().len(),
+            "archived_search_archived": archived_search["runs"][0]["archived"],
             "unarchive_action": unarchive["action"],
             "unarchived_search_count": search["runs"].as_array().unwrap().len(),
         }),
@@ -758,6 +823,8 @@ async fn mcp_lifecycle_tools_manage_real_run() {
       "get_status": "failed",
       "events_nonempty": true,
       "archive_action": "archive",
+      "archived_search_count": 1,
+      "archived_search_archived": true,
       "unarchive_action": "unarchive",
       "unarchived_search_count": 1
     }
@@ -1232,6 +1299,132 @@ async fn mcp_events_filters_find_matches_beyond_first_page() {
     assert_eq!(filtered["events"][0]["truncated"], true);
     resolve.assert_calls(2);
     list_events.assert_calls(2);
+    client
+        .shutdown()
+        .await
+        .expect("MCP client should shut down");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mcp_events_desc_after_offset_and_limit_page_over_requested_order() {
+    let context = test_context!();
+    let server = MockServer::start();
+    let target_url = format!("{}/api/v1", server.base_url());
+    let target: fabro_client::ServerTarget = target_url.parse().unwrap();
+    seed_dev_token_auth(&context.home_dir, &target, TEST_DEV_TOKEN);
+    let run_id = unique_run_id();
+    let resolve = mock_resolved_run(&server, "nightly", &run_id);
+    let events = (1..=5)
+        .map(|sequence| {
+            serde_json::json!({
+                "seq": sequence,
+                "id": format!("evt-{sequence}"),
+                "ts": format!("2026-04-05T12:00:0{sequence}Z"),
+                "run_id": run_id,
+                "event": "run.started",
+                "properties": { "name": format!("event {sequence}") },
+                "actor": null
+            })
+        })
+        .collect::<Vec<_>>();
+    let first_event = events[0].clone();
+    let limited_events = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/api/v1/runs/{run_id}/events"))
+            .query_param("limit", "1");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(serde_json::json!({
+                "data": [first_event],
+                "meta": { "has_more": true }
+            }));
+    });
+    let full_events = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/api/v1/runs/{run_id}/events"))
+            .query_param_missing("limit")
+            .query_param_missing("since_seq");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(serde_json::json!({
+                "data": events,
+                "meta": { "has_more": false }
+            }));
+    });
+    let after_events = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/api/v1/runs/{run_id}/events"))
+            .query_param("since_seq", "2")
+            .query_param("limit", "3");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(serde_json::json!({
+                "data": [
+                    {
+                        "seq": 2,
+                        "id": "evt-2",
+                        "ts": "2026-04-05T12:00:02Z",
+                        "run_id": run_id,
+                        "event": "run.started",
+                        "properties": { "name": "event 2" },
+                        "actor": null
+                    },
+                    {
+                        "seq": 3,
+                        "id": "evt-3",
+                        "ts": "2026-04-05T12:00:03Z",
+                        "run_id": run_id,
+                        "event": "run.started",
+                        "properties": { "name": "event 3" },
+                        "actor": null
+                    },
+                    {
+                        "seq": 4,
+                        "id": "evt-4",
+                        "ts": "2026-04-05T12:00:04Z",
+                        "run_id": run_id,
+                        "event": "run.started",
+                        "properties": { "name": "event 4" },
+                        "actor": null
+                    }
+                ],
+                "meta": { "has_more": true }
+            }));
+    });
+    let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
+
+    let desc = call_tool_json(
+        &client,
+        "fabro_run_events",
+        serde_json::json!({
+            "run_id": "nightly",
+            "action": "list",
+            "direction": "desc",
+            "first": 1
+        }),
+    )
+    .await;
+    let paged = call_tool_json(
+        &client,
+        "fabro_run_events",
+        serde_json::json!({
+            "run_id": "nightly",
+            "action": "list",
+            "after": 2,
+            "offset": 1,
+            "limit": 2
+        }),
+    )
+    .await;
+
+    assert_eq!(desc["events"][0]["event_id"], "evt-5");
+    assert_eq!(paged["events"][0]["event_id"], "evt-3");
+    assert_eq!(paged["events"][1]["event_id"], "evt-4");
+    assert_eq!(paged["next_cursor"], 5);
+    resolve.assert_calls(2);
+    limited_events.assert_calls(0);
+    full_events.assert();
+    after_events.assert();
     client
         .shutdown()
         .await
