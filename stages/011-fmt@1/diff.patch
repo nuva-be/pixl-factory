@@ -1,0 +1,11 @@
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/mcp.rs b/lib/crates/fabro-cli/tests/it/cmd/mcp.rs
+index e25807c8..35837287 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/mcp.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/mcp.rs
+@@ -2302,4 +2302,4 @@ fn mock_resolved_run_json<'a>(
+             .header("Content-Type", "application/json")
+             .json_body(body);
+     })
+-}
+\ No newline at end of file
++}
