@@ -86,15 +86,20 @@ impl AgentAcpBackend {
         let command = resolve_acp_command(provider, explicit_command)
             .map_err(|err| Error::handler_with_source("Failed to resolve ACP command", &err))?;
 
-        if explicit_command.is_none()
+        let node_runtime_env = if explicit_command.is_none()
             && command.program() == default_acp_command(provider).program()
         {
-            node_runtime::ensure_node_runtime(sandbox, &cancel_token).await?;
-        }
+            Some(node_runtime::ensure_node_runtime(sandbox, &cancel_token).await?)
+        } else {
+            None
+        };
 
-        let launch_env = self
+        let mut launch_env = self
             .launch_env(provider, emitter, sandbox, &cancel_token)
             .await?;
+        if let Some(runtime_env) = node_runtime_env {
+            node_runtime::apply_node_runtime_env(&mut launch_env, runtime_env);
+        }
         let on_activity = {
             let emitter = Arc::clone(emitter);
             Arc::new(move || emitter.touch()) as Arc<dyn Fn() + Send + Sync>
@@ -342,6 +347,7 @@ mod tests {
     use fabro_agent::{LocalSandbox, Sandbox, shell_quote};
     use fabro_graphviz::graph::{AttrValue, Node};
     use fabro_model::Provider;
+    use fabro_sandbox::test_support::MockSandbox;
     use fabro_types::EventBody;
     use tokio_util::sync::CancellationToken;
 
@@ -568,6 +574,52 @@ mod tests {
         assert!(command.contains("fake_acp_agent.py"));
         assert!(!command.contains("OPENAI_API_KEY"));
         assert!(!command.contains("secret-key"));
+    }
+
+    #[tokio::test]
+    async fn acp_default_command_launch_env_includes_bootstrapped_node_path() {
+        let mut sandbox = MockSandbox::linux();
+        sandbox.exec_result.stdout =
+            "__FABRO_NODE_RUNTIME_PATH=/home/test/.local/bin:/usr/local/bin:/usr/bin\n".to_string();
+        let sandbox = Arc::new(sandbox);
+        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
+
+        let mut node = Node::new("work");
+        node.attrs.insert(
+            "provider".to_string(),
+            AttrValue::String("openai".to_string()),
+        );
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+
+        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), Provider::OpenAi);
+        let result = backend
+            .run(
+                &node,
+                "write hello",
+                &Context::new(),
+                None,
+                &Arc::new(Emitter::default()),
+                &sandbox_dyn,
+                None,
+                CancellationToken::new(),
+            )
+            .await;
+        assert!(
+            result.is_err(),
+            "mock stdio transport should not complete ACP"
+        );
+
+        let env = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .expect("ACP launch env should be captured");
+        assert_eq!(
+            env.get("PATH").map(String::as_str),
+            Some("/home/test/.local/bin:/usr/local/bin:/usr/bin")
+        );
     }
 
     fn fake_agent_script() -> &'static str {
