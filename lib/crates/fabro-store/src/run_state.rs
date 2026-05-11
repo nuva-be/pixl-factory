@@ -405,7 +405,8 @@ impl RunProjectionReducer for RunProjection {
                 let Some(stage) = stage_at_current_visit(self, stored, event.seq) else {
                     return Ok(());
                 };
-                apply_agent_cli_terminal(
+                apply_agent_terminal(
+                    "agent.cli",
                     stage,
                     props,
                     merge_agent_cli_output(&props.stdout, &props.stderr),
@@ -416,7 +417,8 @@ impl RunProjectionReducer for RunProjection {
                 let Some(stage) = stage_at_current_visit(self, stored, event.seq) else {
                     return Ok(());
                 };
-                apply_agent_cli_terminal(
+                apply_agent_terminal(
+                    "agent.cli",
                     stage,
                     props,
                     merge_agent_cli_output(&props.stdout, &props.stderr),
@@ -427,7 +429,8 @@ impl RunProjectionReducer for RunProjection {
                 let Some(stage) = stage_at_current_visit(self, stored, event.seq) else {
                     return Ok(());
                 };
-                apply_agent_cli_terminal(
+                apply_agent_terminal(
+                    "agent.cli",
                     stage,
                     props,
                     merge_agent_cli_output(&props.stdout, &props.stderr),
@@ -438,7 +441,8 @@ impl RunProjectionReducer for RunProjection {
                 let Some(stage) = stage_at_current_visit(self, stored, event.seq) else {
                     return Ok(());
                 };
-                apply_agent_acp_terminal(
+                apply_agent_terminal(
+                    "agent.acp",
                     stage,
                     props,
                     merge_agent_cli_output(&props.stdout, &props.stderr),
@@ -449,7 +453,8 @@ impl RunProjectionReducer for RunProjection {
                 let Some(stage) = stage_at_current_visit(self, stored, event.seq) else {
                     return Ok(());
                 };
-                apply_agent_acp_terminal(
+                apply_agent_terminal(
+                    "agent.acp",
                     stage,
                     props,
                     merge_agent_cli_output(&props.stdout, &props.stderr),
@@ -460,7 +465,8 @@ impl RunProjectionReducer for RunProjection {
                 let Some(stage) = stage_at_current_visit(self, stored, event.seq) else {
                     return Ok(());
                 };
-                apply_agent_acp_terminal(
+                apply_agent_terminal(
+                    "agent.acp",
                     stage,
                     props,
                     merge_agent_cli_output(&props.stdout, &props.stderr),
@@ -878,51 +884,37 @@ fn provider_used_from_agent_session_activated(props: &AgentSessionActivatedProps
 }
 
 fn provider_used_from_agent_cli_started(props: &AgentCliStartedProps) -> Value {
-    let mut provider_used = serde_json::Map::new();
-    provider_used.insert("mode".to_string(), Value::String("cli".to_string()));
-    provider_used.insert(
-        "provider".to_string(),
-        Value::String(props.provider.clone()),
-    );
-    provider_used.insert("model".to_string(), Value::String(props.model.clone()));
-    provider_used.insert("command".to_string(), Value::String(props.command.clone()));
-    Value::Object(provider_used)
+    provider_used_from_agent_process_started("cli", &props.provider, &props.model, &props.command)
 }
 
 fn provider_used_from_agent_acp_started(props: &AgentAcpStartedProps) -> Value {
+    provider_used_from_agent_process_started("acp", &props.provider, &props.model, &props.command)
+}
+
+fn provider_used_from_agent_process_started(
+    mode: &str,
+    provider: &str,
+    model: &str,
+    command: &str,
+) -> Value {
     let mut provider_used = serde_json::Map::new();
-    provider_used.insert("mode".to_string(), Value::String("acp".to_string()));
-    provider_used.insert(
-        "provider".to_string(),
-        Value::String(props.provider.clone()),
-    );
-    provider_used.insert("model".to_string(), Value::String(props.model.clone()));
-    provider_used.insert("command".to_string(), Value::String(props.command.clone()));
+    provider_used.insert("mode".to_string(), Value::String(mode.to_string()));
+    provider_used.insert("provider".to_string(), Value::String(provider.to_string()));
+    provider_used.insert("model".to_string(), Value::String(model.to_string()));
+    provider_used.insert("command".to_string(), Value::String(command.to_string()));
     Value::Object(provider_used)
 }
 
-fn apply_agent_cli_terminal(
+fn apply_agent_terminal(
+    event_prefix: &str,
     stage: &mut StageProjection,
     props: &impl serde::Serialize,
     output: String,
     termination: CommandTermination,
 ) -> Result<()> {
-    let script_timing = serde_json::to_value(props)
-        .map_err(|err| Error::InvalidEvent(format!("invalid agent.cli terminal payload: {err}")))?;
-    stage.output = Some(output);
-    stage.termination = Some(termination);
-    stage.script_timing = Some(script_timing);
-    Ok(())
-}
-
-fn apply_agent_acp_terminal(
-    stage: &mut StageProjection,
-    props: &impl serde::Serialize,
-    output: String,
-    termination: CommandTermination,
-) -> Result<()> {
-    let script_timing = serde_json::to_value(props)
-        .map_err(|err| Error::InvalidEvent(format!("invalid agent.acp terminal payload: {err}")))?;
+    let script_timing = serde_json::to_value(props).map_err(|err| {
+        Error::InvalidEvent(format!("invalid {event_prefix} terminal payload: {err}"))
+    })?;
     stage.output = Some(output);
     stage.termination = Some(termination);
     stage.script_timing = Some(script_timing);

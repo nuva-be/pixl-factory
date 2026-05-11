@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use fabro_agent::{Sandbox, StaticEnvProvider, ToolEnvProvider, shell_quote};
-use fabro_auth::{CliAgentKind, CredentialResolver, CredentialUsage, ResolvedCredential};
+use fabro_auth::CredentialResolver;
 use fabro_graphviz::graph::Node;
 use fabro_llm::types::TokenCounts;
 use fabro_model::Provider;
-use fabro_types::{CommandOutputStream, CommandTermination};
+use fabro_types::{CommandOutputStream, CommandTermination, LlmBackend};
 use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
@@ -40,10 +40,11 @@ fn cli_failure_detail(stdout: &str, stderr: &str, command: &str) -> String {
 
 use super::super::agent::{CodergenBackend, CodergenResult};
 use super::acp::AgentAcpBackend;
+use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
 use super::{changed_files, node_runtime};
 use crate::context::Context;
 use crate::error::Error;
-use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel, StageScope};
+use crate::event::{Emitter, Event, StageScope};
 use crate::outcome::billed_model_usage_from_llm;
 
 /// Maps a provider to its corresponding CLI tool metadata.
@@ -509,67 +510,18 @@ impl CodergenBackend for AgentCliBackend {
             &stage_scope,
         );
 
-        // Forward provider API key and custom env vars so the CLI tool can
-        // authenticate. Resolve credentials and run any pre-login command
-        // before the main CLI invocation.
-        let cli_agent = match cli {
-            AgentCli::Claude => CliAgentKind::Claude,
-            AgentCli::Codex => CliAgentKind::Codex,
-            AgentCli::Gemini => CliAgentKind::Gemini,
-        };
-        let mut launch_env = if let Some(resolver) = &self.resolver {
-            let resolved = resolver
-                .resolve(provider, CredentialUsage::CliAgent(cli_agent))
-                .await
-                .map_err(|e| Error::handler_with_source("Failed to resolve CLI credential", &e))?;
-            let ResolvedCredential::Cli(cli_credential) = resolved else {
-                return Err(Error::handler("Expected CLI credential".to_string()));
-            };
-            if let Some(login_cmd) = &cli_credential.login_command {
-                let login_result = sandbox
-                    .exec_command(
-                        login_cmd,
-                        30_000,
-                        None,
-                        None,
-                        Some(cancel_token.child_token()),
-                    )
-                    .await
-                    .map_err(|e| Error::handler_with_source("codex login failed", &e))?;
-                if !login_result.is_success() {
-                    tracing::warn!(
-                        exit_code = login_result.display_exit_code(),
-                        "codex login --with-api-key failed: {}",
-                        login_result.stderr
-                    );
-                }
-            }
-            cli_credential.env_vars
-        } else {
-            let mut env = HashMap::new();
-            for name in provider.api_key_env_vars() {
-                if let Some(val) = process_env_var(name) {
-                    env.insert((*name).to_string(), val);
-                }
-            }
-            env
-        };
-        if let Some(provider) = &self.tool_env {
-            if self.github_token_refresh_managed {
-                emitter.notice(
-                    RunNoticeLevel::Info,
-                    RunNoticeCode::GithubTokenRefreshLimited,
-                    "CLI agent stages receive GitHub tokens at process launch; stages running \
-                     beyond token expiry may need to be retried.",
-                );
-            }
-            let tool_env = provider.resolve().await.map_err(|err| {
-                Error::handler_with_anyhow("Failed to resolve CLI agent env", &err)
-            })?;
-            for (name, val) in tool_env {
-                launch_env.insert(name, val);
-            }
-        }
+        let launch_env = resolve_agent_launch_env(AgentLaunchEnvRequest {
+            provider,
+            cli,
+            resolver: self.resolver.as_ref(),
+            tool_env: self.tool_env.as_ref(),
+            github_token_refresh_managed: self.github_token_refresh_managed,
+            stage_label: "CLI",
+            emitter,
+            sandbox,
+            cancel_token: &cancel_token,
+        })
+        .await?;
 
         // Write env file so the inner shell that runs the CLI command picks up
         // PATH and provider env vars; we still pass `launch_env` to
@@ -800,45 +752,43 @@ impl BackendRouter {
         }
     }
 
-    fn select_backend(node: &Node) -> Result<SelectedBackend, Error> {
-        match node.backend() {
+    fn select_backend(node: &Node) -> Result<LlmBackend, Error> {
+        match node.llm_backend() {
             None => {
                 if node.model().is_some_and(is_cli_only_model) {
-                    Ok(SelectedBackend::Cli)
+                    Ok(LlmBackend::Cli)
                 } else {
-                    Ok(SelectedBackend::Api)
+                    Ok(LlmBackend::Api)
                 }
             }
-            Some("api") => Ok(SelectedBackend::Api),
-            Some("cli") => Ok(SelectedBackend::Cli),
-            Some("acp") => Ok(SelectedBackend::Acp),
-            Some(other) => Err(Error::Validation(format!(
-                "unsupported LLM backend \"{other}\"; expected one of: api, cli, acp"
-            ))),
+            Some(Ok(backend)) => Ok(backend),
+            Some(Err(_)) => Err(unsupported_backend_error(
+                node.backend().unwrap_or_default(),
+            )),
         }
     }
 
-    fn select_one_shot_backend(node: &Node) -> Result<SelectedBackend, Error> {
-        match node.backend() {
-            Some("acp") => Ok(SelectedBackend::Acp),
-            Some("api" | "cli") | None => Ok(SelectedBackend::Api),
-            Some(other) => Err(Error::Validation(format!(
-                "unsupported LLM backend \"{other}\"; expected one of: api, cli, acp"
-            ))),
+    fn select_one_shot_backend(node: &Node) -> Result<LlmBackend, Error> {
+        match node.llm_backend() {
+            Some(Ok(LlmBackend::Acp)) => Ok(LlmBackend::Acp),
+            Some(Ok(LlmBackend::Api | LlmBackend::Cli)) | None => Ok(LlmBackend::Api),
+            Some(Err(_)) => Err(unsupported_backend_error(
+                node.backend().unwrap_or_default(),
+            )),
         }
     }
 
     #[cfg(test)]
     fn should_use_cli(node: &Node) -> bool {
-        matches!(Self::select_backend(node), Ok(SelectedBackend::Cli))
+        matches!(Self::select_backend(node), Ok(LlmBackend::Cli))
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SelectedBackend {
-    Api,
-    Cli,
-    Acp,
+fn unsupported_backend_error(raw: &str) -> Error {
+    Error::Validation(format!(
+        "unsupported LLM backend \"{raw}\"; expected one of: {}",
+        LlmBackend::EXPECTED
+    ))
 }
 
 #[async_trait]
@@ -855,7 +805,7 @@ impl CodergenBackend for BackendRouter {
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
         match Self::select_backend(node)? {
-            SelectedBackend::Api => {
+            LlmBackend::Api => {
                 self.api
                     .run(
                         node,
@@ -869,7 +819,7 @@ impl CodergenBackend for BackendRouter {
                     )
                     .await
             }
-            SelectedBackend::Cli => {
+            LlmBackend::Cli => {
                 self.cli
                     .run(
                         node,
@@ -883,7 +833,7 @@ impl CodergenBackend for BackendRouter {
                     )
                     .await
             }
-            SelectedBackend::Acp => {
+            LlmBackend::Acp => {
                 self.acp
                     .run(
                         node,
@@ -911,7 +861,7 @@ impl CodergenBackend for BackendRouter {
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
         match Self::select_one_shot_backend(node)? {
-            SelectedBackend::Acp => {
+            LlmBackend::Acp => {
                 self.acp
                     .one_shot(
                         node,
@@ -924,7 +874,7 @@ impl CodergenBackend for BackendRouter {
                     )
                     .await
             }
-            SelectedBackend::Api | SelectedBackend::Cli => {
+            LlmBackend::Api | LlmBackend::Cli => {
                 self.api
                     .one_shot(
                         node,
@@ -1416,7 +1366,7 @@ mod tests {
 
         assert_eq!(
             BackendRouter::select_backend(&node).unwrap(),
-            SelectedBackend::Api
+            LlmBackend::Api
         );
     }
 
@@ -1428,7 +1378,7 @@ mod tests {
 
         assert_eq!(
             BackendRouter::select_backend(&node).unwrap(),
-            SelectedBackend::Cli
+            LlmBackend::Cli
         );
     }
 
@@ -1440,7 +1390,7 @@ mod tests {
 
         assert_eq!(
             BackendRouter::select_backend(&node).unwrap(),
-            SelectedBackend::Acp
+            LlmBackend::Acp
         );
     }
 

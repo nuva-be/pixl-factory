@@ -15,6 +15,7 @@ use fabro_sandbox::{
     reconnect_for_run_with_callback,
 };
 use fabro_static::EnvVars;
+use fabro_types::LlmBackend;
 use fabro_vault::Vault;
 use futures::future::try_join_all;
 use shlex::try_quote;
@@ -28,6 +29,7 @@ use crate::devcontainer_bridge::{devcontainer_to_snapshot_config, run_devcontain
 use crate::error::Error;
 use crate::event::{Event, RunNoticeCode, RunNoticeLevel};
 use crate::github_token_source::{AppIatMinter, GitHubTokenSource};
+use crate::handler::llm::cli::is_cli_only_model;
 use crate::handler::llm::{AgentAcpBackend, AgentApiBackend, AgentCliBackend, BackendRouter};
 use crate::handler::{HandlerRegistry, default_registry};
 use crate::run_metadata::{RunMetadataRuntime, build_metadata_writer, metadata_branch_name};
@@ -124,7 +126,13 @@ async fn build_registry(
     llm_source: Arc<dyn CredentialSource>,
     cli_resolver: Option<CredentialResolver>,
 ) -> Result<(Arc<HandlerRegistry>, bool), Error> {
-    let build_no_backend = || Arc::new(default_registry(Arc::clone(&interviewer), || None));
+    let no_backend_interviewer = Arc::clone(&interviewer);
+    let build_no_backend = move || {
+        Arc::new(default_registry(
+            Arc::clone(&no_backend_interviewer),
+            || None,
+        ))
+    };
 
     if spec.dry_run {
         return Ok((build_no_backend(), true));
@@ -134,6 +142,51 @@ async fn build_registry(
         .nodes
         .values()
         .any(|n| graph::is_llm_handler_type(n.handler_type()));
+
+    if !graph_needs_llm {
+        return Ok((build_no_backend(), false));
+    }
+
+    let build_llm_registry = || {
+        let model = spec.model.clone();
+        let provider = spec.provider;
+        let fallback_chain = spec.fallback_chain.clone();
+        let mcp_servers = spec.mcp_servers.clone();
+        let llm_source_for_api = Arc::clone(&llm_source);
+        let steering_hub_for_api = Arc::clone(&steering_hub);
+        let tool_env_provider_for_backend = Arc::clone(&tool_env_provider);
+        Arc::new(default_registry(interviewer, move || {
+            let tool_env_provider = Arc::clone(&tool_env_provider_for_backend);
+            let api = AgentApiBackend::new(
+                model.clone(),
+                provider,
+                fallback_chain.clone(),
+                Arc::clone(&llm_source_for_api),
+                Arc::clone(&steering_hub_for_api),
+            )
+            .with_tool_env_provider(tool_env_provider.clone())
+            .with_mcp_servers(mcp_servers.clone());
+            let cli = cli_resolver
+                .clone()
+                .map_or_else(
+                    || AgentCliBackend::new_from_env(model.clone(), provider),
+                    |resolver| AgentCliBackend::new(model.clone(), provider, resolver),
+                )
+                .with_tool_env_provider(tool_env_provider.clone(), github_token_refresh_managed);
+            let acp = cli_resolver
+                .clone()
+                .map_or_else(
+                    || AgentAcpBackend::new_from_env(model.clone(), provider),
+                    |resolver| AgentAcpBackend::new(model.clone(), provider, resolver),
+                )
+                .with_tool_env_provider(tool_env_provider.clone(), github_token_refresh_managed);
+            Some(Box::new(BackendRouter::new(Box::new(api), cli, acp)))
+        }))
+    };
+
+    if !graph_needs_api_backend(graph) {
+        return Ok((build_llm_registry(), false));
+    }
 
     match llm_source.resolve().await {
         Ok(result) if result.credentials.is_empty() => {
@@ -156,49 +209,7 @@ async fn build_registry(
             }
             Ok((build_no_backend(), false))
         }
-        Ok(_result) => {
-            let model = spec.model.clone();
-            let provider = spec.provider;
-            let fallback_chain = spec.fallback_chain.clone();
-            let mcp_servers = spec.mcp_servers.clone();
-            let llm_source_for_api = Arc::clone(&llm_source);
-            let steering_hub_for_api = Arc::clone(&steering_hub);
-            let tool_env_provider_for_backend = Arc::clone(&tool_env_provider);
-            let registry = Arc::new(default_registry(interviewer, move || {
-                let tool_env_provider = Arc::clone(&tool_env_provider_for_backend);
-                let api = AgentApiBackend::new(
-                    model.clone(),
-                    provider,
-                    fallback_chain.clone(),
-                    Arc::clone(&llm_source_for_api),
-                    Arc::clone(&steering_hub_for_api),
-                )
-                .with_tool_env_provider(tool_env_provider.clone())
-                .with_mcp_servers(mcp_servers.clone());
-                let cli = cli_resolver
-                    .clone()
-                    .map_or_else(
-                        || AgentCliBackend::new_from_env(model.clone(), provider),
-                        |resolver| AgentCliBackend::new(model.clone(), provider, resolver),
-                    )
-                    .with_tool_env_provider(
-                        tool_env_provider.clone(),
-                        github_token_refresh_managed,
-                    );
-                let acp = cli_resolver
-                    .clone()
-                    .map_or_else(
-                        || AgentAcpBackend::new_from_env(model.clone(), provider),
-                        |resolver| AgentAcpBackend::new(model.clone(), provider, resolver),
-                    )
-                    .with_tool_env_provider(
-                        tool_env_provider.clone(),
-                        github_token_refresh_managed,
-                    );
-                Some(Box::new(BackendRouter::new(Box::new(api), cli, acp)))
-            }));
-            Ok((registry, false))
-        }
+        Ok(_result) => Ok((build_llm_registry(), false)),
         Err(e) => {
             if graph_needs_llm {
                 return Err(Error::Precondition(format!(
@@ -207,6 +218,25 @@ async fn build_registry(
             }
             Ok((build_no_backend(), false))
         }
+    }
+}
+
+fn graph_needs_api_backend(graph: &graph::Graph) -> bool {
+    graph.nodes.values().any(node_needs_api_backend)
+}
+
+fn node_needs_api_backend(node: &graph::Node) -> bool {
+    if !graph::is_llm_handler_type(node.handler_type()) {
+        return false;
+    }
+
+    match node.handler_type() {
+        Some("prompt" | "one_shot") => !matches!(node.llm_backend(), Some(Ok(LlmBackend::Acp))),
+        _ => match node.llm_backend() {
+            Some(Ok(LlmBackend::Api)) => true,
+            Some(Ok(LlmBackend::Cli | LlmBackend::Acp) | Err(_)) => false,
+            None => !node.model().is_some_and(is_cli_only_model),
+        },
     }
 }
 

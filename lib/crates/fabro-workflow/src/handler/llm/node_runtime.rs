@@ -14,9 +14,24 @@ pub struct NodeRuntimeEnv {
 }
 
 pub fn ensure_node_runtime_shell() -> String {
-    "export PATH=\"$HOME/.local/bin:$PATH\" && \
-     (node --version >/dev/null 2>&1 && npm --version >/dev/null 2>&1 && npx --version >/dev/null 2>&1 || \
-      (mkdir -p ~/.local && curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.gz | tar -xz --strip-components=1 -C ~/.local))"
+    r#"export PATH="$HOME/.local/bin:$PATH" && \
+if node --version >/dev/null 2>&1 && npm --version >/dev/null 2>&1 && npx --version >/dev/null 2>&1; then \
+  true; \
+else \
+  os="$(uname -s)"; \
+  if [ "$os" != "Linux" ]; then \
+    echo "Node.js, npm, and npx are required for default ACP/CLI commands on $os" >&2; \
+    exit 127; \
+  fi; \
+  arch="$(uname -m)"; \
+  case "$arch" in \
+    x86_64|amd64) node_arch="x64" ;; \
+    aarch64|arm64) node_arch="arm64" ;; \
+    *) echo "Unsupported Linux architecture for Node.js install: $arch" >&2; exit 127 ;; \
+  esac; \
+  mkdir -p "$HOME/.local" && \
+  curl -fsSL "https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-${node_arch}.tar.gz" | tar -xz --strip-components=1 -C "$HOME/.local"; \
+fi"#
         .to_string()
 }
 

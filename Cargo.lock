@@ -2453,6 +2453,7 @@ version = "0.230.0-nightly.0"
 dependencies = [
  "fabro-graphviz",
  "fabro-model",
+ "fabro-types",
  "serde",
  "thiserror 2.0.18",
 ]

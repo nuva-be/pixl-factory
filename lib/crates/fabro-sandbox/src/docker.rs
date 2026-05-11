@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::Cursor;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -20,7 +21,7 @@ use fabro_types::{CommandOutputStream, CommandTermination, RunId};
 use fabro_util::time::elapsed_ms;
 use futures::StreamExt;
 use tokio::io::{AsyncWriteExt, duplex};
-use tokio::sync::{Mutex as TokioMutex, OnceCell};
+use tokio::sync::{Mutex as TokioMutex, Notify, OnceCell};
 use tokio::{fs, time};
 use tokio_util::sync::CancellationToken;
 
@@ -884,13 +885,14 @@ struct DockerStdioProcessControl {
     container_id: String,
     exec_id:      String,
     stop_file:    String,
-    state:        DockerStdioProcessState,
+    state:        Arc<DockerStdioProcessState>,
 }
 
 #[derive(Default)]
 struct DockerStdioProcessState {
-    stop_requested: TokioMutex<bool>,
-    termination:    TokioMutex<Option<StdioProcessTermination>>,
+    stop_requested:     AtomicBool,
+    termination:        TokioMutex<Option<StdioProcessTermination>>,
+    termination_notify: Notify,
 }
 
 impl DockerStdioProcessState {
@@ -898,27 +900,36 @@ impl DockerStdioProcessState {
         *self.termination.lock().await
     }
 
-    async fn should_request_stop(&self) -> bool {
-        self.cached_termination().await.is_none() && !*self.stop_requested.lock().await
-    }
-
-    async fn mark_stop_requested(&self) {
-        *self.stop_requested.lock().await = true;
+    async fn request_stop_once(&self) -> bool {
+        self.cached_termination().await.is_none()
+            && !self.stop_requested.swap(true, Ordering::AcqRel)
     }
 
     async fn cache_termination(&self, termination: StdioProcessTermination) {
-        *self.termination.lock().await = Some(termination);
+        let mut cached = self.termination.lock().await;
+        if cached.is_none() {
+            *cached = Some(termination);
+            self.termination_notify.notify_waiters();
+        }
+    }
+
+    async fn wait_for_cached_termination(&self) -> StdioProcessTermination {
+        loop {
+            if let Some(termination) = self.cached_termination().await {
+                return termination;
+            }
+            self.termination_notify.notified().await;
+        }
     }
 }
 
 #[async_trait]
 impl StdioProcessControl for DockerStdioProcessControl {
     async fn terminate(&self) -> crate::Result<()> {
-        if !self.state.should_request_stop().await {
+        if !self.state.request_stop_once().await {
             return Ok(());
         }
         request_docker_exec_stop_with(&self.docker, &self.container_id, &self.stop_file).await?;
-        self.state.mark_stop_requested().await;
         Ok(())
     }
 
@@ -927,7 +938,11 @@ impl StdioProcessControl for DockerStdioProcessControl {
             return Ok(termination);
         }
 
+        let mut poll_interval = time::interval(std::time::Duration::from_secs(1));
         loop {
+            if let Some(termination) = self.state.cached_termination().await {
+                return Ok(termination);
+            }
             let inspect = self
                 .docker
                 .inspect_exec(&self.exec_id)
@@ -939,7 +954,29 @@ impl StdioProcessControl for DockerStdioProcessControl {
                 self.state.cache_termination(termination).await;
                 return Ok(termination);
             }
-            time::sleep(std::time::Duration::from_millis(50)).await;
+            tokio::select! {
+                termination = self.state.wait_for_cached_termination() => return Ok(termination),
+                _ = poll_interval.tick() => {}
+            }
+        }
+    }
+}
+
+async fn cache_docker_stdio_completion(
+    docker: Docker,
+    exec_id: String,
+    state: Arc<DockerStdioProcessState>,
+) {
+    match docker.inspect_exec(&exec_id).await {
+        Ok(inspect) if inspect.running != Some(true) => {
+            let exit_code = inspect.exit_code.and_then(|code| i32::try_from(code).ok());
+            state
+                .cache_termination(StdioProcessTermination::exited(exit_code))
+                .await;
+        }
+        Ok(_) => {}
+        Err(err) => {
+            tracing::warn!(error = %err, "Failed to inspect completed Docker stdio exec");
         }
     }
 }
@@ -1513,13 +1550,17 @@ impl Sandbox for DockerSandbox {
         let stderr_collector = StderrCollector::new(DEFAULT_EXEC_OUTPUT_TAIL_BYTES);
         let stderr_for_output = stderr_collector.clone();
         let (mut stdout_writer, stdout_reader) = duplex(64 * 1024);
+        let state = Arc::new(DockerStdioProcessState::default());
+        let state_for_output = Arc::clone(&state);
+        let docker_for_output = self.docker.clone();
+        let exec_id_for_output = exec_id.clone();
         tokio::spawn(async move {
             while let Some(chunk) = output.next().await {
                 match chunk {
                     Ok(LogOutput::StdOut { message }) => {
                         if let Err(err) = stdout_writer.write_all(&message).await {
                             tracing::warn!(error = %err, "Failed to forward Docker stdio stdout");
-                            return;
+                            break;
                         }
                     }
                     Ok(LogOutput::StdErr { message }) => {
@@ -1529,10 +1570,12 @@ impl Sandbox for DockerSandbox {
                     Err(err) => {
                         let message = format!("Docker stdio output stream error: {err}");
                         stderr_for_output.push(message.as_bytes()).await;
-                        return;
+                        break;
                     }
                 }
             }
+            cache_docker_stdio_completion(docker_for_output, exec_id_for_output, state_for_output)
+                .await;
         });
 
         let handle = StdioProcessHandle::new(DockerStdioProcessControl {
@@ -1540,7 +1583,7 @@ impl Sandbox for DockerSandbox {
             container_id,
             exec_id,
             stop_file,
-            state: DockerStdioProcessState::default(),
+            state,
         });
 
         if let Some(token) = cancel_token {
@@ -2088,15 +2131,14 @@ mod tests {
     async fn docker_stdio_process_state_does_not_cache_cancelled_on_stop_request() {
         let state = DockerStdioProcessState::default();
 
-        assert!(state.should_request_stop().await);
-        state.mark_stop_requested().await;
+        assert!(state.request_stop_once().await);
         assert_eq!(state.cached_termination().await, None);
-        assert!(!state.should_request_stop().await);
+        assert!(!state.request_stop_once().await);
 
         let termination = StdioProcessTermination::exited(Some(143));
         state.cache_termination(termination).await;
         assert_eq!(state.cached_termination().await, Some(termination));
-        assert!(!state.should_request_stop().await);
+        assert!(!state.request_stop_once().await);
     }
 
     #[tokio::test]

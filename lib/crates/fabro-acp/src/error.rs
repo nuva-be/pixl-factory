@@ -17,9 +17,6 @@ pub enum AcpError {
     #[error("ACP turn timed out")]
     TimedOut { stderr: String },
 
-    #[error("ACP process exited before the protocol completed")]
-    ProcessExited { stderr: String },
-
     #[error("ACP prompt stopped with {stop_reason}: {text}")]
     StopReason {
         stop_reason: String,

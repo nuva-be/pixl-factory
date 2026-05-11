@@ -9659,14 +9659,25 @@ impl fabro_agent::Sandbox for CliTestEnv {
     ) -> fabro_sandbox::Result<fabro_agent::ExecResult> {
         self.commands.lock().unwrap().push(command.to_string());
 
-        // git diff calls: first pair returns empty (before), second pair returns
-        // configured files
-        if command.starts_with("git diff") || command.starts_with("git ls-files") {
+        // Changed-file snapshot calls: first returns empty (before), second
+        // returns configured files (after).
+        if command.contains("__FABRO_CHANGED_FILES_DIFF__")
+            || command.starts_with("git diff")
+            || command.starts_with("git ls-files")
+        {
             let call_num = self
                 .git_diff_call_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            // Calls 0,1 = before snapshot (empty), calls 2,3 = after snapshot
-            let stdout = if call_num >= 2 && command.starts_with("git diff") {
+            let stdout = if command.contains("__FABRO_CHANGED_FILES_DIFF__") {
+                if call_num >= 1 {
+                    format!(
+                        "__FABRO_CHANGED_FILES_DIFF__\n{}__FABRO_CHANGED_FILES_UNTRACKED__\n",
+                        self.git_diff_after
+                    )
+                } else {
+                    "__FABRO_CHANGED_FILES_DIFF__\n__FABRO_CHANGED_FILES_UNTRACKED__\n".to_string()
+                }
+            } else if call_num >= 2 && command.starts_with("git diff") {
                 self.git_diff_after.clone()
             } else {
                 String::new()

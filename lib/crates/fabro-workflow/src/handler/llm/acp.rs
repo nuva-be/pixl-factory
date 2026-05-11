@@ -6,18 +6,19 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use fabro_acp::{AcpError, AcpRunRequest, default_acp_command, resolve_acp_command};
 use fabro_agent::{Sandbox, StaticEnvProvider, ToolEnvProvider};
-use fabro_auth::{CliAgentKind, CredentialResolver, CredentialUsage, ResolvedCredential};
+use fabro_auth::CredentialResolver;
 use fabro_graphviz::graph::Node;
 use fabro_model::Provider;
 use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
 use super::super::agent::{CodergenBackend, CodergenResult};
-use super::cli::{AgentCli, process_env_var};
+use super::cli::AgentCli;
+use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
 use super::{changed_files, node_runtime};
 use crate::context::Context;
 use crate::error::Error;
-use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel, StageScope};
+use crate::event::{Emitter, Event, StageScope};
 
 pub struct AgentAcpBackend {
     model: String,
@@ -94,9 +95,18 @@ impl AgentAcpBackend {
             None
         };
 
-        let mut launch_env = self
-            .launch_env(provider, emitter, sandbox, &cancel_token)
-            .await?;
+        let mut launch_env = resolve_agent_launch_env(AgentLaunchEnvRequest {
+            provider,
+            cli: AgentCli::for_provider(provider),
+            resolver: self.resolver.as_ref(),
+            tool_env: self.tool_env.as_ref(),
+            github_token_refresh_managed: self.github_token_refresh_managed,
+            stage_label: "ACP",
+            emitter,
+            sandbox,
+            cancel_token: &cancel_token,
+        })
+        .await?;
         if let Some(runtime_env) = node_runtime_env {
             node_runtime::apply_node_runtime_env(&mut launch_env, runtime_env);
         }
@@ -196,78 +206,6 @@ impl AgentAcpBackend {
             files_touched,
             last_file_touched,
         })
-    }
-
-    async fn launch_env(
-        &self,
-        provider: Provider,
-        emitter: &Arc<Emitter>,
-        sandbox: &Arc<dyn Sandbox>,
-        cancel_token: &CancellationToken,
-    ) -> Result<HashMap<String, String>, Error> {
-        let cli_agent = match AgentCli::for_provider(provider) {
-            AgentCli::Claude => CliAgentKind::Claude,
-            AgentCli::Codex => CliAgentKind::Codex,
-            AgentCli::Gemini => CliAgentKind::Gemini,
-        };
-        let mut launch_env = if let Some(resolver) = &self.resolver {
-            let resolved = resolver
-                .resolve(provider, CredentialUsage::CliAgent(cli_agent))
-                .await
-                .map_err(|err| {
-                    Error::handler_with_source("Failed to resolve ACP credential", &err)
-                })?;
-            let ResolvedCredential::Cli(cli_credential) = resolved else {
-                return Err(Error::handler("Expected CLI credential".to_string()));
-            };
-            if let Some(login_cmd) = &cli_credential.login_command {
-                let login_result = sandbox
-                    .exec_command(
-                        login_cmd,
-                        30_000,
-                        None,
-                        None,
-                        Some(cancel_token.child_token()),
-                    )
-                    .await
-                    .map_err(|err| {
-                        Error::handler_with_source("ACP credential login failed", &err)
-                    })?;
-                if !login_result.is_success() {
-                    tracing::warn!(
-                        exit_code = login_result.display_exit_code(),
-                        "ACP credential login failed: {}",
-                        login_result.stderr
-                    );
-                }
-            }
-            cli_credential.env_vars
-        } else {
-            let mut env = HashMap::new();
-            for name in provider.api_key_env_vars() {
-                if let Some(value) = process_env_var(name) {
-                    env.insert((*name).to_string(), value);
-                }
-            }
-            env
-        };
-
-        if let Some(provider) = &self.tool_env {
-            if self.github_token_refresh_managed {
-                emitter.notice(
-                    RunNoticeLevel::Info,
-                    RunNoticeCode::GithubTokenRefreshLimited,
-                    "ACP agent stages receive GitHub tokens at process launch; stages running \
-                     beyond token expiry may need to be retried.",
-                );
-            }
-            let tool_env = provider.resolve().await.map_err(|err| {
-                Error::handler_with_anyhow("Failed to resolve ACP agent env", &err)
-            })?;
-            launch_env.extend(tool_env);
-        }
-
-        Ok(launch_env)
     }
 }
 

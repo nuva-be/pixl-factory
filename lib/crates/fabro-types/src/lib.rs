@@ -13,6 +13,7 @@ pub mod event_envelope;
 pub mod failure_signature;
 pub mod graph;
 pub mod interview;
+pub mod llm_backend;
 pub mod outcome;
 pub mod principal;
 pub mod pull_request;
@@ -57,6 +58,7 @@ pub use graph::{
     shape_to_handler_type,
 };
 pub use interview::{InterviewQuestionRecord, QuestionType};
+pub use llm_backend::LlmBackend;
 pub use outcome::{
     FailureCategory, FailureDetail, NodeResult, Outcome, OutcomeMeta, StageOutcome, StageState,
 };

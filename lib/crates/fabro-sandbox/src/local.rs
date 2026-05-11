@@ -7,7 +7,7 @@ use fabro_types::{CommandOutputStream, CommandTermination};
 use fabro_util::time::elapsed_ms;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::watch;
 use tokio::task::spawn_blocking;
 use tokio::{fs, time};
 use tokio_util::sync::CancellationToken;
@@ -130,6 +130,34 @@ fn process_env_vars() -> Vec<(String, String)> {
     std::env::vars().collect()
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ExplicitEnvPolicy {
+    FilterSensitive,
+    TrustCaller,
+}
+
+fn filtered_env_vars(
+    env_vars: Option<&std::collections::HashMap<String, String>>,
+    explicit_policy: ExplicitEnvPolicy,
+) -> Vec<(String, String)> {
+    let mut filtered_env: Vec<(String, String)> = process_env_vars()
+        .into_iter()
+        .filter(|(key, _)| !LocalSandbox::should_filter_env_var(key))
+        .collect();
+
+    if let Some(extra) = env_vars {
+        for (key, value) in extra {
+            if matches!(explicit_policy, ExplicitEnvPolicy::TrustCaller)
+                || !LocalSandbox::should_filter_env_var(key)
+            {
+                filtered_env.push((key.clone(), value.clone()));
+            }
+        }
+    }
+
+    filtered_env
+}
+
 async fn drain_pipe<R>(mut pipe: Option<R>, stream: CommandOutputStream) -> String
 where
     R: AsyncRead + Unpin,
@@ -143,37 +171,74 @@ where
     buf
 }
 
+type LocalStdioOutcome = Result<StdioProcessTermination, String>;
+
 struct LocalStdioProcessControl {
-    child:       TokioMutex<Child>,
-    termination: TokioMutex<Option<StdioProcessTermination>>,
+    terminate_tx:   watch::Sender<bool>,
+    termination_rx: watch::Receiver<Option<LocalStdioOutcome>>,
+}
+
+impl LocalStdioProcessControl {
+    fn new(mut child: Child) -> Self {
+        let (terminate_tx, mut terminate_rx) = watch::channel(false);
+        let (termination_tx, termination_rx) = watch::channel(None);
+
+        tokio::spawn(async move {
+            let outcome = tokio::select! {
+                status = child.wait() => {
+                    status
+                        .map(|status| StdioProcessTermination::exited(status.code()))
+                        .map_err(|err| format!("Failed to wait for stdio process: {err}"))
+                }
+                changed = terminate_rx.changed() => {
+                    if changed.is_err() || !*terminate_rx.borrow() {
+                        child.wait()
+                            .await
+                            .map(|status| StdioProcessTermination::exited(status.code()))
+                            .map_err(|err| format!("Failed to wait for stdio process: {err}"))
+                    } else {
+                        sigterm_then_kill(&mut child).await;
+                        Ok(StdioProcessTermination::cancelled())
+                    }
+                }
+            };
+            let _ = termination_tx.send(Some(outcome));
+        });
+
+        Self {
+            terminate_tx,
+            termination_rx,
+        }
+    }
+
+    async fn wait_for_termination(&self) -> crate::Result<StdioProcessTermination> {
+        let mut termination_rx = self.termination_rx.clone();
+        loop {
+            if let Some(outcome) = termination_rx.borrow().clone() {
+                return outcome.map_err(crate::Error::message);
+            }
+            termination_rx.changed().await.map_err(|_| {
+                crate::Error::message(
+                    "stdio process supervisor stopped before reporting termination",
+                )
+            })?;
+        }
+    }
 }
 
 #[async_trait]
 impl StdioProcessControl for LocalStdioProcessControl {
     async fn terminate(&self) -> crate::Result<()> {
-        if self.termination.lock().await.is_some() {
+        if self.termination_rx.borrow().is_some() {
             return Ok(());
         }
 
-        let mut child = self.child.lock().await;
-        sigterm_then_kill(&mut child).await;
-        *self.termination.lock().await = Some(StdioProcessTermination::cancelled());
-        Ok(())
+        self.terminate_tx.send_replace(true);
+        self.wait_for_termination().await.map(|_| ())
     }
 
     async fn wait(&self) -> crate::Result<StdioProcessTermination> {
-        if let Some(termination) = *self.termination.lock().await {
-            return Ok(termination);
-        }
-
-        let mut child = self.child.lock().await;
-        let status = child
-            .wait()
-            .await
-            .map_err(|e| crate::Error::context("Failed to wait for stdio process", e))?;
-        let termination = StdioProcessTermination::exited(status.code());
-        *self.termination.lock().await = Some(termination);
-        Ok(termination)
+        self.wait_for_termination().await
     }
 }
 
@@ -288,18 +353,7 @@ impl Sandbox for LocalSandbox {
     ) -> crate::Result<ExecResult> {
         let start = Instant::now();
 
-        let mut filtered_env: Vec<(String, String)> = process_env_vars()
-            .into_iter()
-            .filter(|(key, _)| !Self::should_filter_env_var(key))
-            .collect();
-
-        if let Some(extra) = env_vars {
-            for (k, v) in extra {
-                if !Self::should_filter_env_var(k) {
-                    filtered_env.push((k.clone(), v.clone()));
-                }
-            }
-        }
+        let filtered_env = filtered_env_vars(env_vars, ExplicitEnvPolicy::FilterSensitive);
 
         let effective_dir =
             working_dir.map_or_else(|| self.working_directory.clone(), std::path::PathBuf::from);
@@ -376,18 +430,7 @@ impl Sandbox for LocalSandbox {
     ) -> crate::Result<ExecStreamingResult> {
         let start = Instant::now();
 
-        let mut filtered_env: Vec<(String, String)> = process_env_vars()
-            .into_iter()
-            .filter(|(key, _)| !Self::should_filter_env_var(key))
-            .collect();
-
-        if let Some(extra) = env_vars {
-            for (k, v) in extra {
-                if !Self::should_filter_env_var(k) {
-                    filtered_env.push((k.clone(), v.clone()));
-                }
-            }
-        }
+        let filtered_env = filtered_env_vars(env_vars, ExplicitEnvPolicy::FilterSensitive);
 
         let effective_dir =
             working_dir.map_or_else(|| self.working_directory.clone(), std::path::PathBuf::from);
@@ -467,16 +510,7 @@ impl Sandbox for LocalSandbox {
         env_vars: Option<&std::collections::HashMap<String, String>>,
         cancel_token: Option<CancellationToken>,
     ) -> crate::Result<StdioProcess> {
-        let mut filtered_env: Vec<(String, String)> = process_env_vars()
-            .into_iter()
-            .filter(|(key, _)| !Self::should_filter_env_var(key))
-            .collect();
-
-        if let Some(extra) = env_vars {
-            for (k, v) in extra {
-                filtered_env.push((k.clone(), v.clone()));
-            }
-        }
+        let filtered_env = filtered_env_vars(env_vars, ExplicitEnvPolicy::TrustCaller);
 
         let effective_dir =
             working_dir.map_or_else(|| self.working_directory.clone(), std::path::PathBuf::from);
@@ -514,10 +548,7 @@ impl Sandbox for LocalSandbox {
         let stderr_collector = StderrCollector::new(DEFAULT_EXEC_OUTPUT_TAIL_BYTES);
         stderr_collector.spawn_reader(stderr);
 
-        let handle = StdioProcessHandle::new(LocalStdioProcessControl {
-            child:       TokioMutex::new(child),
-            termination: TokioMutex::new(None),
-        });
+        let handle = StdioProcessHandle::new(LocalStdioProcessControl::new(child));
 
         if let Some(token) = cancel_token {
             let handle_for_cancel = handle.clone();

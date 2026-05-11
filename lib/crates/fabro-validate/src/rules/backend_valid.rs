@@ -1,4 +1,5 @@
 use fabro_graphviz::graph::{AttrValue, Graph};
+use fabro_types::LlmBackend;
 
 use crate::{Diagnostic, LintRule, Severity};
 
@@ -7,8 +8,6 @@ pub(super) fn rule() -> Box<dyn LintRule> {
 }
 
 struct Rule;
-
-const VALID_BACKENDS: &[&str] = &["api", "cli", "acp"];
 
 impl LintRule for Rule {
     fn name(&self) -> &'static str {
@@ -19,16 +18,17 @@ impl LintRule for Rule {
         let mut diagnostics = Vec::new();
         for node in graph.nodes.values() {
             if let Some(backend) = node.attrs.get("backend").and_then(AttrValue::as_str) {
-                if !VALID_BACKENDS.contains(&backend) {
+                if backend.parse::<LlmBackend>().is_err() {
                     diagnostics.push(Diagnostic {
                         rule:     self.name().to_string(),
                         severity: Severity::Error,
                         message:  format!(
-                            "unsupported LLM backend \"{backend}\"; expected one of: api, cli, acp"
+                            "unsupported LLM backend \"{backend}\"; expected one of: {}",
+                            LlmBackend::EXPECTED
                         ),
                         node_id:  Some(node.id.clone()),
                         edge:     None,
-                        fix:      Some("Use one of: api, cli, acp".to_string()),
+                        fix:      Some(format!("Use one of: {}", LlmBackend::EXPECTED)),
                     });
                 }
             }
