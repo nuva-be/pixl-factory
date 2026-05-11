@@ -9,12 +9,12 @@ This plan is **not** a template for adding automated test coverage — it exists
 Live list of bugs and notable observations surfaced during the sweep. Each entry links back to the scenario where it was found.
 
 ### Bugs / mismatches
-- **I7 / I9 — Misleading "Run not found." on terminal runs**: `message` or `cancel` against a terminal run returns `Run not found.` (which means "not in managed-runs map"), not a status-appropriate error like "run is already terminal". Confusing to operators.
 - **I10 — Archived runs not filtered from default search**: `fabro_run_search` with no `archived` filter returns archived runs alongside active ones. Most systems hide archived by default; consider flipping the default.
 
 ### Rechecked / no longer open
 - **C4 — `inputs` schema/runtime mismatch**: fixed by narrowing MCP input values to scalar JSON (`string`, `boolean`, `integer`, `number`) and rejecting arrays/objects locally with scalar-only errors. Re-tested on 2026-05-11 against `127.0.0.1:32276`; `tools/list` now advertises scalar-only `inputs.additionalProperties`.
 - **C5 — Misleading null-input error message**: fixed. Re-tested on 2026-05-11; null now returns ``input `maybe` cannot be null; use a string, boolean, or number``.
+- **I7 / I9 — Misleading "Run not found." on terminal runs**: fixed on 2026-05-11 in the server API layer. `message`/steer against a durable terminal run that no longer has a live managed engine now returns `409` with `run_not_steerable`; `cancel` returns `409` with `Run is already terminal and cannot be cancelled.` True missing runs still return `404`.
 - **I15 / I16 — yes/no answer flow**: re-tested on 2026-05-11 against `fabro server` `0.230.0-nightly.0` at `127.0.0.1:32276`. `answer=true` and `answer=false` both submit successfully for the bundled `interview` workflow's first `yes_no` question. `true` advanced the run to the next `confirmation` question.
 - **I22 — numeric answer local validation**: re-tested on 2026-05-11 against the same server. `answer=42` now returns `unsupported answer value: 42; expected boolean, string, or object` from the MCP layer before reaching the API.
 - **X6 — Cursor/filter ordering**: simplified on 2026-05-11 by applying search filters before sorting and applying the `after` cursor. This prevents unrelated runs outside the filtered result set from trimming the page. Pagination is explicitly not snapshot-isolated; a new matching run inserted before the cursor during traversal appears when the client starts a new search.
@@ -184,11 +184,11 @@ Source: `run_tools/interact.rs:201`
 - [ ] **I4** Steer a running LLM agent — **DEFERRED** (requires an active LLM agent stage; would burn LLM tokens; can be exercised manually once the answer bug below is resolved).
 - [ ] **I5** `interrupt=true` — **DEFERRED** along with I4.
 - [x] **I6** Missing `message` → `message is required for action message`. — **PASS**.
-- [x] **I7** Message a terminal run → `Run not found.` — **FINDING / BUG**: should distinguish "run is terminal / no managed engine" from "run doesn't exist".
+- [x] **I7** Message a terminal run → initially returned `Run not found.`. — **FIXED**: durable terminal runs without a live managed engine now return `409 run_not_steerable`; true missing runs remain `404`.
 
 #### `cancel`
 - [x] **I8** Cancel a `gh-list` run during `starting`. Returns summary at request time (status=`starting`). Subsequent `gather` returned terminal `failed` within 5s; `get` projection shows `status: {kind: "failed", reason: "cancelled"}` and `conclusion.failure_reason: "Pipeline cancelled"`. — **PASS** + **observation**: `cancel`'s returned summary is a snapshot at request time, not the eventual terminal status.
-- [x] **I9** Cancel an already-terminal run → `Run not found.` — **FINDING / BUG**: same misleading error as I7. Should say "run is terminal" instead.
+- [x] **I9** Cancel an already-terminal run → initially returned `Run not found.`. — **FIXED**: durable terminal runs without a live managed engine now return `409` with `Run is already terminal and cannot be cancelled.`; true missing runs remain `404`.
 
 #### `archive` / `unarchive`
 - [x] **I10** Archive terminal run → `archived=true` in summary; visible via `search archived=true`. — **PASS**. **BUT FINDING**: archived runs are **not** filtered out of default search (no archive filter applied unless explicitly requested).
