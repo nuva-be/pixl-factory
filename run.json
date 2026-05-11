@@ -408,8 +408,8 @@
     "kind": "blocked",
     "blocked_reason": "human_input_required"
   },
-  "status_updated_at": "2026-05-11T19:02:55.655434Z",
-  "last_event_at": "2026-05-11T19:02:55.655434Z",
+  "status_updated_at": "2026-05-11T19:03:48.859245Z",
+  "last_event_at": "2026-05-11T19:03:48.859245Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -719,9 +719,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 65,
       "checkpoint": {
-        "timestamp": "2026-05-11T19:03:42.167442Z",
+        "timestamp": "2026-05-11T19:03:48.859025Z",
         "current_node": "multi_select",
         "completed_nodes": [
           "start",
@@ -733,13 +733,150 @@
         "node_retries": {},
         "context_values": {
           "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+          "failure_signature": "",
+          "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
+          "internal.retry_count.multi_select": 0,
+          "thread.multiple_choice.current_node": "multi_select",
+          "internal.fidelity": "compact",
+          "current_node": "multi_select",
+          "internal.node_visit_count": 1,
+          "human.gate.multiple_choice.label": "[R] Risks",
+          "internal.retry_count.multiple_choice": 0,
+          "human.gate.multiple_choice.answer": "R",
+          "internal.retry_count.start": 0,
+          "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
+          "human.gate.yes_no.answer": "yes",
+          "thread.confirmation.current_node": "multiple_choice",
+          "thread.yes_no.current_node": "confirmation",
+          "human.gate.yes_no.label": "[Y] Yes",
+          "internal.run_id": "01KRC69K2GZ1HA51KK8276VB44",
+          "graph.goal": "answer-bug-probe",
+          "internal.retry_count.yes_no": 0,
+          "internal.retry_count.confirmation": 0,
+          "internal.thread_id": "multiple_choice",
+          "graph.rankdir": "LR",
+          "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
+          "human.gate.label": "[S] Success criteria, [B] Blockers",
+          "human.gate.selected": "S,B",
+          "human.gate.multi_select.answer": "S, B",
+          "preferred_label": "[S] Success criteria, [B] Blockers",
+          "human.gate.confirmation.label": "[Y] Continue",
+          "outcome": "succeeded",
+          "failure_class": "",
+          "human.gate.confirmation.answer": "yes",
+          "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+          "internal.work_dir": "/home/daytona/workspace",
+          "thread.start.current_node": "yes_no"
+        },
+        "node_outcomes": {
+          "multi_select": {
+            "status": "succeeded",
+            "preferred_label": "[S] Success criteria, [B] Blockers",
+            "suggested_next_ids": [
+              "freeform"
+            ],
+            "context_updates": {
+              "human.gate.label": "[S] Success criteria, [B] Blockers",
+              "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
+              "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
+              "human.gate.selected": "S,B",
+              "human.gate.multi_select.answer": "S, B"
+            },
+            "usage": null
+          },
+          "multiple_choice": {
+            "status": "succeeded",
+            "preferred_label": "[R] Risks",
+            "suggested_next_ids": [
+              "multi_select"
+            ],
+            "context_updates": {
+              "human.gate.selected": "R",
+              "human.gate.label": "[R] Risks",
+              "human.gate.multiple_choice.answer": "R",
+              "human.gate.multiple_choice.label": "[R] Risks",
+              "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?"
+            },
+            "usage": null
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "confirmation": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Continue",
+            "suggested_next_ids": [
+              "multiple_choice"
+            ],
+            "context_updates": {
+              "human.gate.confirmation.label": "[Y] Continue",
+              "human.gate.label": "[Y] Continue",
+              "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
+              "human.gate.confirmation.answer": "yes",
+              "human.gate.selected": "Y"
+            },
+            "usage": null
+          },
+          "yes_no": {
+            "status": "succeeded",
+            "preferred_label": "[Y] Yes",
+            "suggested_next_ids": [
+              "confirmation"
+            ],
+            "context_updates": {
+              "human.gate.label": "[Y] Yes",
+              "human.gate.yes_no.answer": "yes",
+              "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
+              "human.gate.yes_no.label": "[Y] Yes",
+              "human.gate.selected": "Y"
+            },
+            "usage": null
+          }
+        },
+        "next_node_id": "freeform",
+        "git_commit_sha": "56ca45d8607e86c1988ec25b8da3d6772d948dab",
+        "node_visits": {
+          "confirmation": 1,
+          "multi_select": 1,
+          "start": 1,
+          "yes_no": 1,
+          "multiple_choice": 1
+        }
+      },
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
+    },
+    {
+      "seq": 0,
+      "checkpoint": {
+        "timestamp": "2026-05-11T19:04:29.315104Z",
+        "current_node": "freeform",
+        "completed_nodes": [
+          "start",
+          "yes_no",
+          "confirmation",
+          "multiple_choice",
+          "multi_select",
+          "freeform"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "human.gate.confirmation.question": "Confirm that you want to continue into more structured questions.",
           "human.gate.multiple_choice.answer": "R",
           "graph.goal": "answer-bug-probe",
           "human.gate.multi_select.question": "Which supporting areas should the final summary emphasize?",
           "human.gate.multi_select.answer": "S, B",
           "human.gate.confirmation.label": "[Y] Continue",
+          "internal.retry_count.freeform": 0,
           "internal.retry_count.yes_no": 0,
-          "internal.thread_id": "multiple_choice",
+          "internal.thread_id": "multi_select",
+          "thread.multi_select.current_node": "freeform",
           "preferred_label": "[S] Success criteria, [B] Blockers",
           "internal.retry_count.multi_select": 0,
           "human.gate.yes_no.question": "Is this interview workflow easy to follow so far?",
@@ -748,15 +885,18 @@
           "thread.confirmation.current_node": "multiple_choice",
           "graph.rankdir": "LR",
           "human.gate.yes_no.label": "[Y] Yes",
-          "current_node": "multi_select",
+          "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
+          "current_node": "freeform",
           "internal.run_id": "01KRC69K2GZ1HA51KK8276VB44",
           "human.gate.confirmation.answer": "yes",
+          "human.gate.text": "\"QA probe — testing the answer wire path\"",
           "internal.node_visit_count": 1,
-          "human.gate.selected": "S,B",
+          "human.gate.selected": "freeform",
           "human.gate.multiple_choice.question": "Which theme should be the center of the final summary?",
           "human.gate.multi_select.label": "[S] Success criteria, [B] Blockers",
+          "human.gate.freeform.answer": "\"QA probe — testing the answer wire path\"",
           "failure_class": "",
-          "human.gate.label": "[S] Success criteria, [B] Blockers",
+          "human.gate.label": "\"QA probe — testing the answer wire path\"",
           "human.gate.yes_no.answer": "yes",
           "internal.retry_count.multiple_choice": 0,
           "thread.yes_no.current_node": "confirmation",
@@ -832,15 +972,30 @@
               "human.gate.multi_select.answer": "S, B"
             },
             "usage": null
+          },
+          "freeform": {
+            "status": "succeeded",
+            "suggested_next_ids": [
+              "summarize"
+            ],
+            "context_updates": {
+              "human.gate.selected": "freeform",
+              "human.gate.text": "\"QA probe — testing the answer wire path\"",
+              "human.gate.freeform.question": "Add any final context, constraints, or nuance for the summary.",
+              "human.gate.freeform.answer": "\"QA probe — testing the answer wire path\"",
+              "human.gate.label": "\"QA probe — testing the answer wire path\""
+            },
+            "usage": null
           }
         },
-        "next_node_id": "freeform",
+        "next_node_id": "summarize",
         "node_visits": {
           "yes_no": 1,
           "multiple_choice": 1,
           "multi_select": 1,
           "confirmation": 1,
-          "start": 1
+          "start": 1,
+          "freeform": 1
         }
       },
       "diff": {}
@@ -862,33 +1017,15 @@
   "pull_request": null,
   "superseded_by": null,
   "pending_interviews": {
-    "01KRC6QGD70J9XNHA3FXJP02EP": {
+    "01KRC6S4BVWT0PNEFHC2DWH0Y3": {
       "question": {
-        "id": "01KRC6QGD70J9XNHA3FXJP02EP",
-        "text": "Which supporting areas should the final summary emphasize?",
-        "stage": "multi_select",
-        "question_type": "multi_select",
-        "options": [
-          {
-            "key": "S",
-            "label": "[S] Success criteria"
-          },
-          {
-            "key": "B",
-            "label": "[B] Blockers"
-          },
-          {
-            "key": "D",
-            "label": "[D] Decisions needed"
-          },
-          {
-            "key": "N",
-            "label": "[N] Next steps"
-          }
-        ],
-        "allow_freeform": false
+        "id": "01KRC6S4BVWT0PNEFHC2DWH0Y3",
+        "text": "Add any final context, constraints, or nuance for the summary.",
+        "stage": "freeform",
+        "question_type": "freeform",
+        "allow_freeform": true
       },
-      "started_at": "2026-05-11T19:02:55.655404Z"
+      "started_at": "2026-05-11T19:03:48.859228Z"
     }
   },
   "stages": {
@@ -954,7 +1091,12 @@
       "first_event_seq": 56,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-11T19:03:42.167332Z"
+      },
       "provider_used": null,
       "diff": null,
       "script_invocation": null,
@@ -963,6 +1105,7 @@
       "output": null,
       "started_at": "2026-05-11T19:02:55.655356Z",
       "handler": "human",
+      "duration_ms": 46511,
       "usage": {
         "input_tokens": 0,
         "output_tokens": 0,
@@ -971,7 +1114,7 @@
         "cache_read_tokens": 0,
         "cache_write_tokens": 0
       },
-      "state": "running"
+      "state": "succeeded"
     },
     "yes_no@1": {
       "first_event_seq": 20,
@@ -1030,6 +1173,29 @@
         "cache_write_tokens": 0
       },
       "state": "succeeded"
+    },
+    "freeform@1": {
+      "first_event_seq": 68,
+      "prompt": null,
+      "response": null,
+      "completion": null,
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-11T19:03:48.859194Z",
+      "handler": "human",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "running"
     }
   }
 }
