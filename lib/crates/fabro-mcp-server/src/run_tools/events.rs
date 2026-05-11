@@ -1,0 +1,294 @@
+use std::sync::Arc;
+
+use fabro_client::Client;
+use fabro_types::EventEnvelope;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::common;
+use super::common::{ToolError, ToolResult};
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RunEventsAction {
+    List,
+    Details,
+    Search,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct FabroRunEventsParams {
+    pub(crate) action:             RunEventsAction,
+    pub(crate) run_id:             String,
+    pub(crate) event_types:        Option<Vec<String>>,
+    pub(crate) categories:         Option<Vec<String>>,
+    pub(crate) direction:          Option<String>,
+    pub(crate) created_after:      Option<String>,
+    pub(crate) created_before:     Option<String>,
+    pub(crate) first:              Option<usize>,
+    pub(crate) after:              Option<u32>,
+    pub(crate) event_ids:          Option<Vec<String>>,
+    pub(crate) offset:             Option<usize>,
+    pub(crate) limit:              Option<usize>,
+    pub(crate) max_content_length: Option<usize>,
+    pub(crate) query:              Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct ValidatedRunEvents {
+    pub(crate) raw: FabroRunEventsParams,
+}
+
+impl TryFrom<FabroRunEventsParams> for ValidatedRunEvents {
+    type Error = ToolError;
+
+    fn try_from(params: FabroRunEventsParams) -> Result<Self, Self::Error> {
+        if params.run_id.trim().is_empty() {
+            return Err(ToolError::message("run_id is required"));
+        }
+        let first = params.first.or(params.limit).unwrap_or(50);
+        if first > 200 {
+            return Err(ToolError::message("first must be <= 200"));
+        }
+        if let Some(direction) = params.direction.as_deref() {
+            if !matches!(direction, "asc" | "desc") {
+                return Err(ToolError::message("direction must be `asc` or `desc`"));
+            }
+        }
+        if let Some(created_after) = params.created_after.as_deref() {
+            common::parse_datetime_filter("created_after", created_after)?;
+        }
+        if let Some(created_before) = params.created_before.as_deref() {
+            common::parse_datetime_filter("created_before", created_before)?;
+        }
+        if matches!(params.action, RunEventsAction::Details)
+            && params.event_ids.as_ref().is_none_or(Vec::is_empty)
+        {
+            return Err(ToolError::message(
+                "event_ids is required for details action",
+            ));
+        }
+        if matches!(params.action, RunEventsAction::Search)
+            && params
+                .query
+                .as_deref()
+                .is_none_or(|query| query.trim().is_empty())
+        {
+            return Err(ToolError::message("query is required for search action"));
+        }
+        Ok(Self { raw: params })
+    }
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct RunEventsResult {
+    pub(crate) run_id:      String,
+    pub(crate) action:      RunEventsAction,
+    pub(crate) events:      Vec<RunEventResult>,
+    pub(crate) next_cursor: Option<u32>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub(crate) struct RunEventResult {
+    pub(crate) event_id:  String,
+    pub(crate) sequence:  u32,
+    pub(crate) event:     Value,
+    pub(crate) truncated: bool,
+}
+
+pub(crate) async fn run_events(
+    client: Arc<Client>,
+    params: ValidatedRunEvents,
+) -> ToolResult<RunEventsResult> {
+    let raw = params.raw;
+    let run_id = client
+        .resolve_run(&raw.run_id)
+        .await
+        .map_err(|err| ToolError::from_anyhow(&err))?
+        .id;
+    let descending = raw.direction.as_deref() == Some("desc");
+    let fetch_after = if descending { None } else { raw.after };
+    let mut events = client
+        .list_run_events(&run_id, fetch_after, event_fetch_limit(&raw))
+        .await
+        .map_err(|err| ToolError::from_anyhow(&err))?;
+    if descending {
+        if let Some(after) = raw.after {
+            events.retain(|event| event.seq < after);
+        }
+    }
+    filter_events(&mut events, &raw)?;
+    if descending {
+        events.reverse();
+    }
+    let offset = raw.offset.unwrap_or(0);
+    let first = raw.first.or(raw.limit).unwrap_or(50).min(200);
+    let page = events
+        .into_iter()
+        .skip(offset)
+        .take(first)
+        .collect::<Vec<_>>();
+    let max_content_length = raw.max_content_length.unwrap_or(20_000);
+    let results = page
+        .iter()
+        .map(|event| run_event_result(event, max_content_length))
+        .collect::<ToolResult<Vec<_>>>()?;
+    let next_cursor = page.last().map(|event| {
+        if descending {
+            event.seq
+        } else {
+            event.seq.saturating_add(1)
+        }
+    });
+
+    Ok(RunEventsResult {
+        run_id: run_id.to_string(),
+        action: raw.action,
+        events: results,
+        next_cursor,
+    })
+}
+
+pub(crate) fn run_events_text(result: &RunEventsResult) -> String {
+    format!("returned {} Fabro event(s)", result.events.len())
+}
+
+fn event_fetch_limit(params: &FabroRunEventsParams) -> Option<usize> {
+    let needs_full_scan = params.event_ids.is_some()
+        || params.event_types.is_some()
+        || params.categories.is_some()
+        || params.created_after.is_some()
+        || params.created_before.is_some()
+        || params.direction.as_deref() == Some("desc")
+        || matches!(
+            params.action,
+            RunEventsAction::Details | RunEventsAction::Search
+        );
+    if needs_full_scan {
+        return None;
+    }
+
+    let requested = params
+        .first
+        .or(params.limit)
+        .unwrap_or(50)
+        .saturating_add(params.offset.unwrap_or(0));
+    (requested <= 200).then_some(requested.max(1))
+}
+
+fn filter_events(events: &mut Vec<EventEnvelope>, params: &FabroRunEventsParams) -> ToolResult<()> {
+    if let Some(event_ids) = params.event_ids.as_ref() {
+        events.retain(|event| event_ids.contains(&event.event.id));
+    }
+    if let Some(event_types) = params.event_types.as_ref() {
+        events.retain(|event| {
+            event_types
+                .iter()
+                .any(|event_type| event_type == event.event.event_name())
+        });
+    }
+    if let Some(categories) = params.categories.as_ref() {
+        events.retain(|event| {
+            let category = event
+                .event
+                .event_name()
+                .split('.')
+                .next()
+                .unwrap_or_default();
+            categories.iter().any(|candidate| candidate == category)
+        });
+    }
+    if let Some(created_after) = params.created_after.as_deref() {
+        let cutoff = common::parse_datetime_filter("created_after", created_after)?;
+        events.retain(|event| event.event.ts >= cutoff);
+    }
+    if let Some(created_before) = params.created_before.as_deref() {
+        let cutoff = common::parse_datetime_filter("created_before", created_before)?;
+        events.retain(|event| event.event.ts <= cutoff);
+    }
+    if matches!(params.action, RunEventsAction::Search) {
+        if let Some(query) = params.query.as_deref() {
+            events.retain(|event| {
+                serde_json::to_string(event).is_ok_and(|serialized| serialized.contains(query))
+            });
+        }
+    }
+    Ok(())
+}
+
+fn run_event_result(
+    event: &EventEnvelope,
+    max_content_length: usize,
+) -> ToolResult<RunEventResult> {
+    let mut serialized = serde_json::to_string(event)
+        .map_err(|err| ToolError::message(format!("failed to serialize event: {err}")))?;
+    let truncated = serialized.len() > max_content_length;
+    let event_value = if truncated {
+        serialized.truncate(floor_char_boundary(&serialized, max_content_length));
+        Value::String(serialized)
+    } else {
+        serde_json::to_value(event)
+            .map_err(|err| ToolError::message(format!("failed to serialize event: {err}")))?
+    };
+    Ok(RunEventResult {
+        event_id: event.event.id.clone(),
+        sequence: event.seq,
+        event: event_value,
+        truncated,
+    })
+}
+
+fn floor_char_boundary(value: &str, max_len: usize) -> usize {
+    let mut boundary = max_len.min(value.len());
+    while !value.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    boundary
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use fabro_types::{EventBody, EventEnvelope, RunEvent, fixtures};
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    #[test]
+    fn run_event_result_truncates_at_utf8_boundary() {
+        let event = EventEnvelope {
+            seq:   1,
+            event: RunEvent {
+                id:                 "evt_utf8".to_string(),
+                ts:                 Utc::now(),
+                run_id:             fixtures::RUN_1,
+                node_id:            None,
+                node_label:         None,
+                stage_id:           None,
+                parallel_group_id:  None,
+                parallel_branch_id: None,
+                session_id:         None,
+                parent_session_id:  None,
+                tool_call_id:       None,
+                actor:              None,
+                body:               EventBody::Unknown {
+                    name:       "test.utf8".to_string(),
+                    properties: json!({ "message": "éééé" }),
+                },
+            },
+        };
+        let serialized = serde_json::to_string(&event).unwrap();
+        let first_multibyte = serialized
+            .find('é')
+            .expect("serialized event should contain é");
+
+        let result = run_event_result(&event, first_multibyte + 1).unwrap();
+
+        assert!(result.truncated);
+        let Value::String(event_json) = result.event else {
+            panic!("truncated events should return string payloads");
+        };
+        assert!(event_json.is_char_boundary(event_json.len()));
+    }
+}
