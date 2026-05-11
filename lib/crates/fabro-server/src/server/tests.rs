@@ -7164,6 +7164,150 @@ fn active_api_stage_projection_ignores_stale_deactivation() {
     );
 }
 
+fn acp_event_for_stage(run_id: &RunId, event: &workflow_event::Event) -> fabro_types::RunEvent {
+    workflow_event::to_run_event_at(
+        run_id,
+        event,
+        Utc::now(),
+        Some(&workflow_event::StageScope {
+            node_id:            "agent".to_string(),
+            visit:              1,
+            parallel_group_id:  None,
+            parallel_branch_id: None,
+        }),
+    )
+}
+
+#[tokio::test]
+async fn steer_with_active_acp_stage_returns_non_steerable_conflict() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = fixtures::RUN_1;
+    let (control_tx, _control_rx) = tokio::sync::mpsc::channel(1);
+    let _temp_dir = insert_running_control_run(
+        &state,
+        run_id,
+        Some(RunAnswerTransport::Subprocess { control_tx }),
+    );
+
+    let started = acp_event_for_stage(&run_id, &workflow_event::Event::AgentAcpStarted {
+        node_id:  "agent".to_string(),
+        visit:    1,
+        mode:     "acp".to_string(),
+        provider: "openai".to_string(),
+        model:    "fake-acp".to_string(),
+        command:  "python fake_agent.py".to_string(),
+    });
+    update_live_run_from_event(&state, run_id, &started);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api(&format!("/runs/{run_id}/steer")))
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"text":"try again"}"#))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_json(response.into_body()).await;
+    assert_eq!(body["errors"][0]["code"], "agent_not_steerable");
+}
+
+#[tokio::test]
+async fn active_acp_stage_marker_clears_on_terminal_paths() {
+    let terminal_events: Vec<workflow_event::Event> = vec![
+        workflow_event::Event::AgentAcpCompleted {
+            node_id:     "agent".to_string(),
+            stdout:      "done".to_string(),
+            stderr:      String::new(),
+            stop_reason: "end_turn".to_string(),
+            duration_ms: 42,
+        },
+        workflow_event::Event::AgentAcpCancelled {
+            node_id:     "agent".to_string(),
+            stdout:      "partial".to_string(),
+            stderr:      "cancelled".to_string(),
+            duration_ms: 7,
+        },
+        workflow_event::Event::AgentAcpTimedOut {
+            node_id:     "agent".to_string(),
+            stdout:      "partial".to_string(),
+            stderr:      "timeout".to_string(),
+            duration_ms: 99,
+        },
+        workflow_event::Event::StageCompleted {
+            node_id: "agent".to_string(),
+            name: "agent".to_string(),
+            index: 0,
+            duration_ms: 1,
+            status: "success".to_string(),
+            preferred_label: None,
+            suggested_next_ids: Vec::new(),
+            billing: None,
+            failure: None,
+            notes: None,
+            files_touched: Vec::new(),
+            context_updates: None,
+            jump_to_node: None,
+            context_values: None,
+            node_visits: None,
+            loop_failure_signatures: None,
+            restart_failure_signatures: None,
+            response: None,
+            attempt: 1,
+            max_attempts: 1,
+        },
+        workflow_event::Event::StageFailed {
+            node_id:     "agent".to_string(),
+            name:        "agent".to_string(),
+            index:       0,
+            failure:     FailureDetail::new("failed", FailureCategory::Deterministic),
+            will_retry:  false,
+            duration_ms: 1,
+            billing:     None,
+            actor:       None,
+        },
+    ];
+
+    for terminal_event in terminal_events {
+        let state = test_app_state();
+        let app = crate::test_support::build_test_router(Arc::clone(&state));
+        let run_id = fixtures::RUN_1;
+        let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(1);
+        let _temp_dir = insert_running_control_run(
+            &state,
+            run_id,
+            Some(RunAnswerTransport::Subprocess { control_tx }),
+        );
+        let started = acp_event_for_stage(&run_id, &workflow_event::Event::AgentAcpStarted {
+            node_id:  "agent".to_string(),
+            visit:    1,
+            mode:     "acp".to_string(),
+            provider: "openai".to_string(),
+            model:    "fake-acp".to_string(),
+            command:  "python fake_agent.py".to_string(),
+        });
+        update_live_run_from_event(&state, run_id, &started);
+        let terminal = acp_event_for_stage(&run_id, &terminal_event);
+        update_live_run_from_event(&state, run_id, &terminal);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(api(&format!("/runs/{run_id}/steer")))
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"text":"try again"}"#))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_status!(response, StatusCode::ACCEPTED).await;
+        let envelope = control_rx.recv().await.unwrap();
+        assert!(matches!(
+            envelope.message,
+            WorkerControlMessage::Steer { ref text, .. } if text == "try again"
+        ));
+    }
+}
+
 #[tokio::test]
 async fn get_graph_returns_svg() {
     let state = test_app_state();

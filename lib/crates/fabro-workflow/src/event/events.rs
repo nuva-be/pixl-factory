@@ -621,6 +621,33 @@ pub enum Event {
         stderr:      String,
         duration_ms: u64,
     },
+    AgentAcpStarted {
+        node_id:  String,
+        visit:    u32,
+        mode:     String,
+        provider: String,
+        model:    String,
+        command:  String,
+    },
+    AgentAcpCompleted {
+        node_id:     String,
+        stdout:      String,
+        stderr:      String,
+        stop_reason: String,
+        duration_ms: u64,
+    },
+    AgentAcpCancelled {
+        node_id:     String,
+        stdout:      String,
+        stderr:      String,
+        duration_ms: u64,
+    },
+    AgentAcpTimedOut {
+        node_id:     String,
+        stdout:      String,
+        stderr:      String,
+        duration_ms: u64,
+    },
     PullRequestCreated {
         pr_url:      String,
         pr_number:   u64,
@@ -1377,6 +1404,36 @@ impl Event {
                 ..
             } => {
                 debug!(node_id, duration_ms, "Agent CLI timed out");
+            }
+            Self::AgentAcpStarted {
+                node_id,
+                provider,
+                model,
+                ..
+            } => {
+                debug!(node_id, provider, model, "Agent ACP started");
+            }
+            Self::AgentAcpCompleted {
+                node_id,
+                stop_reason,
+                duration_ms,
+                ..
+            } => {
+                debug!(node_id, stop_reason, duration_ms, "Agent ACP completed");
+            }
+            Self::AgentAcpCancelled {
+                node_id,
+                duration_ms,
+                ..
+            } => {
+                debug!(node_id, duration_ms, "Agent ACP cancelled");
+            }
+            Self::AgentAcpTimedOut {
+                node_id,
+                duration_ms,
+                ..
+            } => {
+                debug!(node_id, duration_ms, "Agent ACP timed out");
             }
             Self::PullRequestCreated {
                 pr_url,

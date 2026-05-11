@@ -124,12 +124,14 @@ async fn control_run(
         //   - If at least one API-mode session is active → forward.
         //   - Else if no agent stages are active at all → forward (worker hub buffers
         //     for the next session).
-        //   - Else (active agents exist but all are CLI-mode) → 409.
-        if managed_run.active_api_stages.is_empty() && !managed_run.active_cli_stages.is_empty() {
+        //   - Else (active agents exist but all are non-steerable) → 409.
+        if managed_run.active_api_stages.is_empty()
+            && !managed_run.active_non_steerable_agent_stages.is_empty()
+        {
             return ApiError::with_code(
                 StatusCode::CONFLICT,
-                "All currently running agent stages are CLI-mode and cannot be steered.",
-                "cli_agent_not_steerable",
+                "All currently running agent stages use a non-steerable backend.",
+                "agent_not_steerable",
             )
             .into_response();
         }

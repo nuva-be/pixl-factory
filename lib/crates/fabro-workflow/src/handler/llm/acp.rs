@@ -9,6 +9,7 @@ use fabro_agent::{Sandbox, StaticEnvProvider, ToolEnvProvider};
 use fabro_auth::{CliAgentKind, CredentialResolver, CredentialUsage, ResolvedCredential};
 use fabro_graphviz::graph::Node;
 use fabro_model::Provider;
+use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
 use super::super::agent::{CodergenBackend, CodergenResult};
@@ -16,7 +17,7 @@ use super::cli::{AgentCli, process_env_var};
 use super::{changed_files, node_runtime};
 use crate::context::Context;
 use crate::error::Error;
-use crate::event::{Emitter, RunNoticeCode, RunNoticeLevel, StageScope};
+use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel, StageScope};
 
 pub struct AgentAcpBackend {
     model: String,
@@ -71,11 +72,12 @@ impl AgentAcpBackend {
         node: &Node,
         prompt: String,
         emitter: &Arc<Emitter>,
+        stage_scope: &StageScope,
         sandbox: &Arc<dyn Sandbox>,
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
         let files_before = changed_files::detect_changed_files(sandbox).await;
-        let _model = node.model().unwrap_or(&self.model);
+        let model = node.model().unwrap_or(&self.model);
         let provider = node
             .provider()
             .and_then(|value| value.parse::<Provider>().ok())
@@ -98,7 +100,21 @@ impl AgentAcpBackend {
             Arc::new(move || emitter.touch()) as Arc<dyn Fn() + Send + Sync>
         };
 
-        let result = fabro_acp::run_acp_turn(AcpRunRequest {
+        let command_display = command.to_string();
+        emitter.emit_scoped(
+            &Event::AgentAcpStarted {
+                node_id:  node.id.clone(),
+                visit:    stage_scope.visit,
+                mode:     "acp".to_string(),
+                provider: provider.to_string(),
+                model:    model.to_string(),
+                command:  command_display,
+            },
+            stage_scope,
+        );
+
+        let launch_start = std::time::Instant::now();
+        let result = match fabro_acp::run_acp_turn(AcpRunRequest {
             command,
             prompt,
             cwd: sandbox.working_directory().to_string(),
@@ -109,7 +125,62 @@ impl AgentAcpBackend {
             on_activity: Some(on_activity),
         })
         .await
-        .map_err(acp_error_to_workflow)?;
+        {
+            Ok(result) => {
+                emitter.emit_scoped(
+                    &Event::AgentAcpCompleted {
+                        node_id:     node.id.clone(),
+                        stdout:      result.text.clone(),
+                        stderr:      result.stderr.clone(),
+                        stop_reason: stop_reason_to_string(&result.stop_reason),
+                        duration_ms: result.duration_ms,
+                    },
+                    stage_scope,
+                );
+                result
+            }
+            Err(AcpError::Cancelled) => {
+                emitter.emit_scoped(
+                    &Event::AgentAcpCancelled {
+                        node_id:     node.id.clone(),
+                        stdout:      String::new(),
+                        stderr:      String::new(),
+                        duration_ms: elapsed_ms(launch_start),
+                    },
+                    stage_scope,
+                );
+                return Err(Error::Cancelled);
+            }
+            Err(AcpError::TimedOut { stderr }) => {
+                emitter.emit_scoped(
+                    &Event::AgentAcpTimedOut {
+                        node_id:     node.id.clone(),
+                        stdout:      String::new(),
+                        stderr:      stderr.clone(),
+                        duration_ms: elapsed_ms(launch_start),
+                    },
+                    stage_scope,
+                );
+                return Err(acp_error_to_workflow(AcpError::TimedOut { stderr }));
+            }
+            Err(AcpError::StopReason { stop_reason, text }) => {
+                emitter.emit_scoped(
+                    &Event::AgentAcpCompleted {
+                        node_id:     node.id.clone(),
+                        stdout:      text.clone(),
+                        stderr:      String::new(),
+                        stop_reason: stop_reason.clone(),
+                        duration_ms: elapsed_ms(launch_start),
+                    },
+                    stage_scope,
+                );
+                return Err(acp_error_to_workflow(AcpError::StopReason {
+                    stop_reason,
+                    text,
+                }));
+            }
+            Err(error) => return Err(acp_error_to_workflow(error)),
+        };
 
         let (files_touched, last_file_touched) =
             changed_files::files_touched_since(sandbox, &files_before).await;
@@ -201,15 +272,23 @@ impl CodergenBackend for AgentAcpBackend {
         &self,
         node: &Node,
         prompt: &str,
-        _context: &Context,
+        context: &Context,
         _thread_id: Option<&str>,
         emitter: &Arc<Emitter>,
         sandbox: &Arc<dyn Sandbox>,
         _tool_hooks: Option<Arc<dyn fabro_agent::ToolHookCallback>>,
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
-        self.run_turn(node, prompt.to_string(), emitter, sandbox, cancel_token)
-            .await
+        let stage_scope = StageScope::for_handler(context, &node.id);
+        self.run_turn(
+            node,
+            prompt.to_string(),
+            emitter,
+            &stage_scope,
+            sandbox,
+            cancel_token,
+        )
+        .await
     }
 
     async fn one_shot(
@@ -218,7 +297,7 @@ impl CodergenBackend for AgentAcpBackend {
         prompt: &str,
         system_prompt: Option<&str>,
         emitter: &Arc<Emitter>,
-        _stage_scope: &StageScope,
+        stage_scope: &StageScope,
         sandbox: &Arc<dyn Sandbox>,
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
@@ -226,9 +305,16 @@ impl CodergenBackend for AgentAcpBackend {
             Some(system_prompt) => format!("System:\n{system_prompt}\n\nUser:\n{prompt}"),
             None => prompt.to_string(),
         };
-        self.run_turn(node, prompt, emitter, sandbox, cancel_token)
+        self.run_turn(node, prompt, emitter, stage_scope, sandbox, cancel_token)
             .await
     }
+}
+
+fn stop_reason_to_string(stop_reason: &(impl serde::Serialize + std::fmt::Debug)) -> String {
+    serde_json::to_value(stop_reason)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| format!("{stop_reason:?}"))
 }
 
 fn acp_error_to_workflow(error: AcpError) -> Error {
