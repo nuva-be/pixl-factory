@@ -12,11 +12,12 @@ use std::io::{BufRead as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use fabro_client::{AuthEntry, AuthStore, DevTokenEntry, OAuthEntry, StoredSubject};
 use fabro_mcp::client::McpClient;
 use fabro_mcp::config::{McpServerSettings, McpTransport};
 use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
+use fabro_types::RunId;
 use httpmock::Method::{GET, POST};
 use httpmock::MockServer;
 
@@ -865,6 +866,64 @@ async fn mcp_search_orders_by_started_timestamp_before_created_timestamp() {
 
     assert_eq!(result["runs"][0]["run_id"], running_id);
     assert_eq!(result["runs"][1]["run_id"], submitted_id);
+    list_runs.assert();
+    client
+        .shutdown()
+        .await
+        .expect("MCP client should shut down");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mcp_search_orders_submitted_runs_by_created_timestamp_not_run_id_timestamp() {
+    let context = test_context!();
+    let server = MockServer::start();
+    let target_url = format!("{}/api/v1", server.base_url());
+    let target: fabro_client::ServerTarget = target_url.parse().unwrap();
+    seed_dev_token_auth(&context.home_dir, &target, TEST_DEV_TOKEN);
+    let newer_created_id = run_id_with_timestamp("2026-04-05T12:00:00Z", 1);
+    let older_created_id = run_id_with_timestamp("2026-04-05T12:40:00Z", 1);
+    let mut newer_created = remote_run_summary_json(
+        &newer_created_id,
+        "Simple",
+        "simple",
+        "Created later",
+        &serde_json::json!({ "kind": "submitted" }),
+        "2026-04-05T12:30:00Z",
+    );
+    newer_created["timestamps"]["started_at"] = serde_json::Value::Null;
+    let mut older_created = remote_run_summary_json(
+        &older_created_id,
+        "Simple",
+        "simple",
+        "Created earlier",
+        &serde_json::json!({ "kind": "submitted" }),
+        "2026-04-05T12:10:00Z",
+    );
+    older_created["timestamps"]["started_at"] = serde_json::Value::Null;
+    let list_runs = server.mock(|when, then| {
+        when.method(GET)
+            .path("/api/v1/runs")
+            .query_param("include_archived", "true")
+            .query_param("page[limit]", "100")
+            .query_param("page[offset]", "0");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(serde_json::json!({
+                "data": [newer_created, older_created],
+                "meta": { "has_more": false }
+            }));
+    });
+
+    let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
+    let result = call_tool_json(
+        &client,
+        "fabro_run_search",
+        serde_json::json!({ "run_ids": [newer_created_id, older_created_id], "first": 2 }),
+    )
+    .await;
+
+    assert_eq!(result["runs"][0]["run_id"], newer_created_id);
+    assert_eq!(result["runs"][1]["run_id"], older_created_id);
     list_runs.assert();
     client
         .shutdown()
@@ -2053,4 +2112,11 @@ fn normalize_gather(mut value: serde_json::Value) -> serde_json::Value {
         }
     }
     value
+}
+
+fn run_id_with_timestamp(timestamp: &str, sequence: u128) -> String {
+    let timestamp = DateTime::parse_from_rfc3339(timestamp)
+        .expect("test timestamp should parse")
+        .with_timezone(&Utc);
+    RunId::with_timestamp(timestamp, sequence).to_string()
 }

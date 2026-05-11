@@ -402,8 +402,8 @@ pub(crate) async fn search_runs(
         .await
         .map_err(|err| ToolError::from_anyhow(&err))?;
     runs.sort_by(|a, b| {
-        let a_sort_time = a.timestamps.started_at.unwrap_or_else(|| a.id.created_at());
-        let b_sort_time = b.timestamps.started_at.unwrap_or_else(|| b.id.created_at());
+        let a_sort_time = a.timestamps.started_at.unwrap_or(a.timestamps.created_at);
+        let b_sort_time = b.timestamps.started_at.unwrap_or(b.timestamps.created_at);
         b_sort_time.cmp(&a_sort_time).then_with(|| b.id.cmp(&a.id))
     });
 
