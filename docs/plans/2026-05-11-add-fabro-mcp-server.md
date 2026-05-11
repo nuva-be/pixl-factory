@@ -140,7 +140,9 @@ struct CreateRunSpec {
     cwd: Option<PathBuf>,
     run_id: Option<String>,
     goal: Option<String>,
+    #[serde(default)]
     inputs: HashMap<String, serde_json::Value>,
+    #[serde(default)]
     labels: HashMap<String, String>,
     dry_run: Option<bool>,
     auto_approve: Option<bool>,
@@ -790,8 +792,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use rmcp::{
-    ServerHandler, serve_server,
-    handler::server::router::tool::ToolRouter,
+    Json, ServerHandler, serve_server,
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
     transport::stdio,
@@ -814,14 +816,19 @@ pub(crate) struct FabroMcpServer {
 pub(crate) async fn start(args: McpStartArgs, base_ctx: &CommandContext) -> Result<()> {
     let ctx = Arc::new(base_ctx.with_connection(&args.connection)?);
     let server = FabroMcpServer::new(ctx);
-    serve_server(server, stdio()).await?;
+    let service = serve_server(server, stdio()).await?;
+    service.waiting().await?;
     Ok(())
 }
 ```
 
-Implement `ServerHandler`:
+Implement `ServerHandler` through the `#[tool_handler]` impl, not a separate
+plain impl. `rmcp::serve_server(...)` returns after initialization with a
+running service handle; `fabro mcp start` must await `service.waiting()` so the
+stdio process stays alive for later `tools/list` and `tools/call` requests.
 
 ```rust
+#[tool_handler(router = self.tool_router)]
 impl ServerHandler for FabroMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
@@ -846,8 +853,6 @@ impl FabroMcpServer {
     }
 }
 
-#[tool_handler(router = self.tool_router)]
-impl ServerHandler for FabroMcpServer { ... }
 ```
 
 Each placeholder in `run_tools.rs` should return `Err("not implemented".to_string())` until later tasks, except it must compile and be listed.
