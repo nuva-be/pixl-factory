@@ -126,6 +126,8 @@ impl Handler for PromptHandler {
                         system_prompt.as_deref(),
                         &services.run.emitter,
                         &stage_scope,
+                        &services.run.sandbox,
+                        services.run.cancel_token(),
                     )
                     .await;
                 match result {
@@ -335,6 +337,8 @@ mod tests {
                 _system_prompt: Option<&str>,
                 _emitter: &Arc<Emitter>,
                 _stage_scope: &StageScope,
+                _sandbox: &Arc<dyn Sandbox>,
+                _cancel_token: CancellationToken,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
                     text:              "one-shot response".to_string(),
@@ -398,6 +402,8 @@ mod tests {
                 _system_prompt: Option<&str>,
                 _emitter: &Arc<Emitter>,
                 _stage_scope: &StageScope,
+                _sandbox: &Arc<dyn Sandbox>,
+                _cancel_token: CancellationToken,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
                     text:              "one-shot response".to_string(),
@@ -458,6 +464,8 @@ mod tests {
             system_prompt: Option<&str>,
             _emitter: &Arc<Emitter>,
             _stage_scope: &StageScope,
+            _sandbox: &Arc<dyn fabro_agent::Sandbox>,
+            _cancel_token: CancellationToken,
         ) -> Result<CodergenResult, Error> {
             *self.captured_prompt.lock().unwrap() = Some(prompt.to_string());
             *self.captured_system_prompt.lock().unwrap() = Some(system_prompt.map(String::from));

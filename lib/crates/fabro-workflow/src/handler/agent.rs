@@ -56,6 +56,8 @@ pub trait CodergenBackend: Send + Sync {
         _system_prompt: Option<&str>,
         _emitter: &Arc<Emitter>,
         _stage_scope: &StageScope,
+        _sandbox: &Arc<dyn Sandbox>,
+        _cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
         Err(Error::Validation(
             "one_shot mode not supported by this backend".into(),

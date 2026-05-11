@@ -483,6 +483,8 @@ impl CodergenBackend for AgentApiBackend {
         system_prompt: Option<&str>,
         emitter: &Arc<Emitter>,
         stage_scope: &StageScope,
+        _sandbox: &Arc<dyn Sandbox>,
+        _cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
         let client = Client::from_source(self.source.as_ref())
             .await

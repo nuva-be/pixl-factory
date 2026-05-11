@@ -1,10 +1,11 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 use agent_client_protocol::schema::{
     CancelNotification, ContentBlock, ContentChunk, InitializeRequest, PermissionOptionKind,
-    ProtocolVersion, RequestPermissionOutcome, RequestPermissionRequest,
-    RequestPermissionResponse, SelectedPermissionOutcome, SessionNotification, SessionUpdate,
-    StopReason,
+    ProtocolVersion, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    SelectedPermissionOutcome, SessionNotification, SessionUpdate, StopReason,
 };
 use agent_client_protocol::util::MatchDispatch;
 use agent_client_protocol::{ActiveSession, Agent, Client, SessionMessage};
@@ -17,21 +18,21 @@ use crate::error::AcpError;
 use crate::transport::{SandboxAcpTransport, TransportState};
 
 pub struct AcpRunRequest {
-    pub command: AcpCommand,
-    pub prompt: String,
-    pub cwd: String,
-    pub timeout_ms: Option<u64>,
-    pub env: HashMap<String, String>,
-    pub sandbox: Arc<dyn Sandbox>,
+    pub command:      AcpCommand,
+    pub prompt:       String,
+    pub cwd:          String,
+    pub timeout_ms:   Option<u64>,
+    pub env:          HashMap<String, String>,
+    pub sandbox:      Arc<dyn Sandbox>,
     pub cancel_token: CancellationToken,
-    pub on_activity: Option<Arc<dyn Fn() + Send + Sync>>,
+    pub on_activity:  Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 #[derive(Debug)]
 pub struct AcpRunResult {
-    pub text: String,
+    pub text:        String,
     pub stop_reason: StopReason,
-    pub stderr: String,
+    pub stderr:      String,
     pub duration_ms: u64,
 }
 
@@ -76,22 +77,29 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
                 .block_task()
                 .run_until(async |mut session| {
                     session.send_prompt(prompt)?;
-                    read_turn(&mut session, &cancel_token, on_activity.as_ref(), &state_for_run).await
+                    read_turn(
+                        &mut session,
+                        &cancel_token,
+                        on_activity.as_ref(),
+                        &state_for_run,
+                    )
+                    .await
                 })
                 .await
         });
 
     let outcome = match request.timeout_ms {
-        Some(timeout_ms) => match tokio::time::timeout(Duration::from_millis(timeout_ms), run).await
-        {
-            Ok(result) => result,
-            Err(_) => {
-                state.terminate().await?;
-                return Err(AcpError::TimedOut {
-                    stderr: state.stderr_tail().await,
-                });
+        Some(timeout_ms) => {
+            match tokio::time::timeout(Duration::from_millis(timeout_ms), run).await {
+                Ok(result) => result,
+                Err(_) => {
+                    state.terminate().await?;
+                    return Err(AcpError::TimedOut {
+                        stderr: state.stderr_tail().await,
+                    });
+                }
             }
-        },
+        }
         None => run.await,
     };
     let (text, stop_reason) = outcome.map_err(map_protocol_error)?;
@@ -115,7 +123,7 @@ fn map_protocol_error(error: agent_client_protocol::Error) -> AcpError {
             .map_or((rest, ""), |(stop_reason, text)| (stop_reason, text));
         AcpError::StopReason {
             stop_reason: stop_reason.to_string(),
-            text: text.trim_end_matches('"').to_string(),
+            text:        text.trim_end_matches('"').to_string(),
         }
     } else {
         AcpError::Protocol(error)

@@ -2480,6 +2480,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dirs",
+ "fabro-acp",
  "fabro-agent",
  "fabro-auth",
  "fabro-checkpoint",

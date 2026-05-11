@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use agent_client_protocol::schema::McpServer;
 use agent_client_protocol_tokio::AcpAgent;
@@ -12,8 +10,8 @@ use fabro_model::Provider;
 pub struct AcpCommand {
     display: String,
     program: PathBuf,
-    args: Vec<String>,
-    env: HashMap<String, String>,
+    args:    Vec<String>,
+    env:     HashMap<String, String>,
 }
 
 impl AcpCommand {
@@ -72,26 +70,33 @@ impl From<agent_client_protocol::Error> for AcpCommandError {
 #[must_use]
 pub fn default_acp_command(provider: Provider) -> AcpCommand {
     match provider {
-        Provider::Anthropic => command_from_parts(
-            "npx -y @zed-industries/claude-code-acp@latest",
-            "npx",
-            ["-y", "@zed-industries/claude-code-acp@latest"],
-        ),
+        Provider::Anthropic => {
+            command_from_parts("npx -y @zed-industries/claude-code-acp@latest", "npx", [
+                "-y",
+                "@zed-industries/claude-code-acp@latest",
+            ])
+        }
         Provider::Gemini => command_from_parts(
             "npx -y -- @google/gemini-cli@latest --experimental-acp",
             "npx",
-            ["-y", "--", "@google/gemini-cli@latest", "--experimental-acp"],
+            [
+                "-y",
+                "--",
+                "@google/gemini-cli@latest",
+                "--experimental-acp",
+            ],
         ),
         Provider::OpenAi
         | Provider::Kimi
         | Provider::Zai
         | Provider::Minimax
         | Provider::Inception
-        | Provider::OpenAiCompatible => command_from_parts(
-            "npx -y @zed-industries/codex-acp@latest",
-            "npx",
-            ["-y", "@zed-industries/codex-acp@latest"],
-        ),
+        | Provider::OpenAiCompatible => {
+            command_from_parts("npx -y @zed-industries/codex-acp@latest", "npx", [
+                "-y",
+                "@zed-industries/codex-acp@latest",
+            ])
+        }
     }
 }
 
@@ -121,8 +126,8 @@ fn parse_acp_command(raw: &str) -> Result<AcpCommand, AcpCommandError> {
     Ok(AcpCommand {
         display: raw.to_string(),
         program: stdio.command,
-        args: stdio.args,
-        env: stdio
+        args:    stdio.args,
+        env:     stdio
             .env
             .into_iter()
             .map(|env| (env.name, env.value))
@@ -154,8 +159,8 @@ fn command_from_parts<const N: usize>(
     AcpCommand {
         display: display.into(),
         program: program.into(),
-        args: args.into_iter().map(str::to_string).collect(),
-        env: HashMap::new(),
+        args:    args.into_iter().map(str::to_string).collect(),
+        env:     HashMap::new(),
     }
 }
 

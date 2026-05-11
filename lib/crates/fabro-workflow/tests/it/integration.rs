@@ -42,6 +42,7 @@ use fabro_workflow::handler::command::CommandHandler;
 use fabro_workflow::handler::conditional::ConditionalHandler;
 use fabro_workflow::handler::exit::ExitHandler;
 use fabro_workflow::handler::human::HumanHandler;
+use fabro_workflow::handler::llm::AgentAcpBackend;
 use fabro_workflow::handler::llm::cli::{AgentCliBackend, BackendRouter, parse_cli_response};
 use fabro_workflow::handler::manager_loop::SubWorkflowHandler;
 use fabro_workflow::handler::start::StartHandler;
@@ -6315,6 +6316,8 @@ mod real_llm {
             _system_prompt: Option<&str>,
             _emitter: &Arc<Emitter>,
             _stage_scope: &fabro_workflow::event::StageScope,
+            _sandbox: &Arc<dyn fabro_agent::Sandbox>,
+            _cancel_token: tokio_util::sync::CancellationToken,
         ) -> Result<CodergenResult, Error> {
             self.complete(prompt).await
         }
@@ -10264,6 +10267,10 @@ async fn cli_backend_run_returns_text_and_usage() {
 
 // -- BackendRouter e2e: delegates to correct backend --
 
+fn test_acp_backend() -> AgentAcpBackend {
+    AgentAcpBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
+}
+
 #[tokio::test]
 async fn backend_router_delegates_to_cli_for_cli_node() {
     let claude_output = r#"{"type":"result","result":"CLI response","usage":{"input_tokens":10,"output_tokens":5}}"#;
@@ -10272,7 +10279,7 @@ async fn backend_router_delegates_to_cli_for_cli_node() {
     let api_backend = Box::new(MockCodergenBackend); // would return "Response for ..."
     let cli = AgentCliBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli);
+    let router = BackendRouter::new(api_backend, cli, test_acp_backend());
 
     let mut node = Node::new("cli_step");
     node.attrs
@@ -10317,7 +10324,7 @@ async fn backend_router_delegates_to_api_for_normal_node() {
     let api_backend = Box::new(MockCodergenBackend);
     let cli = AgentCliBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli);
+    let router = BackendRouter::new(api_backend, cli, test_acp_backend());
 
     let mut node = Node::new("api_step");
     node.attrs.insert(
@@ -10361,7 +10368,7 @@ async fn backend_router_delegates_to_cli_for_backend_attr() {
     let api_backend = Box::new(MockCodergenBackend);
     let cli = AgentCliBackend::new_from_env("gpt-5.3-codex".into(), Provider::OpenAi)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli);
+    let router = BackendRouter::new(api_backend, cli, test_acp_backend());
 
     let mut node = Node::new("codex_step");
     node.attrs
@@ -10455,7 +10462,7 @@ async fn full_pipeline_with_cli_backend_node() {
     let api = MockCodergenBackend;
     let cli = AgentCliBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(Box::new(api), cli);
+    let router = BackendRouter::new(Box::new(api), cli, test_acp_backend());
     let codergen_handler = AgentHandler::new(Some(Box::new(router)));
 
     let mut registry = HandlerRegistry::new(Box::new(codergen_handler));
@@ -10468,7 +10475,7 @@ async fn full_pipeline_with_cli_backend_node() {
             let api2 = MockCodergenBackend;
             let cli2 = AgentCliBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
                 .with_poll_interval(Duration::from_millis(10));
-            BackendRouter::new(Box::new(api2), cli2)
+            BackendRouter::new(Box::new(api2), cli2, test_acp_backend())
         })))),
     );
 
@@ -10577,7 +10584,7 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let api = MockCodergenBackend;
     let cli = AgentCliBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(Box::new(api), cli);
+    let router = BackendRouter::new(Box::new(api), cli, test_acp_backend());
 
     let mut registry = HandlerRegistry::new(Box::new(AgentHandler::new(Some(Box::new(router)))));
     registry.register("start", Box::new(StartHandler));
@@ -10585,7 +10592,7 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let api2 = MockCodergenBackend;
     let cli2 = AgentCliBackend::new_from_env("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router2 = BackendRouter::new(Box::new(api2), cli2);
+    let router2 = BackendRouter::new(Box::new(api2), cli2, test_acp_backend());
     registry.register(
         "agent",
         Box::new(AgentHandler::new(Some(Box::new(router2)))),

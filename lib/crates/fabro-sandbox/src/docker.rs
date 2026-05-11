@@ -29,8 +29,8 @@ use crate::redact::redact_auth_url;
 use crate::sandbox::{optional_timeout, resolve_path};
 use crate::{
     CommandOutputCallback, DEFAULT_EXEC_OUTPUT_TAIL_BYTES, DirEntry, ExecResult,
-    ExecStreamingResult, GrepOptions, Sandbox, SandboxEvent, SandboxEventCallback,
-    StderrCollector, StdioProcess, StdioProcessHandle, format_lines_numbered, shell_quote,
+    ExecStreamingResult, GrepOptions, Sandbox, SandboxEvent, SandboxEventCallback, StderrCollector,
+    StdioProcess, StdioProcessHandle, format_lines_numbered, shell_quote,
 };
 
 const WORKING_DIRECTORY: &str = "/workspace";
@@ -800,12 +800,12 @@ fn docker_stdio_exec_options(
 ) -> (CreateExecOptions<String>, StartExecOptions) {
     (
         CreateExecOptions {
-            attach_stdin:  Some(true),
+            attach_stdin: Some(true),
             attach_stdout: Some(true),
             attach_stderr: Some(true),
-            tty:           Some(false),
-            cmd:           Some(vec!["/bin/bash".to_string(), "-lc".to_string(), command]),
-            working_dir:   Some(working_dir),
+            tty: Some(false),
+            cmd: Some(vec!["/bin/bash".to_string(), "-lc".to_string(), command]),
+            working_dir: Some(working_dir),
             env,
             ..Default::default()
         },
@@ -824,11 +824,7 @@ async fn request_docker_exec_stop_with(
 ) -> crate::Result<()> {
     let command = format!("touch {}", shell_quote(stop_file));
     let exec_opts = CreateExecOptions {
-        cmd: Some(vec![
-            "/bin/bash".to_string(),
-            "-lc".to_string(),
-            command,
-        ]),
+        cmd: Some(vec!["/bin/bash".to_string(), "-lc".to_string(), command]),
         attach_stdout: Some(true),
         attach_stderr: Some(true),
         working_dir: Some("/".to_string()),
@@ -855,7 +851,12 @@ async fn request_docker_exec_stop_with(
                     stderr.push_str(&String::from_utf8_lossy(&message));
                 }
                 Ok(_) => {}
-                Err(e) => return Err(crate::Error::context("Error reading stop request output", e)),
+                Err(e) => {
+                    return Err(crate::Error::context(
+                        "Error reading stop request output",
+                        e,
+                    ));
+                }
             }
         }
     }
@@ -877,11 +878,11 @@ async fn request_docker_exec_stop_with(
 }
 
 struct DockerStdioProcessControl {
-    docker:      Docker,
+    docker:       Docker,
     container_id: String,
-    exec_id:     String,
-    stop_file:   String,
-    termination: tokio::sync::Mutex<Option<CommandTermination>>,
+    exec_id:      String,
+    stop_file:    String,
+    termination:  tokio::sync::Mutex<Option<CommandTermination>>,
 }
 
 #[async_trait]
@@ -1524,7 +1525,7 @@ impl Sandbox for DockerSandbox {
         }
 
         Ok(StdioProcess {
-            stdin:  input,
+            stdin: input,
             stdout: Box::pin(stdout_reader),
             stderr: stderr_collector,
             handle,

@@ -19,7 +19,10 @@ pub enum AcpError {
     ProcessExited { stderr: String },
 
     #[error("ACP prompt stopped with {stop_reason}: {text}")]
-    StopReason { stop_reason: String, text: String },
+    StopReason {
+        stop_reason: String,
+        text:        String,
+    },
 }
 
 impl From<agent_client_protocol::Error> for AcpError {

@@ -1,4 +1,6 @@
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::Arc;
 
 use agent_client_protocol::{Client, ConnectTo, Lines};
 use fabro_sandbox::{Sandbox, StderrCollector, StdioProcessHandle};
@@ -43,12 +45,12 @@ impl TransportState {
 }
 
 pub(crate) struct SandboxAcpTransport {
-    command: AcpCommand,
-    cwd: String,
-    env: HashMap<String, String>,
-    sandbox: Arc<dyn Sandbox>,
+    command:      AcpCommand,
+    cwd:          String,
+    env:          HashMap<String, String>,
+    sandbox:      Arc<dyn Sandbox>,
     cancel_token: CancellationToken,
-    state: TransportState,
+    state:        TransportState,
 }
 
 impl SandboxAcpTransport {
@@ -106,8 +108,10 @@ impl ConnectTo<Client> for SandboxAcpTransport {
             },
         ));
 
-        let protocol =
-            agent_client_protocol::ConnectTo::<Client>::connect_to(Lines::new(outgoing_sink, incoming_lines), client);
+        let protocol = agent_client_protocol::ConnectTo::<Client>::connect_to(
+            Lines::new(outgoing_sink, incoming_lines),
+            client,
+        );
         tokio::select! {
             result = protocol => {
                 let _ = tokio::time::timeout(std::time::Duration::from_millis(500), handle.wait()).await;

@@ -14,8 +14,8 @@ use tokio_util::sync::CancellationToken;
 use crate::sandbox::optional_timeout;
 use crate::{
     CommandOutputCallback, DEFAULT_EXEC_OUTPUT_TAIL_BYTES, DirEntry, ExecResult,
-    ExecStreamingResult, GrepOptions, Sandbox, SandboxEvent, SandboxEventCallback,
-    StderrCollector, StdioProcess, StdioProcessHandle, format_lines_numbered,
+    ExecStreamingResult, GrepOptions, Sandbox, SandboxEvent, SandboxEventCallback, StderrCollector,
+    StdioProcess, StdioProcessHandle, format_lines_numbered,
 };
 
 pub struct LocalSandbox {
@@ -530,7 +530,7 @@ impl Sandbox for LocalSandbox {
         }
 
         Ok(StdioProcess {
-            stdin:  Box::pin(stdin),
+            stdin: Box::pin(stdin),
             stdout: Box::pin(stdout),
             stderr: stderr_collector,
             handle,

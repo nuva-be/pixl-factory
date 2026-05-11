@@ -267,6 +267,11 @@ impl Node {
     }
 
     #[must_use]
+    pub fn acp_command(&self) -> Option<&str> {
+        self.str_attr("acp_command")
+    }
+
+    #[must_use]
     pub fn selection(&self) -> &str {
         self.str_attr("selection").unwrap_or("deterministic")
     }

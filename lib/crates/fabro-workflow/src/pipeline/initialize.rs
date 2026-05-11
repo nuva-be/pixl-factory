@@ -28,7 +28,7 @@ use crate::devcontainer_bridge::{devcontainer_to_snapshot_config, run_devcontain
 use crate::error::Error;
 use crate::event::{Event, RunNoticeCode, RunNoticeLevel};
 use crate::github_token_source::{AppIatMinter, GitHubTokenSource};
-use crate::handler::llm::{AgentApiBackend, AgentCliBackend, BackendRouter};
+use crate::handler::llm::{AgentAcpBackend, AgentApiBackend, AgentCliBackend, BackendRouter};
 use crate::handler::{HandlerRegistry, default_registry};
 use crate::run_metadata::{RunMetadataRuntime, build_metadata_writer, metadata_branch_name};
 use crate::run_options::{GitCheckpointOptions, RunOptions};
@@ -181,8 +181,21 @@ async fn build_registry(
                         || AgentCliBackend::new_from_env(model.clone(), provider),
                         |resolver| AgentCliBackend::new(model.clone(), provider, resolver),
                     )
-                    .with_tool_env_provider(tool_env_provider, github_token_refresh_managed);
-                Some(Box::new(BackendRouter::new(Box::new(api), cli)))
+                    .with_tool_env_provider(
+                        tool_env_provider.clone(),
+                        github_token_refresh_managed,
+                    );
+                let acp = cli_resolver
+                    .clone()
+                    .map_or_else(
+                        || AgentAcpBackend::new_from_env(model.clone(), provider),
+                        |resolver| AgentAcpBackend::new(model.clone(), provider, resolver),
+                    )
+                    .with_tool_env_provider(
+                        tool_env_provider.clone(),
+                        github_token_refresh_managed,
+                    );
+                Some(Box::new(BackendRouter::new(Box::new(api), cli, acp)))
             }));
             Ok((registry, false))
         }

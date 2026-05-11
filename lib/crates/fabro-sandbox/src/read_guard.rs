@@ -291,9 +291,8 @@ mod tests {
             *mock.captured_command.lock().unwrap(),
             Some("python fake_agent.py".to_string())
         );
-        assert_eq!(
-            *mock.captured_working_dirs.lock().unwrap(),
-            vec![Some("/work/sub".to_string())]
-        );
+        assert_eq!(*mock.captured_working_dirs.lock().unwrap(), vec![Some(
+            "/work/sub".to_string()
+        )]);
     }
 }
