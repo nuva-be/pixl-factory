@@ -208,7 +208,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-11T21:12:41.799310Z",
-  "last_event_at": "2026-05-11T21:12:59.051112Z",
+  "last_event_at": "2026-05-11T21:13:04.236777Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -248,9 +248,9 @@
       "diff": {}
     },
     {
-      "seq": 0,
+      "seq": 42,
       "checkpoint": {
-        "timestamp": "2026-05-11T21:12:59.263965Z",
+        "timestamp": "2026-05-11T21:13:04.236569Z",
         "current_node": "greet",
         "completed_nodes": [
           "start",
@@ -258,23 +258,23 @@
         ],
         "node_retries": {},
         "context_values": {
-          "current_node": "greet",
-          "graph.rankdir": "LR",
-          "thread.start.current_node": "greet",
-          "internal.work_dir": "/home/daytona/workspace",
-          "internal.thread_id": "start",
-          "failure_class": "",
-          "internal.retry_count.greet": 0,
-          "failure_signature": "",
           "internal.fidelity": "compact",
+          "internal.run_id": "01KRCE4MSB8DK908K6QB17Y69H",
+          "internal.retry_count.greet": 0,
           "last_stage": "greet",
-          "last_response": "Done! Here's what was added to the README, just below the main tagline:\n\n```\n> *Agents run the graph*\n> *Human gates hold what matters*\n> *Ship with confidence*\n```\n\nThe haiku (5–7–5) captures Fab",
+          "outcome": "succeeded",
+          "graph.rankdir": "LR",
+          "internal.thread_id": "start",
+          "internal.retry_count.start": 0,
+          "failure_class": "",
+          "current_node": "greet",
           "internal.node_visit_count": 1,
           "graph.goal": "Say hello and demonstrate a basic Fabro workflow",
-          "internal.run_id": "01KRCE4MSB8DK908K6QB17Y69H",
-          "outcome": "succeeded",
+          "thread.start.current_node": "greet",
           "response.greet": "Done! Here's what was added to the README, just below the main tagline:\n\n```\n> *Agents run the graph*\n> *Human gates hold what matters*\n> *Ship with confidence*\n```\n\nThe haiku (5–7–5) captures Fabro's core philosophy:\n- **Line 1** — agents execute workflow graphs autonomously\n- **Line 2** — human-in-the-loop gates give engineers control at the right moments\n- **Line 3** — the end result is confidence in what ships",
-          "internal.retry_count.start": 0
+          "failure_signature": "",
+          "last_response": "Done! Here's what was added to the README, just below the main tagline:\n\n```\n> *Agents run the graph*\n> *Human gates hold what matters*\n> *Ship with confidence*\n```\n\nThe haiku (5–7–5) captures Fab",
+          "internal.work_dir": "/home/daytona/workspace"
         },
         "node_outcomes": {
           "start": {
@@ -318,15 +318,54 @@
           }
         },
         "next_node_id": "exit",
+        "git_commit_sha": "2c182ff71a85e480026654434f59dc3d3e30e589",
         "node_visits": {
           "start": 1,
           "greet": 1
         }
       },
-      "diff": {}
+      "diff": {
+        "patch": "diff --git a/README.md b/README.md\nindex 7cc53e30..d2da91dc 100644\n--- a/README.md\n+++ b/README.md\n@@ -4,6 +4,10 @@\n \n ## The open source dark software factory for expert engineers\n \n+> *Agents run the graph*\n+> *Human gates hold what matters*\n+> *Ship with confidence*\n+\n AI coding agents are powerful but unpredictable. You either babysit every step or review a 50-file diff you don't trust. Fabro gives you a middle path: define the process as a graph, let agents execute it, and intervene only where it matters. [Why Fabro?](https://docs.fabro.sh/getting-started/why-fabro)\n \n [![Rust](https://github.com/fabro-sh/fabro/actions/workflows/rust.yml/badge.svg)](https://github.com/fabro-sh/fabro/actions/workflows/rust.yml)\n@@ -190,4 +194,4 @@ If you need a capability which is not in-scope for Fabro, you always have the op\n \n ## License\n \n-Fabro is licensed under the [MIT License](LICENSE.md).\n+Fabro is licensed under the [MIT License](LICENSE.md).\n\\ No newline at end of file\n",
+        "summary": {
+          "files_changed": 1,
+          "additions": 5,
+          "deletions": 1
+        }
+      }
     }
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-11T21:13:04.288762Z",
+    "status": "succeeded",
+    "duration_ms": 22437,
+    "final_git_commit_sha": "2c182ff71a85e480026654434f59dc3d3e30e589",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "duration_ms": 0,
+        "retries": 0
+      },
+      {
+        "stage_id": "greet",
+        "stage_label": "greet",
+        "duration_ms": 14272,
+        "billing_usd_micros": 74879,
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 4664,
+      "output_tokens": 455,
+      "total_tokens": 42554,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 25020,
+      "cache_write_tokens": 12415,
+      "total_usd_micros": 74879
+    },
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "provider": "daytona",
     "image": "buildpack-deps:noble",
@@ -376,7 +415,12 @@
       "first_event_seq": 20,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Stage completed: greet",
+        "failure_reason": null,
+        "timestamp": "2026-05-11T21:12:59.263737Z"
+      },
       "provider_used": {
         "mode": "agent",
         "provider": "anthropic",
@@ -389,6 +433,7 @@
       "output": null,
       "started_at": "2026-05-11T21:12:44.990471Z",
       "handler": "agent",
+      "duration_ms": 14272,
       "usage": {
         "input_tokens": 4664,
         "output_tokens": 455,
@@ -402,7 +447,36 @@
         "provider": "anthropic",
         "model_id": "claude-sonnet-4-6"
       },
-      "state": "running"
+      "state": "succeeded"
+    },
+    "exit@1": {
+      "first_event_seq": 45,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-11T21:13:04.236777Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-11T21:13:04.236737Z",
+      "handler": "exit",
+      "duration_ms": 0,
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
     }
   }
 }
