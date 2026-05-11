@@ -55,6 +55,11 @@
 - Optionally modify `lib/crates/fabro-cli/tests/it/support/mod.rs`
   - Add only narrow helpers for spawning `fabro mcp start` or extracting MCP text/structured output if duplication appears in `cmd/mcp.rs`.
 
+Before editing Rust code, read:
+
+- `docs/internal/testing-strategy.md` because this plan adds CLI integration tests and unit tests.
+- `docs/internal/error-handling-strategy.md` because MCP tool failures convert CLI/API/auth errors into user-visible tool errors.
+
 ## User-Visible Contract
 
 The CLI contract is:
@@ -326,7 +331,7 @@ struct FabroRunEventsParams {
 - MCP initialize and tools/list must not require a live Fabro server. API connection is lazy and happens when a tool needs it.
 - There is no separate MCP authentication. Tool calls use the same `CommandContext` and `fabro-client` auth store behavior as existing CLI commands. Auth failures returned from tools must include the existing user guidance: `Run \`fabro auth login\` to authenticate.`
 - Tool failures are MCP tool errors, not process exits. The stdio server should stay alive after invalid arguments, not-found selectors, conflicts, auth failures, and API errors.
-- Every successful tool returns structured content and a concise text fallback. The text fallback is for clients that do not yet show MCP structured output.
+- Every successful tool returns structured content and a concise text fallback. The text fallback is for clients that do not yet show MCP structured output. Do not return `rmcp::Json<T>` directly from successful tools, because its text content is the full JSON payload. Instead, build a `CallToolResult` with `structured_content: Some(...)` and a short `Content::text(...)` summary.
 - Run selectors must go through `Client::resolve_run(...)` to preserve existing Fabro prefix/workflow-name behavior.
 - Run creation must reuse `build_run_manifest(...)` and server manifest validation. Do not fabricate run specs or bypass the same source-of-truth path as `fabro create`.
 - Agent config writes must be idempotent and preserve unrelated user config.
@@ -589,6 +594,40 @@ fn init_cursor_writes_idempotent_config() {
 }
 
 #[test]
+fn init_claude_writes_platform_config() {
+    let context = test_context!();
+    context
+        .command()
+        .args(["mcp", "init", "claude"])
+        .assert()
+        .success();
+
+    let config_path = expected_claude_config_path(&context.home_dir);
+    let config: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(config_path).unwrap()).unwrap();
+    fabro_json_snapshot!(context, config, @"");
+}
+
+#[test]
+fn init_windsurf_writes_config() {
+    let context = test_context!();
+    context
+        .command()
+        .args(["mcp", "init", "windsurf"])
+        .assert()
+        .success();
+
+    let config_path = context
+        .home_dir
+        .join(".codeium")
+        .join("windsurf")
+        .join("mcp_config.json");
+    let config: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(config_path).unwrap()).unwrap();
+    fabro_json_snapshot!(context, config, @"");
+}
+
+#[test]
 fn init_preserves_existing_servers() {
     let context = test_context!();
     let config_path = context.home_dir.join(".cursor").join("mcp.json");
@@ -624,7 +663,10 @@ fn init_invalid_json_fails_without_overwrite() {
 }
 ```
 
-Use `fabro_json_snapshot` where the parsed config is the contract. Add the required import:
+Use `fabro_json_snapshot` where the parsed config is the contract. Add a small
+`expected_claude_config_path(home_dir: &Path) -> PathBuf` helper in the test
+module with the same platform branches as production so macOS, Linux, and
+Windows path behavior is covered. Add the required import:
 
 ```rust
 use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
@@ -635,7 +677,7 @@ use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
 Run:
 
 ```bash
-cargo nextest run -p fabro-cli --test it cmd::mcp::config_prints_generic_mcp_json cmd::mcp::config_preserves_connection_flags cmd::mcp::init_cursor_writes_idempotent_config cmd::mcp::init_preserves_existing_servers cmd::mcp::init_invalid_json_fails_without_overwrite
+cargo nextest run -p fabro-cli --test it cmd::mcp::config_prints_generic_mcp_json cmd::mcp::config_preserves_connection_flags cmd::mcp::init_cursor_writes_idempotent_config cmd::mcp::init_claude_writes_platform_config cmd::mcp::init_windsurf_writes_config cmd::mcp::init_preserves_existing_servers cmd::mcp::init_invalid_json_fails_without_overwrite
 ```
 
 Expected: FAIL because config/init are stubs.
@@ -694,15 +736,22 @@ Implement `merge_server_entry(path, entry)` so it:
 - inserts/replaces only `mcpServers.fabro`
 - writes pretty JSON plus trailing newline
 
+Implement all three supported path mappings (`claude`, `cursor`, `windsurf`).
+For `claude`, use `dirs::home_dir()` plus platform cfgs:
+
+- macOS: `Library/Application Support/Claude/claude_desktop_config.json`
+- Linux: `.config/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`, falling back to the home-relative equivalent only in tests when `APPDATA` is absent
+
 - [ ] **Step 4: Run config/init tests and accept snapshots**
 
 Run:
 
 ```bash
-cargo nextest run -p fabro-cli --test it cmd::mcp::config_prints_generic_mcp_json cmd::mcp::config_preserves_connection_flags cmd::mcp::init_cursor_writes_idempotent_config cmd::mcp::init_preserves_existing_servers cmd::mcp::init_invalid_json_fails_without_overwrite
+cargo nextest run -p fabro-cli --test it cmd::mcp::config_prints_generic_mcp_json cmd::mcp::config_preserves_connection_flags cmd::mcp::init_cursor_writes_idempotent_config cmd::mcp::init_claude_writes_platform_config cmd::mcp::init_windsurf_writes_config cmd::mcp::init_preserves_existing_servers cmd::mcp::init_invalid_json_fails_without_overwrite
 cargo insta pending-snapshots
 cargo insta accept
-cargo nextest run -p fabro-cli --test it cmd::mcp::config_prints_generic_mcp_json cmd::mcp::config_preserves_connection_flags cmd::mcp::init_cursor_writes_idempotent_config cmd::mcp::init_preserves_existing_servers cmd::mcp::init_invalid_json_fails_without_overwrite
+cargo nextest run -p fabro-cli --test it cmd::mcp::config_prints_generic_mcp_json cmd::mcp::config_preserves_connection_flags cmd::mcp::init_cursor_writes_idempotent_config cmd::mcp::init_claude_writes_platform_config cmd::mcp::init_windsurf_writes_config cmd::mcp::init_preserves_existing_servers cmd::mcp::init_invalid_json_fails_without_overwrite
 ```
 
 Expected: PASS.
@@ -748,7 +797,7 @@ async fn stdio_server_initializes_and_lists_run_tools() {
                 "mcp".to_string(),
                 "start".to_string(),
             ],
-            env: context.command_env(),
+            env: mcp_stdio_env(&context),
         },
         startup_timeout_secs: 10,
         tool_timeout_secs: 30,
@@ -771,7 +820,11 @@ async fn stdio_server_initializes_and_lists_run_tools() {
 }
 ```
 
-If `TestContext` does not expose a command env map, add a narrow helper in the test module that mirrors `context.command()` environment by spawning through `Command` only for raw tests, or extend support with a focused helper. Do not use ambient user HOME.
+`TestContext` does not currently expose a reusable command env map. Add a narrow
+test helper that builds `std::process::Command` with `fabro_test::apply_test_isolation`
+and `current_dir(&context.temp_dir)`, then either converts its env into the
+`HashMap<String, String>` expected by `McpServerSettings` or uses that command
+directly for raw subprocess tests. Do not use ambient user `HOME`.
 
 - [ ] **Step 2: Run test and verify it fails**
 
@@ -788,13 +841,14 @@ Expected: FAIL because `fabro mcp start` is not implemented.
 In `server.rs`, implement:
 
 ```rust
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
 use rmcp::{
-    Json, ServerHandler, serve_server,
+    ServerHandler, serve_server,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::{ServerCapabilities, ServerInfo},
+    model::{CallToolResult, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
     transport::stdio,
 };
@@ -810,6 +864,7 @@ use super::run_tools;
 pub(crate) struct FabroMcpServer {
     ctx: Arc<CommandContext>,
     client: Arc<OnceCell<Arc<Client>>>,
+    cwd: PathBuf,
     tool_router: ToolRouter<Self>,
 }
 
@@ -848,14 +903,36 @@ impl FabroMcpServer {
     async fn fabro_run_create(
         &self,
         params: Parameters<run_tools::FabroRunCreateParams>,
-    ) -> Result<Json<run_tools::CreateRunsResult>, String> {
-        run_tools::create_runs(self.client().await?, params.0).await
+    ) -> Result<CallToolResult, String> {
+        let result = run_tools::create_runs(self.client().await?, &self.cwd, params.0).await?;
+        run_tools::success_result(&result, run_tools::create_runs_text(&result))
     }
 }
 
 ```
 
-Each placeholder in `run_tools.rs` should return `Err("not implemented".to_string())` until later tasks, except it must compile and be listed.
+`new(...)` should copy `ctx.cwd().to_path_buf()` into the `cwd` field before
+storing the context, so tool calls resolve relative workflows against the MCP
+process cwd captured at startup.
+
+Each placeholder in `run_tools.rs` should return a tool error result until later
+tasks, except it must compile and be listed. Add:
+
+```rust
+pub(crate) fn success_result<T: serde::Serialize>(
+    value: &T,
+    text: impl Into<String>,
+) -> Result<rmcp::model::CallToolResult, String> {
+    let structured_content = serde_json::to_value(value).map_err(|err| err.to_string())?;
+    let mut result = rmcp::model::CallToolResult::structured(structured_content);
+    result.content = vec![rmcp::model::Content::text(text.into())];
+    Ok(result)
+}
+```
+
+Add one text helper per result type, for example `create_runs_text(...)`, so
+fallback content is concise: `"created 1 Fabro run and started 1"`, not a full
+JSON dump.
 
 Implement `client(&self)` with lazy connection:
 
@@ -889,6 +966,10 @@ Add a raw subprocess test that:
 - reads the first stdout line
 - asserts it parses as JSON and has `jsonrpc: "2.0"`
 - asserts stderr may contain logs but stdout contains no leading human text
+
+Use the same isolated environment as `TestContext::command()` for the raw
+subprocess helper: `fabro_test::apply_test_isolation(&mut cmd, &context.home_dir)`
+and `cmd.current_dir(&context.temp_dir)`.
 
 Use a child timeout and kill-on-drop cleanup. The raw JSON should be:
 
@@ -971,6 +1052,11 @@ async fn mcp_create_and_search_manage_real_runs_with_cli_auth() {
 }
 ```
 
+Implement `call_tool_json(...)` so it asserts `is_error != Some(true)`, extracts
+`structured_content`, and verifies the first text content is present and does
+not start with `{` or `[`; this makes the concise fallback contract automated
+instead of a manual-only check.
+
 If `RealAuthHarness::start_with_dev_token` cannot create runs due missing server settings for local execution, use `TestContext` managed server plus explicit `seed_dev_token_auth` against its server target, but keep the test proving persisted CLI auth is used.
 
 - [ ] **Step 2: Run test and verify it fails**
@@ -1031,7 +1117,7 @@ pub(crate) async fn create_runs(
         let cwd = spec.cwd.clone().unwrap_or_else(|| base_cwd.to_path_buf());
         let run_id = spec.run_id.as_deref().map(str::parse).transpose().map_err(tool_err)?;
         let overrides = build_mcp_manifest_overrides(&spec, &cwd)?;
-        let manifest_args = build_manifest_args(&spec);
+        let manifest_args = mcp_manifest_args(&spec);
         let built = build_run_manifest(ManifestBuildInput {
             workflow: PathBuf::from(&spec.workflow),
             cwd,
@@ -1057,6 +1143,46 @@ pub(crate) async fn create_runs(
 ```
 
 Important: the function signature in `server.rs` should pass both the lazy API client and the MCP process cwd from the context, not call `std::env::current_dir()` deep in the tool.
+The outline above omits some `map_err(...)` calls for readability; the real
+implementation must convert every `anyhow::Error` and API error into the shared
+tool-error string helper so `?` never tries to convert `anyhow::Error` directly
+into `String`.
+
+Implement `mcp_manifest_args(&CreateRunSpec) -> Option<fabro_api::types::ManifestArgs>`
+in `run_tools.rs`. It should mirror `manifest_builder::run_manifest_args` for
+provenance:
+
+```rust
+fn mcp_manifest_args(spec: &CreateRunSpec) -> Option<types::ManifestArgs> {
+    let label = spec
+        .labels
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>();
+    let input = spec
+        .inputs
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>();
+    let payload = types::ManifestArgs {
+        auto_approve: spec.auto_approve.filter(|value| *value),
+        dry_run: spec.dry_run.filter(|value| *value),
+        label,
+        model: spec.model.clone(),
+        preserve_sandbox: spec.preserve_sandbox.filter(|value| *value),
+        provider: spec.provider.clone(),
+        sandbox: spec.sandbox.clone(),
+        docker_image: None,
+        input,
+        verbose: None,
+    };
+    (!mcp_manifest_args_is_empty(&payload)).then_some(payload)
+}
+```
+
+Keep the emptiness check local if `manifest_args_is_empty` is not accessible.
+The `input` strings are only for provenance; authoritative input values come
+from `input_overrides` after JSON-to-TOML conversion.
 
 - [ ] **Step 6: Implement JSON-to-TOML input conversion**
 
@@ -1237,7 +1363,7 @@ let events = client
 Then apply filters in memory:
 
 - event ids
-- event types
+- event types using `event.event.event_name()`
 - categories
 - created_after/before
 - query substring on serialized event JSON
@@ -1359,6 +1485,7 @@ Check manually:
 
 - `fabro mcp start` has no `printout!`, `println!`, `eprintln!` is only for stderr and not in server steady-state startup.
 - all MCP tool argument validation returns tool errors, not process exits.
+- successful MCP tools include both `structuredContent` and short text content; text content is not just serialized JSON.
 - no tests write run internals directly.
 - no live provider credentials are required.
 - agent config merge preserves unrelated keys.
