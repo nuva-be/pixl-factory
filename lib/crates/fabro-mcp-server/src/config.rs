@@ -20,9 +20,10 @@ pub fn config_json(settings: &McpConfigSettings) -> Result<String> {
 }
 
 pub fn init_agent(settings: &McpInitSettings) -> Result<()> {
-    let path = agent_config_path(settings.agent, &settings.home_dir);
     let entry = server_entry(&settings.config);
-    merge_server_entry(&path, entry)?;
+    for path in agent_config_paths(settings.agent, &settings.home_dir) {
+        merge_server_entry(&path, entry.clone())?;
+    }
     Ok(())
 }
 
@@ -60,13 +61,11 @@ fn merge_server_entry(path: &Path, entry: Value) -> Result<()> {
             .with_context(|| format!("failed to create {}", parent.display()))?;
     }
 
-    let mut root = if path.exists() {
-        let contents = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        serde_json::from_str::<Value>(&contents)
-            .with_context(|| format!("failed to parse MCP config {}", path.display()))?
-    } else {
-        Value::Object(Map::new())
+    let mut root = match std::fs::read_to_string(path) {
+        Ok(contents) => serde_json::from_str::<Value>(&contents)
+            .with_context(|| format!("failed to parse MCP config {}", path.display()))?,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Value::Object(Map::new()),
+        Err(err) => return Err(err).with_context(|| format!("failed to read {}", path.display())),
     };
 
     let root_object = root
@@ -91,18 +90,27 @@ fn merge_server_entry(path: &Path, entry: Value) -> Result<()> {
     std::fs::write(path, rendered).with_context(|| format!("failed to write {}", path.display()))
 }
 
-fn agent_config_path(agent: McpAgent, home_dir: &Path) -> PathBuf {
+fn agent_config_paths(agent: McpAgent, home_dir: &Path) -> Vec<PathBuf> {
     match agent {
-        McpAgent::Claude => claude_config_path(home_dir),
-        McpAgent::Cursor => home_dir.join(".cursor").join("mcp.json"),
-        McpAgent::Windsurf => home_dir
-            .join(".codeium")
-            .join("windsurf")
-            .join("mcp_config.json"),
+        McpAgent::Claude => vec![
+            claude_desktop_config_path(home_dir),
+            claude_code_config_path(home_dir),
+        ],
+        McpAgent::Cursor => vec![home_dir.join(".cursor").join("mcp.json")],
+        McpAgent::Windsurf => vec![
+            home_dir
+                .join(".codeium")
+                .join("windsurf")
+                .join("mcp_config.json"),
+        ],
     }
 }
 
-fn claude_config_path(home_dir: &Path) -> PathBuf {
+fn claude_code_config_path(home_dir: &Path) -> PathBuf {
+    home_dir.join(".claude.json")
+}
+
+fn claude_desktop_config_path(home_dir: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         home_dir

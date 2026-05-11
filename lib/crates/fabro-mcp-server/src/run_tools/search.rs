@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use fabro_client::Client;
+use fabro_types::{Run, RunStatusKind};
+use futures::future::try_join_all;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +25,8 @@ pub(crate) struct FabroRunSearchParams {
 
 #[derive(Debug)]
 pub(crate) struct ValidatedSearchRuns {
-    pub(crate) raw: FabroRunSearchParams,
+    pub(crate) raw:    FabroRunSearchParams,
+    pub(crate) status: Option<Vec<RunStatusKind>>,
 }
 
 impl TryFrom<FabroRunSearchParams> for ValidatedSearchRuns {
@@ -33,13 +36,33 @@ impl TryFrom<FabroRunSearchParams> for ValidatedSearchRuns {
         if params.first.is_some_and(|first| first > 100) {
             return Err(ToolError::message("first must be <= 100"));
         }
+        if let Some(run_ids) = params.run_ids.as_ref() {
+            common::validate_len("run_ids", run_ids.len(), 1, 100)?;
+        }
+        let status = params
+            .status
+            .as_ref()
+            .map(|statuses| {
+                statuses
+                    .iter()
+                    .map(|status| {
+                        status.parse::<RunStatusKind>().map_err(|_| {
+                            ToolError::message(format!("unknown run status `{status}`"))
+                        })
+                    })
+                    .collect::<ToolResult<Vec<_>>>()
+            })
+            .transpose()?;
         if let Some(created_after) = params.created_after.as_deref() {
             common::parse_datetime_filter("created_after", created_after)?;
         }
         if let Some(created_before) = params.created_before.as_deref() {
             common::parse_datetime_filter("created_before", created_before)?;
         }
-        Ok(Self { raw: params })
+        Ok(Self {
+            raw: params,
+            status,
+        })
     }
 }
 
@@ -53,11 +76,16 @@ pub(crate) async fn search_runs(
     client: Arc<Client>,
     params: ValidatedSearchRuns,
 ) -> ToolResult<SearchRunsResult> {
+    let status = params.status;
     let raw = params.raw;
-    let mut runs = client
-        .list_store_runs()
-        .await
-        .map_err(|err| ToolError::from_anyhow(&err))?;
+    let mut runs = if let Some(run_ids) = raw.run_ids.as_ref() {
+        resolve_requested_runs(&client, run_ids).await?
+    } else {
+        client
+            .list_store_runs()
+            .await
+            .map_err(|err| ToolError::from_anyhow(&err))?
+    };
     runs.sort_by(|a, b| {
         let a_sort_time = a.timestamps.started_at.unwrap_or(a.timestamps.created_at);
         let b_sort_time = b.timestamps.started_at.unwrap_or(b.timestamps.created_at);
@@ -70,9 +98,6 @@ pub(crate) async fn search_runs(
         }
     }
 
-    if let Some(run_ids) = raw.run_ids.as_ref() {
-        runs.retain(|run| run_ids.iter().any(|id| id == &run.id.to_string()));
-    }
     if let Some(workflow) = raw.workflow.as_deref() {
         runs.retain(|run| {
             run.workflow.name == workflow || run.workflow.slug.as_deref() == Some(workflow)
@@ -85,11 +110,11 @@ pub(crate) async fn search_runs(
                 .all(|(key, value)| run.labels.get(key) == Some(value))
         });
     }
-    if let Some(status) = raw.status.as_ref() {
+    if let Some(status) = status.as_ref() {
         runs.retain(|run| {
             status
                 .iter()
-                .any(|status| status == common::run_status_kind(run.lifecycle.status))
+                .any(|status| *status == run.lifecycle.status.kind())
         });
     }
     if let Some(archived) = raw.archived {
@@ -118,4 +143,23 @@ pub(crate) async fn search_runs(
 
 pub(crate) fn search_runs_text(result: &SearchRunsResult) -> String {
     format!("found {} Fabro run(s)", result.runs.len())
+}
+
+async fn resolve_requested_runs(client: &Arc<Client>, run_ids: &[String]) -> ToolResult<Vec<Run>> {
+    let runs = try_join_all(run_ids.iter().map(|run_id| {
+        let client = Arc::clone(client);
+        async move {
+            client
+                .resolve_run(run_id)
+                .await
+                .map_err(|err| ToolError::from_anyhow(&err))
+        }
+    }))
+    .await?;
+
+    let mut unique = HashMap::new();
+    for run in runs {
+        unique.entry(run.id).or_insert(run);
+    }
+    Ok(unique.into_values().collect())
 }

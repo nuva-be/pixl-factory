@@ -1,46 +1,27 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use fabro_api::types;
 use fabro_config::{CliLayer, RunLayer};
 use fabro_manifest::{self, ManifestBuildInput, RunOverrideInput};
 use fabro_server::manifest_validation;
-use fabro_types::RunId;
 use serde_json::Value;
 
 use super::common::{ToolError, ToolResult};
-use super::create::CreateRunSpec;
+use super::create::ValidatedCreateRunSpec;
 
 pub(super) fn build_mcp_run_manifest(
-    spec: &CreateRunSpec,
+    spec: &ValidatedCreateRunSpec,
     cwd: &Path,
     user_settings_path: &Path,
 ) -> ToolResult<types::RunManifest> {
-    if let Some(run_id) = spec.run_id.as_deref() {
-        run_id.parse::<RunId>().map_err(|err| {
-            ToolError::message(format!("run_id must be a valid Fabro run id: {err}"))
-        })?;
-    }
-
     let built = fabro_manifest::build_run_manifest(ManifestBuildInput {
         workflow:           PathBuf::from(&spec.workflow),
         cwd:                cwd.to_path_buf(),
         run_overrides:      mcp_run_overrides(spec),
         cli_overrides:      Some(CliLayer::default()),
-        input_overrides:    spec
-            .inputs
-            .iter()
-            .map(|(key, value)| json_to_toml_value(key, value).map(|value| (key.clone(), value)))
-            .collect::<ToolResult<HashMap<_, _>>>()?,
+        input_overrides:    spec.inputs.clone(),
         args:               mcp_manifest_args(spec),
-        run_id:             spec
-            .run_id
-            .as_deref()
-            .map(str::parse::<RunId>)
-            .transpose()
-            .map_err(|err| {
-                ToolError::message(format!("run_id must be a valid Fabro run id: {err}"))
-            })?,
+        run_id:             spec.run_id,
         user_settings_path: Some(user_settings_path.to_path_buf()),
     })
     .map_err(|err| ToolError::from_anyhow(&err))?;
@@ -85,7 +66,7 @@ pub(super) fn json_to_toml_value(key: &str, value: &Value) -> ToolResult<toml::V
     }
 }
 
-fn mcp_manifest_args(spec: &CreateRunSpec) -> Option<types::ManifestArgs> {
+fn mcp_manifest_args(spec: &ValidatedCreateRunSpec) -> Option<types::ManifestArgs> {
     let mut input = spec
         .inputs
         .iter()
@@ -113,12 +94,13 @@ fn mcp_manifest_args(spec: &CreateRunSpec) -> Option<types::ManifestArgs> {
     (!fabro_manifest::manifest_args_is_empty(&payload)).then_some(payload)
 }
 
-fn mcp_run_overrides(spec: &CreateRunSpec) -> Option<RunLayer> {
+fn mcp_run_overrides(spec: &ValidatedCreateRunSpec) -> Option<RunLayer> {
     fabro_manifest::build_sparse_run_overrides(RunOverrideInput {
         goal:             spec.goal.as_deref(),
         model:            spec.model.as_deref(),
         provider:         spec.provider.as_deref(),
         sandbox:          spec.sandbox.as_deref(),
+        docker_image:     None,
         preserve_sandbox: spec.preserve_sandbox,
         dry_run:          spec.dry_run,
         auto_approve:     spec.auto_approve,
@@ -173,7 +155,7 @@ mod tests {
 
     #[test]
     fn mcp_manifest_args_preserve_input_provenance() {
-        let args = mcp_manifest_args(&CreateRunSpec {
+        let spec = ValidatedCreateRunSpec::try_from(CreateRunSpec {
             workflow:         "simple".to_string(),
             run_id:           None,
             cwd:              None,
@@ -191,7 +173,8 @@ mod tests {
             preserve_sandbox: None,
             start:            None,
         })
-        .expect("input args should be present");
+        .expect("create spec should validate");
+        let args = mcp_manifest_args(&spec).expect("input args should be present");
 
         assert_eq!(args.input, vec![r"count=3", r#"decision="approve""#]);
     }

@@ -229,7 +229,7 @@ fn init_cursor_writes_idempotent_config() {
 }
 
 #[test]
-fn init_claude_writes_platform_config() {
+fn init_claude_writes_desktop_and_code_configs() {
     let context = test_context!();
     context
         .command()
@@ -237,12 +237,69 @@ fn init_claude_writes_platform_config() {
         .assert()
         .success();
 
-    let config_path = expected_claude_config_path(&context.home_dir);
-    let config: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(config_path).unwrap()).unwrap();
-    fabro_json_snapshot!(context, config, @r#"
+    let desktop_config: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(expected_claude_desktop_config_path(&context.home_dir)).unwrap(),
+    )
+    .unwrap();
+    fabro_json_snapshot!(context, desktop_config, @r#"
     {
       "mcpServers": {
+        "fabro": {
+          "command": "fabro",
+          "args": [
+            "mcp",
+            "start"
+          ]
+        }
+      }
+    }
+    "#);
+
+    let code_config: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(context.home_dir.join(".claude.json")).unwrap(),
+    )
+    .unwrap();
+    fabro_json_snapshot!(context, code_config, @r#"
+    {
+      "mcpServers": {
+        "fabro": {
+          "command": "fabro",
+          "args": [
+            "mcp",
+            "start"
+          ]
+        }
+      }
+    }
+    "#);
+}
+
+#[test]
+fn init_claude_preserves_existing_claude_code_config() {
+    let context = test_context!();
+    let claude_code_path = context.home_dir.join(".claude.json");
+    std::fs::write(
+        &claude_code_path,
+        r#"{"numStartups":42,"mcpServers":{"other":{"type":"http","url":"https://example.test/mcp"}}}"#,
+    )
+    .unwrap();
+
+    context
+        .command()
+        .args(["mcp", "init", "claude"])
+        .assert()
+        .success();
+
+    let config: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&claude_code_path).unwrap()).unwrap();
+    fabro_json_snapshot!(context, config, @r#"
+    {
+      "numStartups": 42,
+      "mcpServers": {
+        "other": {
+          "type": "http",
+          "url": "https://example.test/mcp"
+        },
         "fabro": {
           "command": "fabro",
           "args": [
@@ -625,19 +682,8 @@ async fn mcp_search_includes_archived_runs_by_default() {
     );
     archived["lifecycle"]["archived"] = serde_json::json!(true);
     archived["lifecycle"]["archived_at"] = serde_json::json!("2026-04-05T12:02:00Z");
-    let list_runs = server.mock(|when, then| {
-        when.method(GET)
-            .path("/api/v1/runs")
-            .query_param("include_archived", "true")
-            .query_param("page[limit]", "100")
-            .query_param("page[offset]", "0");
-        then.status(200)
-            .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "data": [active, archived],
-                "meta": { "has_more": false }
-            }));
-    });
+    let active_resolve = mock_resolved_run_json(&server, &active_id, active, None);
+    let archived_resolve = mock_resolved_run_json(&server, &archived_id, archived, None);
 
     let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
     let result = call_tool_json(
@@ -655,7 +701,8 @@ async fn mcp_search_includes_archived_runs_by_default() {
             .iter()
             .any(|run| run["archived"] == true)
     );
-    list_runs.assert();
+    active_resolve.assert();
+    archived_resolve.assert();
     client
         .shutdown()
         .await
@@ -677,7 +724,8 @@ async fn mcp_search_refreshes_expired_oauth_token() {
     let run_id = unique_run_id();
     let expired_access = server.mock(|when, then| {
         when.method(GET)
-            .path("/api/v1/runs")
+            .path("/api/v1/runs/resolve")
+            .query_param("selector", run_id.clone())
             .header("authorization", "Bearer expired-access");
         then.status(401)
             .header("Content-Type", "application/json")
@@ -710,24 +758,19 @@ async fn mcp_search_refreshes_expired_oauth_token() {
     });
     let fresh_access = server.mock(|when, then| {
         when.method(GET)
-            .path("/api/v1/runs")
+            .path("/api/v1/runs/resolve")
             .header("authorization", "Bearer fresh-access")
-            .query_param("include_archived", "true")
-            .query_param("page[limit]", "100")
-            .query_param("page[offset]", "0");
+            .query_param("selector", run_id.clone());
         then.status(200)
             .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "data": [remote_run_summary_json(
-                    &run_id,
-                    "Simple",
-                    "simple",
-                    "OAuth refreshed",
-                    &serde_json::json!({ "kind": "submitted" }),
-                    "2026-04-05T12:00:00Z",
-                )],
-                "meta": { "has_more": false }
-            }));
+            .json_body(remote_run_summary_json(
+                &run_id,
+                "Simple",
+                "simple",
+                "OAuth refreshed",
+                &serde_json::json!({ "kind": "submitted" }),
+                "2026-04-05T12:00:00Z",
+            ));
     });
     let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
 
@@ -773,27 +816,20 @@ async fn mcp_search_uses_fabro_auth_file_override() {
         )
         .expect("custom auth store should be seeded");
     let run_id = unique_run_id();
-    let list_runs = server.mock(|when, then| {
-        when.method(GET)
-            .path("/api/v1/runs")
-            .header("authorization", format!("Bearer {TEST_DEV_TOKEN}"))
-            .query_param("include_archived", "true")
-            .query_param("page[limit]", "100")
-            .query_param("page[offset]", "0");
-        then.status(200)
-            .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "data": [remote_run_summary_json(
-                    &run_id,
-                    "Simple",
-                    "simple",
-                    "Custom auth file",
-                    &serde_json::json!({ "kind": "submitted" }),
-                    "2026-04-05T12:00:00Z",
-                )],
-                "meta": { "has_more": false }
-            }));
-    });
+    let authorization = format!("Bearer {TEST_DEV_TOKEN}");
+    let resolve = mock_resolved_run_json(
+        &server,
+        &run_id,
+        remote_run_summary_json(
+            &run_id,
+            "Simple",
+            "simple",
+            "Custom auth file",
+            &serde_json::json!({ "kind": "submitted" }),
+            "2026-04-05T12:00:00Z",
+        ),
+        Some(&authorization),
+    );
     let mut fixture = mcp_stdio_fixture(&context, &["--server", &target_url]);
     fixture.env.insert(
         "FABRO_AUTH_FILE".to_string(),
@@ -809,7 +845,7 @@ async fn mcp_search_uses_fabro_auth_file_override() {
     .await;
 
     assert_eq!(result["runs"][0]["run_id"], run_id);
-    list_runs.assert();
+    resolve.assert();
     client
         .shutdown()
         .await
@@ -842,19 +878,8 @@ async fn mcp_search_orders_by_started_timestamp_before_created_timestamp() {
         "2026-04-05T12:00:00Z",
     );
     running["timestamps"]["started_at"] = serde_json::json!("2026-04-05T12:20:00Z");
-    let list_runs = server.mock(|when, then| {
-        when.method(GET)
-            .path("/api/v1/runs")
-            .query_param("include_archived", "true")
-            .query_param("page[limit]", "100")
-            .query_param("page[offset]", "0");
-        then.status(200)
-            .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "data": [submitted, running],
-                "meta": { "has_more": false }
-            }));
-    });
+    let submitted_resolve = mock_resolved_run_json(&server, &submitted_id, submitted, None);
+    let running_resolve = mock_resolved_run_json(&server, &running_id, running, None);
 
     let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
     let result = call_tool_json(
@@ -866,7 +891,8 @@ async fn mcp_search_orders_by_started_timestamp_before_created_timestamp() {
 
     assert_eq!(result["runs"][0]["run_id"], running_id);
     assert_eq!(result["runs"][1]["run_id"], submitted_id);
-    list_runs.assert();
+    submitted_resolve.assert();
+    running_resolve.assert();
     client
         .shutdown()
         .await
@@ -900,19 +926,8 @@ async fn mcp_search_orders_submitted_runs_by_created_timestamp_not_run_id_timest
         "2026-04-05T12:10:00Z",
     );
     older_created["timestamps"]["started_at"] = serde_json::Value::Null;
-    let list_runs = server.mock(|when, then| {
-        when.method(GET)
-            .path("/api/v1/runs")
-            .query_param("include_archived", "true")
-            .query_param("page[limit]", "100")
-            .query_param("page[offset]", "0");
-        then.status(200)
-            .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "data": [newer_created, older_created],
-                "meta": { "has_more": false }
-            }));
-    });
+    let newer_resolve = mock_resolved_run_json(&server, &newer_created_id, newer_created, None);
+    let older_resolve = mock_resolved_run_json(&server, &older_created_id, older_created, None);
 
     let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
     let result = call_tool_json(
@@ -924,7 +939,8 @@ async fn mcp_search_orders_submitted_runs_by_created_timestamp_not_run_id_timest
 
     assert_eq!(result["runs"][0]["run_id"], newer_created_id);
     assert_eq!(result["runs"][1]["run_id"], older_created_id);
-    list_runs.assert();
+    newer_resolve.assert();
+    older_resolve.assert();
     client
         .shutdown()
         .await
@@ -1277,7 +1293,7 @@ async fn mcp_interact_actions_resolve_selector_and_call_expected_endpoints() {
     assert_eq!(message_result["result"]["interrupt"], true);
     assert_eq!(cancel_result["result"]["summary"]["run_id"], run_id);
     resolve.assert_calls(4);
-    retrieve.assert_calls(3);
+    retrieve.assert_calls(1);
     projection.assert();
     start.assert();
     message.assert();
@@ -1821,28 +1837,16 @@ async fn mcp_events_offset_beyond_fetch_cap_reaches_later_pages() {
             })
         })
         .collect::<Vec<_>>();
-    let first_200_events = events.iter().take(200).cloned().collect::<Vec<_>>();
-    let capped_events = server.mock(|when, then| {
+    let first_251_events = events.iter().take(251).cloned().collect::<Vec<_>>();
+    let bounded_events = server.mock(|when, then| {
         when.method(GET)
             .path(format!("/api/v1/runs/{run_id}/events"))
-            .query_param("limit", "200");
+            .query_param("limit", "251");
         then.status(200)
             .header("Content-Type", "application/json")
             .json_body(serde_json::json!({
-                "data": first_200_events,
+                "data": first_251_events,
                 "meta": { "has_more": true }
-            }));
-    });
-    let full_events = server.mock(|when, then| {
-        when.method(GET)
-            .path(format!("/api/v1/runs/{run_id}/events"))
-            .query_param_missing("limit")
-            .query_param_missing("since_seq");
-        then.status(200)
-            .header("Content-Type", "application/json")
-            .json_body(serde_json::json!({
-                "data": events,
-                "meta": { "has_more": false }
             }));
     });
     let client = spawn_mcp_client(&context, &["--server", &target_url]).await;
@@ -1862,8 +1866,7 @@ async fn mcp_events_offset_beyond_fetch_cap_reaches_later_pages() {
     assert_eq!(paged["events"][0]["event_id"], "evt-251");
     assert_eq!(paged["next_cursor"], 252);
     resolve.assert();
-    capped_events.assert_calls(0);
-    full_events.assert();
+    bounded_events.assert();
     client
         .shutdown()
         .await
@@ -1898,7 +1901,7 @@ async fn mcp_tool_auth_error_mentions_login() {
     harness.shutdown().await;
 }
 
-fn expected_claude_config_path(home_dir: &Path) -> PathBuf {
+fn expected_claude_desktop_config_path(home_dir: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         home_dir
@@ -2119,4 +2122,24 @@ fn run_id_with_timestamp(timestamp: &str, sequence: u128) -> String {
         .expect("test timestamp should parse")
         .with_timezone(&Utc);
     RunId::with_timestamp(timestamp, sequence).to_string()
+}
+
+fn mock_resolved_run_json<'a>(
+    server: &'a MockServer,
+    selector: &str,
+    body: serde_json::Value,
+    authorization: Option<&str>,
+) -> httpmock::Mock<'a> {
+    server.mock(|when, then| {
+        let when = when
+            .method(GET)
+            .path("/api/v1/runs/resolve")
+            .query_param("selector", selector);
+        if let Some(authorization) = authorization {
+            when.header("authorization", authorization);
+        }
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(body);
+    })
 }

@@ -24,6 +24,7 @@ fabro-config = { path = "../fabro-config" }
 fabro-server = { path = "../fabro-server" }
 fabro-types = { path = "../fabro-types" }
 fabro-util = { path = "../fabro-util" }
+futures.workspace = true
 rmcp = { workspace = true, features = ["server", "macros", "schemars", "transport-io"] }
 schemars = "1.2.1"
 serde.workspace = true

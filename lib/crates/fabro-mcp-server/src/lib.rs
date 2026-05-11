@@ -5,15 +5,14 @@ mod server;
 use std::path::PathBuf;
 
 pub use config::{config_json, init_agent};
+use fabro_client::ServerTarget;
 pub use server::start;
 
 #[derive(Debug, Clone)]
 pub struct FabroMcpServerSettings {
-    pub config:        McpConfigSettings,
-    pub server_target: Option<String>,
+    pub server_target: Option<ServerTarget>,
     pub storage_dir:   PathBuf,
     pub config_path:   PathBuf,
-    pub home_dir:      PathBuf,
     pub cwd:           PathBuf,
 }
 

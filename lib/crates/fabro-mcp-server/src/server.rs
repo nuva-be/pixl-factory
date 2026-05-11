@@ -194,20 +194,22 @@ async fn client_from_settings(settings: &FabroMcpServerSettings) -> Result<Clien
     connect_local_server(settings).await
 }
 
-async fn connect_target(server: &str, settings: &FabroMcpServerSettings) -> Result<Client> {
-    let target: ServerTarget = server.parse()?;
+async fn connect_target(
+    target: &ServerTarget,
+    settings: &FabroMcpServerSettings,
+) -> Result<Client> {
     let auth_store = AuthStore::default();
-    let mut credential = resolve_target_credential_with_store(&target, &auth_store)?;
+    let mut credential = resolve_target_credential_with_store(target, &auth_store)?;
     if credential.is_none() && target.is_unix_socket() {
         let runtime_token_path = Storage::new(&settings.storage_dir)
             .runtime_directory()
             .dev_token_path();
         credential = dev_token::read_dev_token_file(&runtime_token_path).map(Credential::DevToken);
     }
-    let oauth_session = refreshable_oauth(&target, &auth_store, credential.as_ref());
+    let oauth_session = refreshable_oauth(target, &auth_store, credential.as_ref());
     let mut builder = Client::builder()
         .target(target.clone())
-        .transport_connector(target_transport_connector(target))
+        .transport_connector(target_transport_connector(target.clone()))
         .request_timeout(CLIENT_REQUEST_TIMEOUT);
     if let Some(credential) = credential {
         builder = builder.credential(credential);

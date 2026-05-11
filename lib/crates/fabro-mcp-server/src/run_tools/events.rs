@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use fabro_client::Client;
 use fabro_types::EventEnvelope;
 use schemars::JsonSchema;
@@ -37,7 +38,11 @@ pub(crate) struct FabroRunEventsParams {
 
 #[derive(Debug)]
 pub(crate) struct ValidatedRunEvents {
-    pub(crate) raw: FabroRunEventsParams,
+    pub(crate) raw:            FabroRunEventsParams,
+    pub(crate) descending:     bool,
+    pub(crate) first:          usize,
+    pub(crate) created_after:  Option<DateTime<Utc>>,
+    pub(crate) created_before: Option<DateTime<Utc>>,
 }
 
 impl TryFrom<FabroRunEventsParams> for ValidatedRunEvents {
@@ -51,17 +56,21 @@ impl TryFrom<FabroRunEventsParams> for ValidatedRunEvents {
         if first > 200 {
             return Err(ToolError::message("first must be <= 200"));
         }
-        if let Some(direction) = params.direction.as_deref() {
-            if !matches!(direction, "asc" | "desc") {
-                return Err(ToolError::message("direction must be `asc` or `desc`"));
-            }
-        }
-        if let Some(created_after) = params.created_after.as_deref() {
-            common::parse_datetime_filter("created_after", created_after)?;
-        }
-        if let Some(created_before) = params.created_before.as_deref() {
-            common::parse_datetime_filter("created_before", created_before)?;
-        }
+        let descending = match params.direction.as_deref() {
+            None | Some("asc") => false,
+            Some("desc") => true,
+            Some(_) => return Err(ToolError::message("direction must be `asc` or `desc`")),
+        };
+        let created_after = params
+            .created_after
+            .as_deref()
+            .map(|created_after| common::parse_datetime_filter("created_after", created_after))
+            .transpose()?;
+        let created_before = params
+            .created_before
+            .as_deref()
+            .map(|created_before| common::parse_datetime_filter("created_before", created_before))
+            .transpose()?;
         if matches!(params.action, RunEventsAction::Details)
             && params.event_ids.as_ref().is_none_or(Vec::is_empty)
         {
@@ -77,7 +86,13 @@ impl TryFrom<FabroRunEventsParams> for ValidatedRunEvents {
         {
             return Err(ToolError::message("query is required for search action"));
         }
-        Ok(Self { raw: params })
+        Ok(Self {
+            raw: params,
+            descending,
+            first,
+            created_after,
+            created_before,
+        })
     }
 }
 
@@ -101,29 +116,35 @@ pub(crate) async fn run_events(
     client: Arc<Client>,
     params: ValidatedRunEvents,
 ) -> ToolResult<RunEventsResult> {
+    let descending = params.descending;
+    let first = params.first;
+    let created_after = params.created_after;
+    let created_before = params.created_before;
     let raw = params.raw;
     let run_id = client
         .resolve_run(&raw.run_id)
         .await
         .map_err(|err| ToolError::from_anyhow(&err))?
         .id;
-    let descending = raw.direction.as_deref() == Some("desc");
     let fetch_after = if descending { None } else { raw.after };
-    let mut events = client
-        .list_run_events(&run_id, fetch_after, event_fetch_limit(&raw))
-        .await
-        .map_err(|err| ToolError::from_anyhow(&err))?;
+    let mut events = if let Some(limit) = event_fetch_limit(&raw, first) {
+        client
+            .list_run_events_until(&run_id, fetch_after, limit)
+            .await
+    } else {
+        client.list_run_events(&run_id, fetch_after, None).await
+    }
+    .map_err(|err| ToolError::from_anyhow(&err))?;
     if descending {
         if let Some(after) = raw.after {
             events.retain(|event| event.seq < after);
         }
     }
-    filter_events(&mut events, &raw)?;
+    filter_events(&mut events, &raw, created_after, created_before);
     if descending {
         events.reverse();
     }
     let offset = raw.offset.unwrap_or(0);
-    let first = raw.first.or(raw.limit).unwrap_or(50).min(200);
     let page = events
         .into_iter()
         .skip(offset)
@@ -154,7 +175,7 @@ pub(crate) fn run_events_text(result: &RunEventsResult) -> String {
     format!("returned {} Fabro event(s)", result.events.len())
 }
 
-fn event_fetch_limit(params: &FabroRunEventsParams) -> Option<usize> {
+fn event_fetch_limit(params: &FabroRunEventsParams, first: usize) -> Option<usize> {
     let needs_full_scan = params.event_ids.is_some()
         || params.event_types.is_some()
         || params.categories.is_some()
@@ -169,15 +190,16 @@ fn event_fetch_limit(params: &FabroRunEventsParams) -> Option<usize> {
         return None;
     }
 
-    let requested = params
-        .first
-        .or(params.limit)
-        .unwrap_or(50)
-        .saturating_add(params.offset.unwrap_or(0));
-    (requested <= 200).then_some(requested.max(1))
+    let requested = first.saturating_add(params.offset.unwrap_or(0));
+    Some(requested.max(1))
 }
 
-fn filter_events(events: &mut Vec<EventEnvelope>, params: &FabroRunEventsParams) -> ToolResult<()> {
+fn filter_events(
+    events: &mut Vec<EventEnvelope>,
+    params: &FabroRunEventsParams,
+    created_after: Option<DateTime<Utc>>,
+    created_before: Option<DateTime<Utc>>,
+) {
     if let Some(event_ids) = params.event_ids.as_ref() {
         events.retain(|event| event_ids.contains(&event.event.id));
     }
@@ -199,12 +221,10 @@ fn filter_events(events: &mut Vec<EventEnvelope>, params: &FabroRunEventsParams)
             categories.iter().any(|candidate| candidate == category)
         });
     }
-    if let Some(created_after) = params.created_after.as_deref() {
-        let cutoff = common::parse_datetime_filter("created_after", created_after)?;
+    if let Some(cutoff) = created_after {
         events.retain(|event| event.event.ts >= cutoff);
     }
-    if let Some(created_before) = params.created_before.as_deref() {
-        let cutoff = common::parse_datetime_filter("created_before", created_before)?;
+    if let Some(cutoff) = created_before {
         events.retain(|event| event.event.ts <= cutoff);
     }
     if matches!(params.action, RunEventsAction::Search) {
@@ -214,7 +234,6 @@ fn filter_events(events: &mut Vec<EventEnvelope>, params: &FabroRunEventsParams)
             });
         }
     }
-    Ok(())
 }
 
 fn run_event_result(

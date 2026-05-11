@@ -11,8 +11,8 @@ use fabro_api::types;
 use fabro_config::project::{self, discover_project_config, resolve_workflow_path};
 use fabro_config::run::{resolve_run_goal_from_layer, resolve_run_goal_from_namespace};
 use fabro_config::{
-    CliLayer, DaytonaDockerfileLayer, ReplaceMap, RunExecutionLayer, RunGoalLayer, RunLayer,
-    RunModelLayer, RunSandboxLayer, WorkflowSettingsBuilder,
+    CliLayer, DaytonaDockerfileLayer, DockerSandboxLayer, ReplaceMap, RunExecutionLayer,
+    RunGoalLayer, RunLayer, RunModelLayer, RunSandboxLayer, WorkflowSettingsBuilder,
 };
 use fabro_graphviz::graph::AttrValue;
 use fabro_graphviz::parser;
@@ -51,6 +51,7 @@ pub struct RunOverrideInput<'a> {
     pub model:            Option<&'a str>,
     pub provider:         Option<&'a str>,
     pub sandbox:          Option<&'a str>,
+    pub docker_image:     Option<&'a str>,
     pub preserve_sandbox: Option<bool>,
     pub dry_run:          Option<bool>,
     pub auto_approve:     Option<bool>,
@@ -67,12 +68,18 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
         name:      input.model.map(InterpString::parse),
         fallbacks: Vec::new(),
     });
-    let sandbox =
-        (input.sandbox.is_some() || input.preserve_sandbox.is_some()).then(|| RunSandboxLayer {
-            provider: input.sandbox.map(ToOwned::to_owned),
-            preserve: input.preserve_sandbox,
-            ..RunSandboxLayer::default()
-        });
+    let sandbox = (input.sandbox.is_some()
+        || input.docker_image.is_some()
+        || input.preserve_sandbox.is_some())
+    .then(|| RunSandboxLayer {
+        provider: input.sandbox.map(ToOwned::to_owned),
+        docker: input.docker_image.map(|image| DockerSandboxLayer {
+            image: Some(image.to_string()),
+            ..DockerSandboxLayer::default()
+        }),
+        preserve: input.preserve_sandbox,
+        ..RunSandboxLayer::default()
+    });
     let execution =
         (input.dry_run.is_some() || input.auto_approve.is_some()).then(|| RunExecutionLayer {
             mode:     input.dry_run.map(|dry_run| {
@@ -707,6 +714,7 @@ mod tests {
             model:            Some("gpt-5.4-mini"),
             provider:         Some("openai"),
             sandbox:          Some("local"),
+            docker_image:     None,
             preserve_sandbox: Some(true),
             dry_run:          Some(true),
             auto_approve:     Some(false),

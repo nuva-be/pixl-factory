@@ -35,7 +35,41 @@ pub(crate) struct FabroRunInteractParams {
 
 #[derive(Debug)]
 pub(crate) struct ValidatedInteractRun {
-    pub(crate) raw: FabroRunInteractParams,
+    pub(crate) run_id: String,
+    pub(crate) action: ValidatedInteractAction,
+}
+
+#[derive(Debug)]
+pub(crate) enum ValidatedInteractAction {
+    Get,
+    Start,
+    Message {
+        message:   String,
+        interrupt: bool,
+    },
+    Cancel,
+    Archive,
+    Unarchive,
+    GetQuestions,
+    Answer {
+        question_id: String,
+        body:        types::SubmitAnswerRequest,
+    },
+}
+
+impl ValidatedInteractAction {
+    fn action(&self) -> RunInteractAction {
+        match self {
+            Self::Get => RunInteractAction::Get,
+            Self::Start => RunInteractAction::Start,
+            Self::Message { .. } => RunInteractAction::Message,
+            Self::Cancel => RunInteractAction::Cancel,
+            Self::Archive => RunInteractAction::Archive,
+            Self::Unarchive => RunInteractAction::Unarchive,
+            Self::GetQuestions => RunInteractAction::GetQuestions,
+            Self::Answer { .. } => RunInteractAction::Answer,
+        }
+    }
 }
 
 impl TryFrom<FabroRunInteractParams> for ValidatedInteractRun {
@@ -45,26 +79,51 @@ impl TryFrom<FabroRunInteractParams> for ValidatedInteractRun {
         if params.run_id.trim().is_empty() {
             return Err(ToolError::message("run_id is required"));
         }
-        if matches!(params.action, RunInteractAction::Message)
-            && params
-                .message
-                .as_deref()
-                .is_none_or(|message| message.trim().is_empty())
-        {
-            return Err(ToolError::message("message is required for action message"));
-        }
-        if matches!(params.action, RunInteractAction::Answer) {
-            if params.question_id.as_deref().is_none_or(str::is_empty) {
-                return Err(ToolError::message(
-                    "question_id is required for action answer",
-                ));
+        let action = match params.action {
+            RunInteractAction::Get => ValidatedInteractAction::Get,
+            RunInteractAction::Start => ValidatedInteractAction::Start,
+            RunInteractAction::Message => {
+                let Some(message) = params
+                    .message
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|message| !message.is_empty())
+                else {
+                    return Err(ToolError::message("message is required for action message"));
+                };
+                ValidatedInteractAction::Message {
+                    message:   message.to_string(),
+                    interrupt: params.interrupt.unwrap_or(false),
+                }
             }
-            let Some(answer) = params.answer.as_ref() else {
-                return Err(ToolError::message("answer is required for action answer"));
-            };
-            answer_to_submit_request(answer.clone())?;
-        }
-        Ok(Self { raw: params })
+            RunInteractAction::Cancel => ValidatedInteractAction::Cancel,
+            RunInteractAction::Archive => ValidatedInteractAction::Archive,
+            RunInteractAction::Unarchive => ValidatedInteractAction::Unarchive,
+            RunInteractAction::GetQuestions => ValidatedInteractAction::GetQuestions,
+            RunInteractAction::Answer => {
+                let Some(question_id) = params
+                    .question_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|question_id| !question_id.is_empty())
+                else {
+                    return Err(ToolError::message(
+                        "question_id is required for action answer",
+                    ));
+                };
+                let Some(answer) = params.answer else {
+                    return Err(ToolError::message("answer is required for action answer"));
+                };
+                ValidatedInteractAction::Answer {
+                    question_id: question_id.to_string(),
+                    body:        answer_to_submit_request(answer)?,
+                }
+            }
+        };
+        Ok(Self {
+            run_id: params.run_id.trim().to_string(),
+            action,
+        })
     }
 }
 
@@ -79,68 +138,57 @@ pub(crate) async fn interact_run(
     client: Arc<Client>,
     params: ValidatedInteractRun,
 ) -> ToolResult<InteractRunResult> {
-    let raw = params.raw;
     let run_id = client
-        .resolve_run(&raw.run_id)
+        .resolve_run(&params.run_id)
         .await
         .map_err(|err| ToolError::from_anyhow(&err))?
         .id;
-    let result = match raw.action {
-        RunInteractAction::Get => interact_get(&client, &run_id).await?,
-        RunInteractAction::Start => {
-            client
+    let action = params.action.action();
+    let result = match params.action {
+        ValidatedInteractAction::Get => interact_get(&client, &run_id).await?,
+        ValidatedInteractAction::Start => {
+            let summary = client
                 .start_run(&run_id, false)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
-            json!({ "summary": common::run_summary_result(&common::retrieve_run(&client, &run_id).await?) })
+            json!({ "summary": common::run_summary_result(&summary) })
         }
-        RunInteractAction::Message => {
-            let message = raw
-                .message
-                .expect("validated message action has a message")
-                .trim()
-                .to_string();
+        ValidatedInteractAction::Message { message, interrupt } => {
             client
-                .steer_run(&run_id, message.clone(), raw.interrupt.unwrap_or(false))
+                .steer_run(&run_id, message.clone(), interrupt)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
-            json!({ "message": message, "interrupt": raw.interrupt.unwrap_or(false) })
+            json!({ "message": message, "interrupt": interrupt })
         }
-        RunInteractAction::Cancel => {
-            client
+        ValidatedInteractAction::Cancel => {
+            let summary = client
                 .cancel_run(&run_id)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
-            json!({ "summary": common::run_summary_result(&common::retrieve_run(&client, &run_id).await?) })
+            json!({ "summary": common::run_summary_result(&summary) })
         }
-        RunInteractAction::Archive => {
-            client
+        ValidatedInteractAction::Archive => {
+            let summary = client
                 .archive_run(&run_id)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
-            json!({ "summary": common::run_summary_result(&common::retrieve_run(&client, &run_id).await?) })
+            json!({ "summary": common::run_summary_result(&summary) })
         }
-        RunInteractAction::Unarchive => {
-            client
+        ValidatedInteractAction::Unarchive => {
+            let summary = client
                 .unarchive_run(&run_id)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
-            json!({ "summary": common::run_summary_result(&common::retrieve_run(&client, &run_id).await?) })
+            json!({ "summary": common::run_summary_result(&summary) })
         }
-        RunInteractAction::GetQuestions => {
+        ValidatedInteractAction::GetQuestions => {
             let questions = client
                 .list_run_questions(&run_id)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
             json!({ "questions": questions })
         }
-        RunInteractAction::Answer => {
-            let question_id = raw
-                .question_id
-                .expect("validated answer action has a question_id");
-            let body = answer_to_submit_request(
-                raw.answer.expect("validated answer action has an answer"),
-            )?;
+        ValidatedInteractAction::Answer { question_id, body } => {
             client
                 .submit_run_answer(&run_id, &question_id, body)
                 .await
@@ -151,7 +199,7 @@ pub(crate) async fn interact_run(
 
     Ok(InteractRunResult {
         run_id: run_id.to_string(),
-        action: raw.action,
+        action,
         result,
     })
 }
@@ -176,31 +224,59 @@ async fn interact_get(client: &Client, run_id: &RunId) -> ToolResult<Value> {
 }
 
 fn answer_to_submit_request(answer: Value) -> ToolResult<types::SubmitAnswerRequest> {
-    let payload = match answer {
-        Value::Bool(true) => json!({ "kind": "yes" }),
-        Value::Bool(false) => json!({ "kind": "no" }),
-        Value::String(text) => json!({ "kind": "text", "text": text }),
+    match answer {
+        Value::Bool(true) => Ok(types::SubmitAnswerYesRequest {
+            kind: types::SubmitAnswerYesRequestKind::Yes,
+        }
+        .into()),
+        Value::Bool(false) => Ok(types::SubmitAnswerNoRequest {
+            kind: types::SubmitAnswerNoRequestKind::No,
+        }
+        .into()),
+        Value::String(text) => Ok(text_answer_request(text)),
         Value::Object(mut object) => {
             if let Some(option) = object.remove("option") {
-                json!({ "kind": "selected", "option_key": option })
+                let option_key = serde_json::from_value::<String>(option).map_err(|err| {
+                    ToolError::message(format!("answer option must be a string: {err}"))
+                })?;
+                Ok(types::SubmitAnswerSelectedRequest {
+                    kind: types::SubmitAnswerSelectedRequestKind::Selected,
+                    option_key,
+                }
+                .into())
             } else if let Some(options) = object.remove("options") {
-                json!({ "kind": "multi_selected", "option_keys": options })
+                let option_keys =
+                    serde_json::from_value::<Vec<String>>(options).map_err(|err| {
+                        ToolError::message(format!("answer options must be strings: {err}"))
+                    })?;
+                Ok(types::SubmitAnswerMultiSelectedRequest {
+                    kind: types::SubmitAnswerMultiSelectedRequestKind::MultiSelected,
+                    option_keys,
+                }
+                .into())
             } else if let Some(text) = object.remove("text") {
-                json!({ "kind": "text", "text": text })
+                let text = serde_json::from_value::<String>(text).map_err(|err| {
+                    ToolError::message(format!("answer text must be a string: {err}"))
+                })?;
+                Ok(text_answer_request(text))
             } else {
-                return Err(ToolError::message(
+                Err(ToolError::message(
                     "answer object must contain one of: option, options, text",
-                ));
+                ))
             }
         }
-        other => {
-            return Err(ToolError::message(format!(
-                "unsupported answer value: {other}; expected boolean, string, or object",
-            )));
-        }
-    };
-    serde_json::from_value(payload)
-        .map_err(|err| ToolError::message(format!("failed to build submit-answer request: {err}")))
+        other => Err(ToolError::message(format!(
+            "unsupported answer value: {other}; expected boolean, string, or object",
+        ))),
+    }
+}
+
+fn text_answer_request(text: String) -> types::SubmitAnswerRequest {
+    types::SubmitAnswerTextRequest {
+        kind: types::SubmitAnswerTextRequestKind::Text,
+        text,
+    }
+    .into()
 }
 
 #[cfg(test)]

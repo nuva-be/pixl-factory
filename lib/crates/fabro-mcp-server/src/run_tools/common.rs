@@ -127,18 +127,7 @@ pub(super) fn parse_datetime_filter(name: &str, raw: &str) -> ToolResult<DateTim
 }
 
 pub(super) fn run_status_kind(status: RunStatus) -> &'static str {
-    match status {
-        RunStatus::Submitted => "submitted",
-        RunStatus::Queued => "queued",
-        RunStatus::Starting => "starting",
-        RunStatus::Running => "running",
-        RunStatus::Blocked { .. } => "blocked",
-        RunStatus::Paused { .. } => "paused",
-        RunStatus::Removing => "removing",
-        RunStatus::Succeeded { .. } => "succeeded",
-        RunStatus::Failed { .. } => "failed",
-        RunStatus::Dead => "dead",
-    }
+    status.kind().into()
 }
 
 fn format_tool_error(err: &anyhow::Error) -> String {

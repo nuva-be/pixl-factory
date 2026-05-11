@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use fabro_client::Client;
+use futures::future::try_join_all;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::time;
@@ -58,22 +59,24 @@ pub(crate) async fn gather_runs(
 ) -> ToolResult<GatherRunsResult> {
     let start = Instant::now();
     let deadline = start + Duration::from_secs(params.timeout_seconds);
-    let mut run_ids = Vec::with_capacity(params.run_ids.len());
-    for selector in params.run_ids {
-        run_ids.push(
+    let run_ids = try_join_all(params.run_ids.into_iter().map(|selector| {
+        let client = Arc::clone(&client);
+        async move {
             client
                 .resolve_run(&selector)
                 .await
-                .map_err(|err| ToolError::from_anyhow(&err))?
-                .id,
-        );
-    }
+                .map(|run| run.id)
+                .map_err(|err| ToolError::from_anyhow(&err))
+        }
+    }))
+    .await?;
 
     loop {
-        let mut summaries = Vec::with_capacity(run_ids.len());
-        for run_id in &run_ids {
-            summaries.push(common::retrieve_run(&client, run_id).await?);
-        }
+        let summaries = try_join_all(run_ids.iter().map(|run_id| {
+            let client = Arc::clone(&client);
+            async move { common::retrieve_run(&client, run_id).await }
+        }))
+        .await?;
         if summaries
             .iter()
             .all(|run| run.lifecycle.status.is_terminal())
