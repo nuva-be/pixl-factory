@@ -758,6 +758,7 @@ fn docker_controlled_shell_command(command: &str, stop_file: &str, pid_file: &st
 stop_file={stop_file}; \
 pid_file={pid_file}; \
 user_command={command}; \
+exec 3<&0; \
 rm -f \"$pid_file\"; \
 if [ -e \"$stop_file\" ]; then \
   rm -f \"$stop_file\" \"$pid_file\"; \
@@ -772,11 +773,12 @@ fi; \
   kill -KILL \"-$child\" 2>/dev/null || kill -KILL \"$child\" 2>/dev/null || true; \
 ) & watcher=$!; \
 if command -v setsid >/dev/null 2>&1; then \
-  setsid /bin/bash -lc \"$user_command\" & \
+  setsid /bin/bash -lc \"$user_command\" <&3 & \
 else \
-  /bin/bash -lc \"$user_command\" & \
+  /bin/bash -lc \"$user_command\" <&3 & \
 fi; \
 child=$!; \
+exec 3<&-; \
 echo \"$child\" > \"$pid_file\"; \
 wait \"$child\"; \
 status=$?; \
@@ -1868,8 +1870,10 @@ mod tests {
         reason = "unit test reads an in-memory tar entry synchronously"
     )]
     use std::io::Read as _;
+    use std::process::Stdio;
     use std::time::Duration;
 
+    use tokio::io::AsyncWriteExt as _;
     use tokio::process::Command;
 
     use super::*;
@@ -2015,6 +2019,45 @@ mod tests {
             matching_processes.is_empty(),
             "controlled shell command should not leave child processes: {matching_processes:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn controlled_shell_command_preserves_stdin_for_user_command() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let stop_file = tempdir.path().join("stop");
+        let pid_file = tempdir.path().join("pid");
+        let stop_file = stop_file.to_string_lossy().into_owned();
+        let pid_file = pid_file.to_string_lossy().into_owned();
+        let command = docker_controlled_shell_command("cat", &stop_file, &pid_file);
+
+        let mut child = Command::new("/bin/bash")
+            .arg("-lc")
+            .arg(command)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("controlled shell command should spawn");
+        let mut stdin = child
+            .stdin
+            .take()
+            .expect("controlled shell command stdin should be piped");
+        stdin
+            .write_all(b"abc\n")
+            .await
+            .expect("stdin should be written");
+        drop(stdin);
+
+        let output = time::timeout(Duration::from_secs(5), child.wait_with_output())
+            .await
+            .expect("controlled shell command should not hang")
+            .expect("controlled shell command should run");
+
+        assert!(
+            output.status.success(),
+            "controlled shell command should exit successfully: {output:?}"
+        );
+        assert_eq!(output.stdout, b"abc\n");
     }
 
     #[tokio::test]
