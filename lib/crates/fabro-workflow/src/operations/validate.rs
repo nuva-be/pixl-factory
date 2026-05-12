@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use fabro_types::WorkflowSettings;
 
-use super::create::preprocess_and_validate;
+use super::create::{RenderMode, preprocess_and_validate};
 use super::source::{ResolveWorkflowInput, WorkflowInput, resolve_workflow};
 use crate::error::Error;
 use crate::pipeline::Validated;
@@ -13,6 +13,12 @@ pub struct ValidateInput {
     pub settings:          WorkflowSettings,
     pub cwd:               PathBuf,
     pub custom_transforms: Vec<Box<dyn Transform>>,
+    /// How undefined template inputs are treated. Validate-style callers
+    /// (`fabro validate`, the `/validate` API) pass [`RenderMode::Structural`]
+    /// so unbound inputs surface as warning diagnostics. Run-style callers
+    /// (`fabro run`, preflight) pass [`RenderMode::Strict`] so unbound inputs
+    /// hard-fail before a run is created.
+    pub mode:              RenderMode,
 }
 
 /// Parse, transform, and validate a DOT source string.
@@ -34,5 +40,6 @@ pub fn validate(input: ValidateInput) -> Result<Validated, Error> {
         input.custom_transforms,
         Some(&resolved.settings),
         resolved.goal_override.as_deref(),
+        input.mode,
     )
 }
