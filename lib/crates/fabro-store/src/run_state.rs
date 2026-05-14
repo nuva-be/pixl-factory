@@ -230,6 +230,10 @@ impl RunProjectionReducer for RunProjection {
                     repo_cloned:       props.repo_cloned,
                     clone_origin_url:  props.clone_origin_url.clone(),
                     clone_branch:      props.clone_branch.clone(),
+                    workspace_root:    props.workspace_root.clone(),
+                    repos_root:        props.repos_root.clone(),
+                    primary_repo_path: props.primary_repo_path.clone(),
+                    primary_repo_link: props.primary_repo_link.clone(),
                 });
             }
             EventBody::PullRequestCreated(props) => {
