@@ -2686,15 +2686,30 @@ async fn interrupt_active_session_turn_cancels_runtime_and_persists_interrupted(
         axum::serve(listener, llm_app).await.unwrap();
     });
     let openai_base_url = format!("http://{llm_addr}/v1");
-    let state = test_app_state_with_env_lookup(
-        default_test_server_settings(),
-        RunLayer::default(),
-        5,
-        move |name| match name {
-            "OPENAI_BASE_URL" => Some(openai_base_url.clone()),
-            _ => None,
-        },
-    );
+    // Use an isolated storage root so that other tests' AppState startup does
+    // not run `recover_stale_running_state` against this test's session
+    // directory and mark its in-flight turn as Interrupted.
+    let storage_dir = std::env::temp_dir().join(format!("fabro-server-test-{}", Ulid::new()));
+    std::fs::create_dir_all(&storage_dir).expect("test storage dir should be creatable");
+    let server_settings = server_settings_from_toml(&format!(
+        r#"
+_version = 1
+
+[server.storage]
+root = "{}"
+
+[server.auth]
+methods = ["dev-token"]
+"#,
+        storage_dir.display()
+    ));
+    let state =
+        test_app_state_with_env_lookup(server_settings, RunLayer::default(), 5, move |name| {
+            match name {
+                "OPENAI_BASE_URL" => Some(openai_base_url.clone()),
+                _ => None,
+            }
+        });
     state
         .vault
         .write()
@@ -2746,7 +2761,12 @@ async fn interrupt_active_session_turn_cancels_runtime_and_persists_interrupted(
         .unwrap();
     assert_eq!(stream_response.status(), StatusCode::OK);
     let mut stream_body = stream_response.into_body();
-    let running = read_sse_until(&mut stream_body, "turn.running").await;
+    // Wait for `turn.assistant_text_start` so the agent is committed to the
+    // in-flight LLM call. Waiting only for `turn.running` (emitted before
+    // `build_agent_session` and `process_input`) leaves a window in which the
+    // turn can reach a terminal state before the interrupt request arrives,
+    // making the assertions below flaky under heavy CI load.
+    let running = read_sse_until(&mut stream_body, "turn.assistant_text_start").await;
     let turn_id = sse_events(&running)
         .into_iter()
         .find_map(|event| {
