@@ -1442,7 +1442,7 @@ mod tests {
         assert_eq!(stored.event_name(), "stage.failed");
         let properties = stored.properties().unwrap();
         assert_eq!(properties["failure"]["message"], "lint failed");
-        assert_eq!(properties["failure"]["failure_class"], "deterministic");
+        assert_eq!(properties["failure"]["category"], "deterministic");
         assert_eq!(properties["will_retry"], true);
         assert_eq!(properties["billing"], serde_json::to_value(&usage).unwrap());
     }
@@ -1550,7 +1550,7 @@ mod tests {
 
         assert_eq!(stored.event_name(), "run.failed");
         let properties = stored.properties().unwrap();
-        assert_eq!(properties["failure"]["message"], "boom");
+        assert_eq!(properties["failure"]["detail"]["message"], "boom");
         assert_eq!(properties["duration_ms"], 900);
     }
 
@@ -1570,11 +1570,11 @@ mod tests {
 
         let properties = stored.properties().unwrap();
         assert_eq!(
-            properties["failure"]["message"],
+            properties["failure"]["detail"]["message"],
             "Failed to initialize sandbox"
         );
         assert_eq!(
-            properties["failure"]["causes"],
+            properties["failure"]["detail"]["causes"],
             serde_json::json!(["connection refused"])
         );
     }
@@ -1596,15 +1596,18 @@ mod tests {
         assert_eq!(stored.event_name(), "run.failed");
         let properties = stored.properties().unwrap();
         assert_eq!(
-            properties["failure"]["message"],
+            properties["failure"]["detail"]["message"],
             "Failed to initialize sandbox"
         );
         assert_eq!(
-            properties["failure"]["causes"],
+            properties["failure"]["detail"]["causes"],
             serde_json::json!(["connection refused"])
         );
         assert_eq!(properties["failure"]["reason"], "sandbox_init_failed");
-        assert_eq!(properties["failure"]["category"], "transient_infra");
+        assert_eq!(
+            properties["failure"]["detail"]["category"],
+            "transient_infra"
+        );
         assert_eq!(properties["duration_ms"], 900);
         assert_eq!(properties["final_git_commit_sha"], "abc123");
         assert!(properties.get("error").is_none());

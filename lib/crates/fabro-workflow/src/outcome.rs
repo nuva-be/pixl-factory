@@ -7,7 +7,7 @@ use fabro_model::{
 };
 pub use fabro_types::BilledModelUsage;
 
-use crate::error::{Error, classify_failure_reason};
+use crate::error::{Error, FailureSignature, classify_failure_reason};
 
 pub type Outcome = fabro_core::Outcome<Option<BilledModelUsage>>;
 
@@ -109,7 +109,7 @@ impl OutcomeExt for Outcome {
 
     fn with_signature(mut self, sig: Option<impl Into<String>>) -> Self {
         if let Some(ref mut failure) = self.failure {
-            failure.signature = sig.map(Into::into);
+            failure.signature = sig.map(|sig| FailureSignature(sig.into()));
         }
         self
     }

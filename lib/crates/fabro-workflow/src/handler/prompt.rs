@@ -139,7 +139,7 @@ impl Handler for PromptHandler {
                     })
                     .await;
                 match result {
-                    Ok(CodergenResult::Full(outcome)) => return Ok(outcome),
+                    Ok(CodergenResult::Full(outcome)) => return Ok(*outcome),
                     Ok(CodergenResult::Text {
                         text,
                         usage,
