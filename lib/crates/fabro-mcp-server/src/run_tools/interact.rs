@@ -25,6 +25,8 @@ pub(crate) enum RunInteractAction {
     Cancel,
     Archive,
     Unarchive,
+    LinkParent,
+    UnlinkParent,
     GetQuestions,
     Answer,
 }
@@ -33,6 +35,7 @@ pub(crate) enum RunInteractAction {
 pub(crate) struct FabroRunInteractParams {
     pub(crate) action:      RunInteractAction,
     pub(crate) run_id:      String,
+    pub(crate) parent_id:   Option<String>,
     pub(crate) message:     Option<String>,
     pub(crate) interrupt:   Option<bool>,
     pub(crate) question_id: Option<String>,
@@ -120,6 +123,10 @@ pub(crate) enum ValidatedInteractAction {
     Cancel,
     Archive,
     Unarchive,
+    LinkParent {
+        parent_id: String,
+    },
+    UnlinkParent,
     GetQuestions,
     Answer {
         question_id: String,
@@ -137,6 +144,8 @@ impl ValidatedInteractAction {
             Self::Cancel => RunInteractAction::Cancel,
             Self::Archive => RunInteractAction::Archive,
             Self::Unarchive => RunInteractAction::Unarchive,
+            Self::LinkParent { .. } => RunInteractAction::LinkParent,
+            Self::UnlinkParent => RunInteractAction::UnlinkParent,
             Self::GetQuestions => RunInteractAction::GetQuestions,
             Self::Answer { .. } => RunInteractAction::Answer,
         }
@@ -171,6 +180,22 @@ impl TryFrom<FabroRunInteractParams> for ValidatedInteractRun {
             RunInteractAction::Cancel => ValidatedInteractAction::Cancel,
             RunInteractAction::Archive => ValidatedInteractAction::Archive,
             RunInteractAction::Unarchive => ValidatedInteractAction::Unarchive,
+            RunInteractAction::LinkParent => {
+                let Some(parent_id) = params
+                    .parent_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|parent_id| !parent_id.is_empty())
+                else {
+                    return Err(ToolError::message(
+                        "parent_id is required for action link_parent",
+                    ));
+                };
+                ValidatedInteractAction::LinkParent {
+                    parent_id: parent_id.to_string(),
+                }
+            }
+            RunInteractAction::UnlinkParent => ValidatedInteractAction::UnlinkParent,
             RunInteractAction::GetQuestions => ValidatedInteractAction::GetQuestions,
             RunInteractAction::Answer => {
                 let Some(question_id) = params
@@ -256,6 +281,25 @@ pub(crate) async fn interact_run(
         ValidatedInteractAction::Unarchive => {
             let summary = client
                 .unarchive_run(&run_id)
+                .await
+                .map_err(|err| ToolError::from_anyhow(&err))?;
+            json!({ "summary": common::run_summary_result(&summary) })
+        }
+        ValidatedInteractAction::LinkParent { parent_id } => {
+            let parent_id = client
+                .resolve_run(&parent_id)
+                .await
+                .map_err(|err| ToolError::from_anyhow(&err))?
+                .id;
+            let summary = client
+                .link_run_parent(&run_id, &parent_id)
+                .await
+                .map_err(|err| ToolError::from_anyhow(&err))?;
+            json!({ "summary": common::run_summary_result(&summary) })
+        }
+        ValidatedInteractAction::UnlinkParent => {
+            let summary = client
+                .unlink_run_parent(&run_id)
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?;
             json!({ "summary": common::run_summary_result(&summary) })
@@ -402,6 +446,7 @@ mod tests {
         let err = ValidatedInteractRun::try_from(FabroRunInteractParams {
             action:      RunInteractAction::Answer,
             run_id:      "run_123".to_string(),
+            parent_id:   None,
             message:     None,
             interrupt:   None,
             question_id: Some("question-1".to_string()),
@@ -413,10 +458,54 @@ mod tests {
     }
 
     #[test]
+    fn interact_link_parent_validation_rejects_missing_or_blank_parent_id() {
+        for parent_id in [None, Some("   ".to_string())] {
+            let err = ValidatedInteractRun::try_from(FabroRunInteractParams {
+                action: RunInteractAction::LinkParent,
+                run_id: "child-run".to_string(),
+                parent_id,
+                message: None,
+                interrupt: None,
+                question_id: None,
+                answer: None,
+            })
+            .unwrap_err();
+
+            assert!(
+                err.as_str()
+                    .contains("parent_id is required for action link_parent"),
+                "{}",
+                err.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn interact_unlink_parent_validation_does_not_require_parent_id() {
+        let validated = ValidatedInteractRun::try_from(FabroRunInteractParams {
+            action:      RunInteractAction::UnlinkParent,
+            run_id:      " child-run ".to_string(),
+            parent_id:   None,
+            message:     None,
+            interrupt:   None,
+            question_id: None,
+            answer:      None,
+        })
+        .expect("unlink_parent should not require parent_id");
+
+        assert_eq!(validated.run_id, "child-run");
+        assert!(matches!(
+            validated.action,
+            ValidatedInteractAction::UnlinkParent
+        ));
+    }
+
+    #[test]
     fn interrupt_action_requires_only_run_id() {
         let validated = ValidatedInteractRun::try_from(FabroRunInteractParams {
             action:      RunInteractAction::Interrupt,
             run_id:      "run_123".to_string(),
+            parent_id:   None,
             message:     None,
             interrupt:   None,
             question_id: None,
