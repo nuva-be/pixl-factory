@@ -20,8 +20,8 @@ pub struct RefreshToken {
     pub login:        String,
     pub name:         String,
     pub email:        String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar_url:   Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub avatar_url:   String,
     pub issued_at:    DateTime<Utc>,
     pub expires_at:   DateTime<Utc>,
     pub last_used_at: DateTime<Utc>,
@@ -233,7 +233,7 @@ mod tests {
             login: "octocat".to_string(),
             name: "The Octocat".to_string(),
             email: "octocat@example.com".to_string(),
-            avatar_url: None,
+            avatar_url: String::new(),
             issued_at: now,
             expires_at: now + ChronoDuration::days(30),
             last_used_at: now,
@@ -317,13 +317,13 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(entry.avatar_url, None);
+        assert_eq!(entry.avatar_url, "");
     }
 
     #[test]
     fn serializes_avatar_url_when_present() {
         let mut entry = refresh_token([1_u8; 32], Uuid::new_v4(), false);
-        entry.avatar_url = Some("https://example.com/octocat.png".to_string());
+        entry.avatar_url = "https://example.com/octocat.png".to_string();
 
         let json = serde_json::to_value(&entry).unwrap();
 

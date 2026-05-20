@@ -12,7 +12,7 @@ use cookie::{Cookie, CookieJar, Key, SameSite};
 use fabro_redact::DisplaySafeUrl;
 use fabro_static::EnvVars;
 use fabro_types::settings::ServerAuthMethod;
-use fabro_types::{AuthMethod, IdpIdentity, Principal};
+use fabro_types::{AuthMethod, IdpIdentity};
 use fabro_util::dev_token::validate_dev_token_format;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
@@ -23,8 +23,7 @@ use crate::auth::{GithubEndpoints, browser_shell};
 use crate::error::ApiError;
 use crate::jwt_auth::{AuthMode, auth_method_name, dev_token_matches};
 use crate::principal_middleware::{
-    RequestAuth, RequestAuthContext, RequiredUser, UserProfile, non_empty_avatar_url,
-    require_authenticated_user,
+    RequestAuth, RequestAuthContext, RequiredUser, UserProfile, require_authenticated_user,
 };
 use crate::server::AppState;
 
@@ -194,22 +193,16 @@ pub(crate) fn session_cookie_present(headers: &HeaderMap) -> bool {
 }
 
 pub(crate) fn auth_context_from_session(session: &SessionCookie) -> RequestAuthContext {
-    let identity = session.identity.clone();
-    let principal_avatar = non_empty_avatar_url(&session.avatar_url);
-    let principal = Principal::user_with_avatar(
-        identity,
+    RequestAuthContext::authenticated_user(
+        session.identity.clone(),
         session.login.clone(),
         session.auth_method,
-        principal_avatar,
-    );
-    RequestAuthContext::authenticated(
-        principal,
-        Some(UserProfile {
+        UserProfile {
             name:       session.name.clone(),
             email:      session.email.clone(),
             avatar_url: session.avatar_url.clone(),
             user_url:   session.user_url.clone(),
-        }),
+        },
     )
 }
 

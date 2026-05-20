@@ -14,8 +14,8 @@ pub struct AuthCode {
     pub login:          String,
     pub name:           String,
     pub email:          String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar_url:     Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub avatar_url:     String,
     pub code_challenge: String,
     pub redirect_uri:   String,
     pub expires_at:     DateTime<Utc>,
@@ -110,7 +110,7 @@ mod tests {
             login: "octocat".to_string(),
             name: "The Octocat".to_string(),
             email: "octocat@example.com".to_string(),
-            avatar_url: None,
+            avatar_url: String::new(),
             code_challenge: "challenge".to_string(),
             redirect_uri: "http://127.0.0.1/callback".to_string(),
             expires_at,
@@ -149,13 +149,13 @@ mod tests {
         }))
         .unwrap();
 
-        assert_eq!(entry.avatar_url, None);
+        assert_eq!(entry.avatar_url, "");
     }
 
     #[test]
     fn serializes_avatar_url_when_present() {
         let mut entry = auth_code("avatar-code", chrono::Utc::now());
-        entry.avatar_url = Some("https://example.com/octocat.png".to_string());
+        entry.avatar_url = "https://example.com/octocat.png".to_string();
 
         let json = serde_json::to_value(&entry).unwrap();
 

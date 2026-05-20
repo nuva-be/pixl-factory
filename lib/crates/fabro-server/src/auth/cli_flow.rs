@@ -32,7 +32,7 @@ use crate::auth::{
 };
 use crate::jwt_auth::{AuthMode, ConfiguredAuth, bearer_token_from_headers};
 use crate::principal_middleware::{
-    AuthContextSlot, AuthStatus, RequestAuth, RequestAuthContext, UserProfile, non_empty_avatar_url,
+    AuthContextSlot, AuthStatus, RequestAuth, RequestAuthContext, non_empty_avatar_url,
 };
 use crate::server::AppState;
 use crate::web_auth::{
@@ -508,7 +508,7 @@ async fn token(
             login:       entry.login.clone(),
             name:        entry.name.clone(),
             email:       entry.email.clone(),
-            avatar_url:  entry.avatar_url.clone().unwrap_or_default(),
+            avatar_url:  entry.avatar_url.clone(),
             user_url:    String::new(),
             auth_method: AuthMethod::Github,
         },
@@ -665,7 +665,7 @@ async fn refresh(
             login:       old.login.clone(),
             name:        old.name.clone(),
             email:       old.email.clone(),
-            avatar_url:  old.avatar_url.clone().unwrap_or_default(),
+            avatar_url:  old.avatar_url.clone(),
             user_url:    String::new(),
             auth_method: AuthMethod::Github,
         },
@@ -959,20 +959,14 @@ fn refresh_credential_from_headers(headers: &HeaderMap) -> RefreshCredential {
 }
 
 fn refresh_user_context(refresh_token: &RefreshToken) -> RequestAuthContext {
-    let avatar_url = refresh_token.avatar_url.clone();
     RequestAuthContext::authenticated(
         Principal::user_with_avatar(
             refresh_token.identity.clone(),
             refresh_token.login.clone(),
             AuthMethod::Github,
-            avatar_url.clone(),
+            non_empty_avatar_url(&refresh_token.avatar_url),
         ),
-        Some(UserProfile {
-            name:       refresh_token.name.clone(),
-            email:      refresh_token.email.clone(),
-            avatar_url: avatar_url.unwrap_or_default(),
-            user_url:   String::new(),
-        }),
+        None,
     )
 }
 
@@ -996,7 +990,7 @@ fn next_refresh_row(
         login:        existing.map_or_else(String::new, |token| token.login.clone()),
         name:         existing.map_or_else(String::new, |token| token.name.clone()),
         email:        existing.map_or_else(String::new, |token| token.email.clone()),
-        avatar_url:   existing.and_then(|token| token.avatar_url.clone()),
+        avatar_url:   existing.map_or_else(String::new, |token| token.avatar_url.clone()),
         issued_at:    now,
         expires_at:   now + chrono::Duration::days(REFRESH_TOKEN_TTL_DAYS),
         last_used_at: now,
@@ -1190,7 +1184,7 @@ async fn issue_auth_code_response(
         login: session.login.clone(),
         name: session.name.clone(),
         email: session.email.clone(),
-        avatar_url: non_empty_avatar_url(&session.avatar_url),
+        avatar_url: session.avatar_url.clone(),
         code_challenge: code_challenge.to_string(),
         redirect_uri: redirect_uri.clone(),
         expires_at: chrono::Utc::now() + chrono::Duration::seconds(60),
@@ -1404,7 +1398,7 @@ client_id = "github-client-id"
                 login:          "octocat".to_string(),
                 name:           "The Octocat".to_string(),
                 email:          "octocat@example.com".to_string(),
-                avatar_url:     Some("https://example.com/octocat.png".to_string()),
+                avatar_url:     "https://example.com/octocat.png".to_string(),
                 code_challenge: pkce_challenge(verifier),
                 redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
                 expires_at:     chrono::Utc::now() + chrono::Duration::seconds(60),
@@ -1427,7 +1421,7 @@ client_id = "github-client-id"
             login:        "octocat".to_string(),
             name:         "The Octocat".to_string(),
             email:        "octocat@example.com".to_string(),
-            avatar_url:   Some("https://example.com/octocat.png".to_string()),
+            avatar_url:   "https://example.com/octocat.png".to_string(),
             issued_at:    now,
             expires_at:   now + chrono::Duration::days(30),
             last_used_at: now,
@@ -2025,10 +2019,7 @@ client_id = "github-client-id"
             .unwrap()
             .expect("refresh token should be stored");
         assert_eq!(refresh.login, "octocat");
-        assert_eq!(
-            refresh.avatar_url.as_deref(),
-            Some("https://example.com/octocat.png")
-        );
+        assert_eq!(refresh.avatar_url, "https://example.com/octocat.png");
         assert_eq!(refresh.user_agent, "fabro-cli/0.1");
     }
 

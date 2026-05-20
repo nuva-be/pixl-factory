@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use fabro_types::{Principal, RunBlobId, RunId, StageId, UserPrincipal};
+use fabro_types::{AuthMethod, IdpIdentity, Principal, RunBlobId, RunId, StageId, UserPrincipal};
 use jsonwebtoken::decode_header;
 use strum::IntoStaticStr;
 
@@ -85,6 +85,22 @@ impl RequestAuthContext {
             auth_error_code: None,
             user_profile,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn authenticated_user(
+        identity: IdpIdentity,
+        login: String,
+        auth_method: AuthMethod,
+        profile: UserProfile,
+    ) -> Self {
+        let principal = Principal::user_with_avatar(
+            identity,
+            login,
+            auth_method,
+            non_empty_avatar_url(&profile.avatar_url),
+        );
+        Self::authenticated(principal, Some(profile))
     }
 
     #[must_use]
@@ -412,20 +428,13 @@ fn classify_user_token(token: &str, config: &ConfiguredAuth) -> RequestAuthConte
             );
         }
     };
-    let principal_avatar = non_empty_avatar_url(&auth.avatar_url);
-    let principal = Principal::user_with_avatar(
-        auth.identity,
-        auth.login,
-        auth.auth_method,
-        principal_avatar,
-    );
     let profile = UserProfile {
         name:       auth.name,
         email:      auth.email,
         avatar_url: auth.avatar_url,
         user_url:   auth.user_url,
     };
-    RequestAuthContext::authenticated(principal, Some(profile))
+    RequestAuthContext::authenticated_user(auth.identity, auth.login, auth.auth_method, profile)
 }
 
 fn auth_rejection(status: AuthStatus, code: Option<AuthErrorCode>) -> ApiError {
