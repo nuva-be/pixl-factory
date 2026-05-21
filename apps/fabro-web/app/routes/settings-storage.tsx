@@ -6,7 +6,6 @@ import { formatBytesAsMemory } from "../lib/format";
 import { useServerSettings, useSystemResources } from "../lib/queries";
 import {
   Mono,
-  Muted,
   ObjectStoreRows,
   Panel,
   PanelSkeleton,
@@ -65,13 +64,6 @@ function StorageRootPanel({
     <Panel title="Storage root">
       <Row title="Path" help="Filesystem path for run state and logs.">
         <Mono>{storage.root}</Mono>
-      </Row>
-      <Row title="Mount point" help="Filesystem containing the storage path.">
-        {disk.mount_point ? (
-          <Mono>{disk.mount_point}</Mono>
-        ) : (
-          <Muted>Unknown</Muted>
-        )}
       </Row>
       <Row title="Fabro managed" help="Bytes currently tracked under Fabro storage.">
         {formatBytesAsMemory(disk.fabro_managed_bytes, 0)}
