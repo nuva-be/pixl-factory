@@ -1,0 +1,687 @@
+diff --git a/docs/public/administration/server-configuration.mdx b/docs/public/administration/server-configuration.mdx
+index 2ff6a38f2..8552987b6 100644
+--- a/docs/public/administration/server-configuration.mdx
++++ b/docs/public/administration/server-configuration.mdx
+@@ -99,6 +99,7 @@ team = "platform"
+ 
+ [run.checkpoint]
+ exclude_globs = ["**/node_modules/**", "**/.cache/**"]
++skip_git_hooks = false
+ 
+ [run.inputs]
+ default_branch = "main"
+@@ -293,8 +294,9 @@ Configure checkpoint behavior for all runs.
+ | Key | Description |
+ |---|---|
+ | `exclude_globs` | Glob patterns for files to exclude from checkpoint commits (for example, `["**/node_modules/**"]`) |
++| `skip_git_hooks` | When `true`, Fabro-managed run-branch checkpoint commits bypass local Git commit hooks. Defaults to `false`. Does not affect Fabro workflow `[[run.hooks]]` or metadata-branch snapshots. |
+ 
+-`exclude_globs` replaces across layers — the highest-precedence layer wins wholesale. See [Run Configuration — Checkpoint](/execution/run-configuration#runcheckpoint) for per-run configuration.
++`exclude_globs` replaces across layers — the highest-precedence layer wins wholesale. `skip_git_hooks` uses normal override semantics. See [Run Configuration — Checkpoint](/execution/run-configuration#runcheckpoint) for per-run configuration.
+ 
+ ## Secrets and environment variables
+ 
+@@ -396,4 +398,4 @@ Fabro resolves these from `process env -> server.env`.
+ | Variable | Default | Description |
+ |---|---|---|
+ | `FABRO_LOG` | `info` | Log level: `error`, `warn`, `info`, `debug` |
+-| `FABRO_LOG_DESTINATION` | Command-mode default | Server log destination: `file` or `stdout` |
++| `FABRO_LOG_DESTINATION` | Command-mode default | Server log destination: `file` or `stdout` |
+\ No newline at end of file
+diff --git a/docs/public/api-reference/fabro-api.yaml b/docs/public/api-reference/fabro-api.yaml
+index d7215339f..4931a7ba0 100644
+--- a/docs/public/api-reference/fabro-api.yaml
++++ b/docs/public/api-reference/fabro-api.yaml
+@@ -10631,12 +10631,18 @@ components:
+ 
+     RunCheckpointSettings:
+       type: object
+-      required: [exclude_globs]
++      required: [exclude_globs, skip_git_hooks]
+       properties:
+         exclude_globs:
+           type: array
+           items:
+             type: string
++        skip_git_hooks:
++          type: boolean
++          description: |
++            When true, Fabro-managed run-branch checkpoint commits bypass
++            local Git commit hooks. Does not affect Fabro `[[run.hooks]]`
++            or metadata-branch snapshots. Defaults to false.
+ 
+     RunCloneSettings:
+       type: object
+diff --git a/docs/public/execution/run-configuration.mdx b/docs/public/execution/run-configuration.mdx
+index e0c24263b..9439ba073 100644
+--- a/docs/public/execution/run-configuration.mdx
++++ b/docs/public/execution/run-configuration.mdx
+@@ -345,13 +345,15 @@ Configure how git checkpoint commits behave.
+ ```toml title="run.toml"
+ [run.checkpoint]
+ exclude_globs = ["**/node_modules/**", "**/.cache/**", "**/dist/**"]
++skip_git_hooks = false
+ ```
+ 
+ | Field | Description |
+ |---|---|
+ | `exclude_globs` | Glob patterns for files to exclude from checkpoint commits. Uses git pathspec `:(glob,exclude)` syntax. |
++| `skip_git_hooks` | When `true`, Fabro-managed run-branch checkpoint commits bypass local Git commit hooks (e.g. `pre-commit`, `commit-msg`). Defaults to `false`. Does not affect Fabro workflow `[[run.hooks]]` or metadata-branch snapshots. |
+ 
+-`exclude_globs` replaces across layers — the higher-precedence layer wins wholesale.
++`exclude_globs` replaces across layers — the higher-precedence layer wins wholesale. `skip_git_hooks` uses normal override semantics: the highest layer that sets it wins.
+ 
+ ### `[run.inputs]`
+ 
+@@ -558,4 +560,4 @@ Use `fabro preflight` to validate a run config without executing it:
+ 
+ ```bash
+ fabro preflight run.toml
+-```
++```
+\ No newline at end of file
+diff --git a/lib/crates/fabro-api/tests/workflow_settings_round_trip.rs b/lib/crates/fabro-api/tests/workflow_settings_round_trip.rs
+index 50c05af3a..77842ff9e 100644
+--- a/lib/crates/fabro-api/tests/workflow_settings_round_trip.rs
++++ b/lib/crates/fabro-api/tests/workflow_settings_round_trip.rs
+@@ -46,6 +46,39 @@ approval = "auto"
+     assert_eq!(round_trip, settings);
+ }
+ 
++#[test]
++fn workflow_settings_json_includes_run_checkpoint_skip_git_hooks() {
++    let settings = WorkflowSettingsBuilder::from_toml(
++        r#"
++_version = 1
++
++[run.checkpoint]
++skip_git_hooks = true
++"#,
++    )
++    .expect("settings with run.checkpoint.skip_git_hooks should resolve");
++
++    let json = serde_json::to_value(&settings).expect("workflow settings should serialize");
++    assert_eq!(json["run"]["checkpoint"]["skip_git_hooks"], true);
++    assert_eq!(
++        json["run"]["checkpoint"]["exclude_globs"],
++        serde_json::json!([])
++    );
++
++    let round_trip: ApiWorkflowSettings =
++        serde_json::from_value(json).expect("workflow settings should deserialize");
++    assert_eq!(round_trip, settings);
++    assert!(round_trip.run.checkpoint.skip_git_hooks);
++}
++
++#[test]
++fn workflow_settings_default_run_checkpoint_skip_git_hooks_is_false() {
++    let settings = WorkflowSettingsBuilder::from_toml("_version = 1\n")
++        .expect("default settings should resolve");
++    let json = serde_json::to_value(&settings).expect("workflow settings should serialize");
++    assert_eq!(json["run"]["checkpoint"]["skip_git_hooks"], false);
++}
++
+ fn assert_same_type<T: 'static, U: 'static>() {
+     assert_eq!(
+         TypeId::of::<T>(),
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/attach.rs b/lib/crates/fabro-cli/tests/it/cmd/attach.rs
+index 5b649d36a..3c948c7e6 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/attach.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/attach.rs
+@@ -925,7 +925,8 @@ fn attach_json_errors_without_prompting_for_human_input() {
+                 "include": []
+               },
+               "checkpoint": {
+-                "exclude_globs": []
++                "exclude_globs": [],
++                "skip_git_hooks": false
+               },
+               "clone": {
+                 "enabled": true
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/inspect.rs b/lib/crates/fabro-cli/tests/it/cmd/inspect.rs
+index d947ce16b..3189a6d78 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/inspect.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/inspect.rs
+@@ -147,7 +147,8 @@ fn inspect_resolves_selector_via_server_endpoint() {
+                 "approval": "prompt"
+               },
+               "checkpoint": {
+-                "exclude_globs": []
++                "exclude_globs": [],
++                "skip_git_hooks": false
+               },
+               "clone": {
+                 "enabled": true
+diff --git a/lib/crates/fabro-config/src/layers/combine.rs b/lib/crates/fabro-config/src/layers/combine.rs
+index 9e09e8a5f..6f919e179 100644
+--- a/lib/crates/fabro-config/src/layers/combine.rs
++++ b/lib/crates/fabro-config/src/layers/combine.rs
+@@ -164,10 +164,15 @@ impl_combine_self!(
+ 
+ impl Combine for RunCheckpointLayer {
+     fn combine(self, other: Self) -> Self {
+-        if self.exclude_globs.is_empty() {
+-            other
++        let exclude_globs = if self.exclude_globs.is_empty() {
++            other.exclude_globs
+         } else {
+-            self
++            self.exclude_globs
++        };
++        let skip_git_hooks = self.skip_git_hooks.or(other.skip_git_hooks);
++        Self {
++            exclude_globs,
++            skip_git_hooks,
+         }
+     }
+ }
+diff --git a/lib/crates/fabro-config/src/layers/run.rs b/lib/crates/fabro-config/src/layers/run.rs
+index 60ae6e54a..63a12130b 100644
+--- a/lib/crates/fabro-config/src/layers/run.rs
++++ b/lib/crates/fabro-config/src/layers/run.rs
+@@ -281,7 +281,9 @@ pub struct RunExecutionLayer {
+ #[serde(deny_unknown_fields)]
+ pub struct RunCheckpointLayer {
+     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+-    pub exclude_globs: Vec<String>,
++    pub exclude_globs:  Vec<String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub skip_git_hooks: Option<bool>,
+ }
+ 
+ /// `[run.clone]` — source workspace clone policy.
+diff --git a/lib/crates/fabro-config/src/resolve/run.rs b/lib/crates/fabro-config/src/resolve/run.rs
+index d360857b0..f8d3fc2d1 100644
+--- a/lib/crates/fabro-config/src/resolve/run.rs
++++ b/lib/crates/fabro-config/src/resolve/run.rs
+@@ -184,9 +184,12 @@ fn resolve_execution(execution: Option<&RunExecutionLayer>) -> RunExecutionSetti
+ 
+ fn resolve_checkpoint(checkpoint: Option<&RunCheckpointLayer>) -> RunCheckpointSettings {
+     RunCheckpointSettings {
+-        exclude_globs: checkpoint
++        exclude_globs:  checkpoint
+             .map(|checkpoint| checkpoint.exclude_globs.clone())
+             .unwrap_or_default(),
++        skip_git_hooks: checkpoint
++            .and_then(|checkpoint| checkpoint.skip_git_hooks)
++            .unwrap_or(false),
+     }
+ }
+ 
+diff --git a/lib/crates/fabro-config/src/tests/resolve_run.rs b/lib/crates/fabro-config/src/tests/resolve_run.rs
+index e35bcd73c..3d8eb9ac0 100644
+--- a/lib/crates/fabro-config/src/tests/resolve_run.rs
++++ b/lib/crates/fabro-config/src/tests/resolve_run.rs
+@@ -609,3 +609,99 @@ fabro_tools = true
+         assert!(!settings.agent.fabro_tools);
+     }
+ }
++
++mod run_checkpoint_skip_git_hooks {
++    //! Layer + resolver tests for `[run.checkpoint] skip_git_hooks`.
++
++    use crate::layers::Combine;
++    use crate::{SettingsLayer, WorkflowSettingsBuilder};
++
++    fn parse_settings(source: &str) -> SettingsLayer {
++        source
++            .parse::<SettingsLayer>()
++            .expect("fixture should parse via SettingsLayer")
++    }
++
++    #[test]
++    fn resolves_skip_git_hooks_true_when_set() {
++        let settings = WorkflowSettingsBuilder::from_toml(
++            r"
++_version = 1
++
++[run.checkpoint]
++skip_git_hooks = true
++",
++        )
++        .expect("settings should resolve")
++        .run;
++
++        assert!(settings.checkpoint.skip_git_hooks);
++    }
++
++    #[test]
++    fn resolves_skip_git_hooks_false_when_omitted() {
++        let settings = WorkflowSettingsBuilder::from_layer(&SettingsLayer::default())
++            .expect("empty settings should resolve")
++            .run;
++
++        assert!(!settings.checkpoint.skip_git_hooks);
++    }
++
++    #[test]
++    fn higher_layer_false_overrides_lower_layer_true() {
++        let workflow = parse_settings(
++            r"
++_version = 1
++
++[run.checkpoint]
++skip_git_hooks = false
++",
++        );
++        let user = parse_settings(
++            r"
++_version = 1
++
++[run.checkpoint]
++skip_git_hooks = true
++",
++        );
++        let merged = workflow.combine(user);
++
++        let settings = WorkflowSettingsBuilder::from_layer(&merged)
++            .expect("merged settings should resolve")
++            .run;
++
++        assert!(!settings.checkpoint.skip_git_hooks);
++    }
++
++    #[test]
++    fn exclude_globs_replace_behavior_preserved_when_skip_git_hooks_added() {
++        // Higher layer provides skip_git_hooks but no exclude_globs;
++        // exclude_globs should still inherit from the lower layer because the
++        // higher layer's list is empty.
++        let workflow = parse_settings(
++            r"
++_version = 1
++
++[run.checkpoint]
++skip_git_hooks = true
++",
++        );
++        let user = parse_settings(
++            r#"
++_version = 1
++
++[run.checkpoint]
++exclude_globs = ["**/lower/**"]
++"#,
++        );
++        let merged = workflow.combine(user);
++
++        let settings = WorkflowSettingsBuilder::from_layer(&merged)
++            .expect("merged settings should resolve")
++            .run;
++
++        assert_eq!(settings.checkpoint.exclude_globs, vec!["**/lower/**"]);
++        assert!(settings.checkpoint.skip_git_hooks);
++    }
++}
+diff --git a/lib/crates/fabro-types/src/settings/run.rs b/lib/crates/fabro-types/src/settings/run.rs
+index a716c7827..80c890f9e 100644
+--- a/lib/crates/fabro-types/src/settings/run.rs
++++ b/lib/crates/fabro-types/src/settings/run.rs
+@@ -237,7 +237,13 @@ impl Default for RunExecutionSettings {
+ 
+ #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+ pub struct RunCheckpointSettings {
+-    pub exclude_globs: Vec<String>,
++    pub exclude_globs:  Vec<String>,
++    /// When `true`, Fabro-managed run-branch checkpoint commits bypass
++    /// local Git commit hooks (e.g. `pre-commit`, `commit-msg`). This does
++    /// not affect Fabro workflow `[[run.hooks]]` or metadata-branch
++    /// snapshots, which already bypass repository hooks.
++    #[serde(default)]
++    pub skip_git_hooks: bool,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+diff --git a/lib/crates/fabro-workflow/src/handler/parallel.rs b/lib/crates/fabro-workflow/src/handler/parallel.rs
+index 66e12dc7e..885df80a1 100644
+--- a/lib/crates/fabro-workflow/src/handler/parallel.rs
++++ b/lib/crates/fabro-workflow/src/handler/parallel.rs
+@@ -195,6 +195,7 @@ impl Handler for ParallelHandler {
+                 None,
+                 &gs.checkpoint_exclude_globs,
+                 &gs.git_author,
++                gs.checkpoint_skip_hooks,
+             )
+             .await;
+             match result {
+@@ -318,6 +319,9 @@ impl Handler for ParallelHandler {
+                 .as_ref()
+                 .map(|gs| gs.git_author.clone())
+                 .unwrap_or_default();
++            let skip_git_hooks = git_state
++                .as_ref()
++                .is_some_and(|gs| gs.checkpoint_skip_hooks);
+             let group_id = parallel_group_id.clone();
+             let branch_scope = StageScope::for_parallel_branch(
+                 setup.target_id.clone(),
+@@ -408,10 +412,12 @@ impl Handler for ParallelHandler {
+                         .is_ok_and(fabro_sandbox::ExecResult::is_success)
+                     {
+                         let msg = format!("fabro({rid}): {nid} ({status_str})");
+-                        let commit_cmd = format!(
+-                            "{git_r} -c 'user.name={name}' -c 'user.email={email}' commit --allow-empty -m '{msg}'",
+-                            name = git_author.name,
+-                            email = git_author.email,
++                        let commit_cmd = parallel_branch_commit_cmd(
++                            git_r,
++                            &git_author.name,
++                            &git_author.email,
++                            &msg,
++                            skip_git_hooks,
+                         );
+                         let _ = setup
+                             .sandbox
+@@ -660,6 +666,22 @@ fn find_join_node(results: &[BranchResult], graph: &Graph) -> Option<String> {
+     common_sorted.first().map(|id| (*id).clone())
+ }
+ 
++/// Build the parallel-branch checkpoint commit command. Appends
++/// `--no-verify` when `skip_git_hooks` is true so the commit bypasses the
++/// repository's local Git commit hooks (e.g. `pre-commit`, `commit-msg`).
++fn parallel_branch_commit_cmd(
++    git_remote: &str,
++    author_name: &str,
++    author_email: &str,
++    message: &str,
++    skip_git_hooks: bool,
++) -> String {
++    let no_verify = if skip_git_hooks { " --no-verify" } else { "" };
++    format!(
++        "{git_remote} -c 'user.name={author_name}' -c 'user.email={author_email}' commit --allow-empty{no_verify} -m '{message}'",
++    )
++}
++
+ #[cfg(test)]
+ mod tests {
+     use std::sync::Arc;
+@@ -921,4 +943,36 @@ mod tests {
+         let branch_count = context.get(keys::PARALLEL_BRANCH_COUNT);
+         assert_eq!(branch_count, Some(serde_json::json!(2)));
+     }
++
++    #[test]
++    fn parallel_branch_commit_cmd_includes_no_verify_when_skip_hooks_enabled() {
++        let cmd = super::parallel_branch_commit_cmd(
++            super::GIT_REMOTE,
++            "Fabro",
++            "fabro@example.com",
++            "fabro(r1): branch_a (succeeded)",
++            true,
++        );
++        assert!(
++            cmd.contains("--no-verify"),
++            "expected --no-verify when skip_git_hooks=true; got {cmd:?}"
++        );
++        assert!(cmd.contains("commit --allow-empty"));
++    }
++
++    #[test]
++    fn parallel_branch_commit_cmd_omits_no_verify_when_skip_hooks_disabled() {
++        let cmd = super::parallel_branch_commit_cmd(
++            super::GIT_REMOTE,
++            "Fabro",
++            "fabro@example.com",
++            "fabro(r1): branch_a (succeeded)",
++            false,
++        );
++        assert!(
++            !cmd.contains("--no-verify"),
++            "expected no --no-verify when skip_git_hooks=false; got {cmd:?}"
++        );
++        assert!(cmd.contains("commit --allow-empty"));
++    }
+ }
+diff --git a/lib/crates/fabro-workflow/src/lifecycle/git.rs b/lib/crates/fabro-workflow/src/lifecycle/git.rs
+index 4e8fef87f..6dcd85fe6 100644
+--- a/lib/crates/fabro-workflow/src/lifecycle/git.rs
++++ b/lib/crates/fabro-workflow/src/lifecycle/git.rs
+@@ -277,6 +277,7 @@ impl RunLifecycle<WorkflowGraph> for GitLifecycle {
+             shadow_sha,
+             &self.run_options.checkpoint_exclude_globs(),
+             &git_author,
++            self.run_options.checkpoint_skip_git_hooks(),
+         )
+         .await;
+ 
+diff --git a/lib/crates/fabro-workflow/src/pipeline/execute.rs b/lib/crates/fabro-workflow/src/pipeline/execute.rs
+index 6ae8cc244..dfd22c655 100644
+--- a/lib/crates/fabro-workflow/src/pipeline/execute.rs
++++ b/lib/crates/fabro-workflow/src/pipeline/execute.rs
+@@ -63,6 +63,7 @@ pub async fn execute(init: Initialized) -> Executed {
+             run_branch: git.run_branch.clone(),
+             meta_branch: git.meta_branch.clone(),
+             checkpoint_exclude_globs: run_options.checkpoint_exclude_globs(),
++            checkpoint_skip_hooks: run_options.checkpoint_skip_git_hooks(),
+             git_author: run_options.git_author(),
+         }))
+     });
+diff --git a/lib/crates/fabro-workflow/src/run_options.rs b/lib/crates/fabro-workflow/src/run_options.rs
+index 6a9d9f65a..c1d20cdcb 100644
+--- a/lib/crates/fabro-workflow/src/run_options.rs
++++ b/lib/crates/fabro-workflow/src/run_options.rs
+@@ -54,6 +54,10 @@ impl RunOptions {
+         self.settings.run.checkpoint.exclude_globs.clone()
+     }
+ 
++    pub fn checkpoint_skip_git_hooks(&self) -> bool {
++        self.settings.run.checkpoint.skip_git_hooks
++    }
++
+     pub fn git_author(&self) -> GitAuthor {
+         git_author_from_settings(&self.settings)
+     }
+diff --git a/lib/crates/fabro-workflow/src/sandbox_git.rs b/lib/crates/fabro-workflow/src/sandbox_git.rs
+index 817c0fa53..eeace9f84 100644
+--- a/lib/crates/fabro-workflow/src/sandbox_git.rs
++++ b/lib/crates/fabro-workflow/src/sandbox_git.rs
+@@ -27,6 +27,7 @@ pub struct GitState {
+     pub run_branch:               Option<String>,
+     pub meta_branch:              Option<String>,
+     pub checkpoint_exclude_globs: Vec<String>,
++    pub checkpoint_skip_hooks:    bool,
+     pub git_author:               GitAuthor,
+ }
+ 
+@@ -68,6 +69,7 @@ pub async fn git_checkpoint(
+     shadow_sha: Option<String>,
+     exclude_globs: &[String],
+     author: &GitAuthor,
++    skip_git_hooks: bool,
+ ) -> std::result::Result<String, GitCommandError> {
+     let mut all_excludes: Vec<String> = artifact_snapshot::EXCLUDE_DIRS
+         .iter()
+@@ -125,8 +127,9 @@ pub async fn git_checkpoint(
+     }
+ 
+     let msg_path_q = shell_quote(&msg_path);
++    let no_verify = if skip_git_hooks { " --no-verify" } else { "" };
+     let commit_cmd = format!(
+-        "{GIT_REMOTE} -c user.name={name} -c user.email={email} commit --allow-empty -F {msg_path_q}",
++        "{GIT_REMOTE} -c user.name={name} -c user.email={email} commit --allow-empty{no_verify} -F {msg_path_q}",
+         name = shell_quote(&author.name),
+         email = shell_quote(&author.email),
+     );
+@@ -174,6 +177,7 @@ pub(crate) async fn checked_git_checkpoint(
+     shadow_sha: Option<String>,
+     exclude_globs: &[String],
+     author: &GitAuthor,
++    skip_git_hooks: bool,
+ ) -> std::result::Result<String, SharedError> {
+     runtime.ensure_git_available(sandbox).await.map_err(|err| {
+         SharedError::new(anyhow::Error::new(err).context("sandbox git unavailable"))
+@@ -187,6 +191,7 @@ pub(crate) async fn checked_git_checkpoint(
+         shadow_sha,
+         exclude_globs,
+         author,
++        skip_git_hooks,
+     )
+     .await
+     .map_err(|err| SharedError::new(anyhow::Error::new(err)))
+@@ -1068,6 +1073,7 @@ mod tests {
+             None,
+             &[],
+             &crate::git::GitAuthor::default(),
++            false,
+         )
+         .await
+         .unwrap_err();
+@@ -1094,6 +1100,7 @@ mod tests {
+             None,
+             &[],
+             &crate::git::GitAuthor::default(),
++            false,
+         )
+         .await
+         .unwrap_err();
+@@ -1124,6 +1131,7 @@ mod tests {
+             None,
+             &[],
+             &crate::git::GitAuthor::default(),
++            false,
+         )
+         .await
+         .unwrap_err();
+@@ -1143,6 +1151,7 @@ mod tests {
+             None,
+             &[],
+             &crate::git::GitAuthor::default(),
++            false,
+         )
+         .await
+         .unwrap_err();
+@@ -1162,10 +1171,30 @@ mod tests {
+         ]);
+         let author = crate::git::GitAuthor::default();
+ 
+-        let first =
+-            git_checkpoint(&sandbox, "run1", "work", "success", 1, None, &[], &author).await;
+-        let second =
+-            git_checkpoint(&sandbox, "run1", "work", "success", 1, None, &[], &author).await;
++        let first = git_checkpoint(
++            &sandbox,
++            "run1",
++            "work",
++            "success",
++            1,
++            None,
++            &[],
++            &author,
++            false,
++        )
++        .await;
++        let second = git_checkpoint(
++            &sandbox,
++            "run1",
++            "work",
++            "success",
++            1,
++            None,
++            &[],
++            &author,
++            false,
++        )
++        .await;
+ 
+         assert!(first.is_ok(), "first checkpoint failed: {:?}", first.err());
+         assert!(
+@@ -1225,6 +1254,63 @@ mod tests {
+         assert_eq!(tail.stderr.as_deref(), Some("fatal: bad revision\n"));
+     }
+ 
++    #[tokio::test]
++    async fn git_checkpoint_appends_no_verify_when_skip_hooks_enabled() {
++        // add, commit, rev-parse
++        let sandbox = ScriptedSandbox::new(vec![exec_ok(), exec_ok(), exec_ok()]);
++        git_checkpoint(
++            &sandbox,
++            "run1",
++            "work",
++            "success",
++            1,
++            None,
++            &[],
++            &crate::git::GitAuthor::default(),
++            true,
++        )
++        .await
++        .expect("checkpoint should succeed");
++
++        let commands = sandbox.commands();
++        let commit_cmd = commands
++            .iter()
++            .find(|c| c.contains(" commit "))
++            .expect("commit command should be issued");
++        assert!(
++            commit_cmd.contains("--no-verify"),
++            "commit command should include --no-verify when skip_git_hooks=true; got {commit_cmd:?}"
++        );
++    }
++
++    #[tokio::test]
++    async fn git_checkpoint_omits_no_verify_when_skip_hooks_disabled() {
++        let sandbox = ScriptedSandbox::new(vec![exec_ok(), exec_ok(), exec_ok()]);
++        git_checkpoint(
++            &sandbox,
++            "run1",
++            "work",
++            "success",
++            1,
++            None,
++            &[],
++            &crate::git::GitAuthor::default(),
++            false,
++        )
++        .await
++        .expect("checkpoint should succeed");
++
++        let commands = sandbox.commands();
++        let commit_cmd = commands
++            .iter()
++            .find(|c| c.contains(" commit "))
++            .expect("commit command should be issued");
++        assert!(
++            !commit_cmd.contains("--no-verify"),
++            "commit command should omit --no-verify when skip_git_hooks=false; got {commit_cmd:?}"
++        );
++    }
++
+     #[tokio::test]
+     async fn git_checkpoint_includes_builtin_excludes() {
+         // Set up a real git repo
+@@ -1262,8 +1348,18 @@ mod tests {
+ 
+         // Call git_checkpoint with empty user excludes — built-in excludes should still
+         // apply
+-        let result =
+-            git_checkpoint(&sandbox, "run1", "work", "success", 1, None, &[], &author).await;
++        let result = git_checkpoint(
++            &sandbox,
++            "run1",
++            "work",
++            "success",
++            1,
++            None,
++            &[],
++            &author,
++            false,
++        )
++        .await;
+         assert!(result.is_ok(), "git_checkpoint failed: {:?}", result.err());
+ 
+         // Verify that excluded directories were NOT staged
+diff --git a/lib/packages/fabro-api-client/src/models/run-checkpoint-settings.ts b/lib/packages/fabro-api-client/src/models/run-checkpoint-settings.ts
+index b2f784466..22f96ffc3 100644
+--- a/lib/packages/fabro-api-client/src/models/run-checkpoint-settings.ts
++++ b/lib/packages/fabro-api-client/src/models/run-checkpoint-settings.ts
+@@ -16,4 +16,10 @@
+ 
+ export interface RunCheckpointSettings {
+     'exclude_globs': Array<string>;
+-}
++    /**
++     * When true, Fabro-managed run-branch checkpoint commits bypass local Git commit hooks. Does not affect Fabro `[[run.hooks]]` or metadata-branch snapshots. Defaults to false. 
++     * @type {boolean}
++     * @memberof RunCheckpointSettings
++     */
++    'skip_git_hooks': boolean;
++}
+\ No newline at end of file
