@@ -295,4 +295,25 @@
     min-width: 100%;
     padding-right: 1rem;
   }
+  /* Shrink markdown headings for the narrow column. The assistant-ui defaults
+   * go up to 36px (h1), which dominates the sidebar. H1 stays distinct at
+   * 18px; H2/H3 read as bold body text; H4-H6 get no special styling. */
+  .ask-fabro-sidebar .aui-md-h1 {
+    font-size: 1.125rem; /* 18px */
+    line-height: 1.5rem;
+    font-weight: 700;
+  }
+  .ask-fabro-sidebar .aui-md-h2,
+  .ask-fabro-sidebar .aui-md-h3 {
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.5rem;
+    font-weight: 700;
+  }
+  .ask-fabro-sidebar .aui-md-h4,
+  .ask-fabro-sidebar .aui-md-h5,
+  .ask-fabro-sidebar .aui-md-h6 {
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.5rem;
+    font-weight: 400;
+  }
 }
