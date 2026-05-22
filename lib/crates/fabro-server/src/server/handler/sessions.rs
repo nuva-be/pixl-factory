@@ -1025,12 +1025,13 @@ fn agent_event_payload(event_turn_id: TurnId, event: AgentEvent) -> Option<Event
                 usage: serde_json::to_value(usage).unwrap_or(Value::Null),
             },
         )),
-        AgentEvent::TextDelta { delta } | AgentEvent::ReasoningDelta { delta } => Some(
-            EventBody::RunSessionAssistantDelta(RunSessionAssistantDeltaProps {
+        AgentEvent::TextDelta { delta } => Some(EventBody::RunSessionAssistantDelta(
+            RunSessionAssistantDeltaProps {
                 turn_id: event_turn_id,
                 delta,
-            }),
-        ),
+            },
+        )),
+        AgentEvent::ReasoningDelta { .. } => None,
         AgentEvent::ToolCallStarted {
             tool_name,
             tool_call_id,
@@ -1251,6 +1252,32 @@ fn parse_turn_id(value: &str) -> Result<TurnId, ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_event_payload_maps_text_delta_to_session_assistant_delta() {
+        let turn_id = TurnId::new();
+        let body = agent_event_payload(turn_id, AgentEvent::TextDelta {
+            delta: "Hello".to_string(),
+        });
+
+        match body {
+            Some(EventBody::RunSessionAssistantDelta(props)) => {
+                assert_eq!(props.turn_id, turn_id);
+                assert_eq!(props.delta, "Hello");
+            }
+            other => panic!("expected assistant delta event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn agent_event_payload_drops_reasoning_delta() {
+        let turn_id = TurnId::new();
+        let body = agent_event_payload(turn_id, AgentEvent::ReasoningDelta {
+            delta: "The user just said hello.".to_string(),
+        });
+
+        assert!(body.is_none(), "reasoning delta should not be visible");
+    }
 
     #[test]
     fn ask_fabro_tool_approval_allows_run_interact_and_run_events() {
