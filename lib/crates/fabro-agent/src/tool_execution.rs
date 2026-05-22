@@ -754,6 +754,7 @@ mod tests {
             &config,
             &Emitter::new(),
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -806,6 +807,7 @@ mod tests {
             CancellationToken::new(),
             &config,
             &Emitter::new(),
+            "test-session",
             "test-session",
             None,
         )
