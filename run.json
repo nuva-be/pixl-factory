@@ -228,7 +228,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-22T11:35:16.765905Z",
-  "last_event_at": "2026-05-22T11:40:43.406200Z",
+  "last_event_at": "2026-05-22T11:41:23.885780Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -268,9 +268,9 @@
       "diff": {}
     },
     {
-      "seq": 0,
+      "seq": 43,
       "checkpoint": {
-        "timestamp": "2026-05-22T11:41:18.732519Z",
+        "timestamp": "2026-05-22T11:41:23.885543Z",
         "current_node": "nap",
         "completed_nodes": [
           "start",
@@ -278,22 +278,26 @@
         ],
         "node_retries": {},
         "context_values": {
-          "internal.thread_id": "start",
-          "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
-          "internal.run_id": "01KS7QF7DY77VG5Y00XY8NFM83",
-          "internal.node_visit_count": 1,
           "failure_signature": "nap|transient_infra|handler timed out after 360000ms",
+          "thread.start.current_node": "nap",
           "outcome": "failed",
+          "internal.retry_count.nap": 0,
+          "internal.node_visit_count": 1,
+          "failure_class": "transient_infra",
+          "internal.retry_count.start": 0,
           "current_node": "nap",
+          "graph.goal": "Sleep long enough for a human to practice interrupts and steering",
           "internal.fidelity": "compact",
           "internal.work_dir": "/home/daytona/workspace/fabro",
-          "internal.retry_count.nap": 0,
-          "thread.start.current_node": "nap",
-          "internal.retry_count.start": 0,
-          "failure_class": "transient_infra",
-          "graph.rankdir": "LR"
+          "internal.thread_id": "start",
+          "graph.rankdir": "LR",
+          "internal.run_id": "01KS7QF7DY77VG5Y00XY8NFM83"
         },
         "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
           "nap": {
             "status": "failed",
             "failure": {
@@ -302,22 +306,69 @@
               "system_actor": "timeout"
             },
             "usage": null
-          },
-          "start": {
-            "status": "succeeded",
-            "usage": null
           }
         },
         "next_node_id": "exit",
+        "git_commit_sha": "c0748983dddd9ac2c47c3ac5c05b417c245697ea",
         "node_visits": {
-          "start": 1,
-          "nap": 1
+          "nap": 1,
+          "start": 1
         }
       },
-      "diff": {}
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
     }
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-22T11:41:23.909366Z",
+    "status": "succeeded",
+    "timing": {
+      "wall_time_ms": 367122,
+      "inference_time_ms": 0,
+      "tool_time_ms": 0,
+      "active_time_ms": 0
+    },
+    "final_git_commit_sha": "c0748983dddd9ac2c47c3ac5c05b417c245697ea",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "timing": {
+          "wall_time_ms": 0,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "nap",
+        "stage_label": "nap",
+        "timing": {
+          "wall_time_ms": 360002,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 670,
+      "output_tokens": 239,
+      "total_tokens": 52616,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 34655,
+      "cache_write_tokens": 17052
+    },
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "provider": "daytona",
     "image": "buildpack-deps:noble",
@@ -376,7 +427,12 @@
       "first_event_seq": 20,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "failed",
+        "notes": null,
+        "failure_reason": "handler timed out after 360000ms",
+        "timestamp": "2026-05-22T11:41:18.732454Z"
+      },
       "provider_used": {
         "mode": "agent",
         "provider": "anthropic",
@@ -389,6 +445,12 @@
       "output": null,
       "started_at": "2026-05-22T11:35:18.729504Z",
       "handler": "agent",
+      "timing": {
+        "wall_time_ms": 360002,
+        "inference_time_ms": 0,
+        "tool_time_ms": 0,
+        "active_time_ms": 0
+      },
       "usage": {
         "input_tokens": 670,
         "output_tokens": 239,
@@ -401,7 +463,41 @@
         "provider": "anthropic",
         "model_id": "claude-sonnet-4-6"
       },
-      "state": "running"
+      "state": "failed"
+    },
+    "exit@1": {
+      "first_event_seq": 46,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-22T11:41:23.885780Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-22T11:41:23.885735Z",
+      "handler": "exit",
+      "timing": {
+        "wall_time_ms": 0,
+        "inference_time_ms": 0,
+        "tool_time_ms": 0,
+        "active_time_ms": 0
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
     }
   }
 }
