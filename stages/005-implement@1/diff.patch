@@ -1,0 +1,1112 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index b8d1227a9..285af159a 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2262,6 +2262,7 @@ dependencies = [
+  "fabro-api",
+  "fabro-auth",
+  "fabro-build-support",
++ "fabro-client",
+  "fabro-config",
+  "fabro-github",
+  "fabro-graphviz",
+diff --git a/apps/fabro-web/app/components/chats/ask-fabro-sidebar.tsx b/apps/fabro-web/app/components/chats/ask-fabro-sidebar.tsx
+index 6e239a3ae..fbba4b5cf 100644
+--- a/apps/fabro-web/app/components/chats/ask-fabro-sidebar.tsx
++++ b/apps/fabro-web/app/components/chats/ask-fabro-sidebar.tsx
+@@ -1,4 +1,4 @@
+-import { useMemo, useRef } from "react";
++import { useMemo } from "react";
+ import {
+   AssistantRuntimeProvider,
+   useLocalRuntime,
+@@ -6,24 +6,12 @@ import {
+ import { Thread, makeMarkdownText } from "@assistant-ui/react-ui";
+ import { XMarkIcon } from "@heroicons/react/24/outline";
+ 
+-import { createScriptedAdapter } from "../../lib/chats-runtime";
+-import type { Chat } from "../../lib/chats-types";
++import { createAskFabroAdapter } from "../../lib/ask-fabro-runtime";
+ import SidebarComposer from "./sidebar-composer";
+ import ToolFallback from "./tool-fallback";
+ 
+ const MarkdownText = makeMarkdownText();
+ 
+-/** The sidebar runs against an empty, store-less chat: the scripted adapter
+- * only reads `scriptIndex`, advanced locally per reply via `scriptIndexRef`. */
+-const EMPTY_CHAT: Chat = {
+-  id: "ask-fabro",
+-  title: "",
+-  createdAt: 0,
+-  scriptIndex: 0,
+-  seedMessages: [],
+-  pendingResponse: false,
+-};
+-
+ export const SIDEBAR_WIDTH = 420;
+ 
+ /**
+@@ -31,24 +19,25 @@ export const SIDEBAR_WIDTH = 420;
+  * collapses to zero when closed; renders assistant-ui's `<Thread>` with a
+  * stripped composer scoped to the narrow column via the `.ask-fabro-sidebar`
+  * CSS in app.css.
++ *
++ * The sidebar is parameterized by `runId`: the agent's session is scoped to
++ * that run (and only that run; the server enforces this via the same-run
++ * worker token attached to the session's run-control tools).
+  */
+ export default function AskFabroSidebar({
+   isOpen,
+   onClose,
++  runId,
++  defaultModel,
+ }: {
+   isOpen: boolean;
+   onClose: () => void;
++  runId: string;
++  defaultModel?: string | null;
+ }) {
+-  const scriptIndexRef = useRef(0);
+   const adapter = useMemo(
+-    () =>
+-      createScriptedAdapter({
+-        getChat: () => ({ ...EMPTY_CHAT, scriptIndex: scriptIndexRef.current }),
+-        onReplyComplete: () => {
+-          scriptIndexRef.current += 1;
+-        },
+-      }),
+-    [],
++    () => createAskFabroAdapter({ runId, defaultModel }),
++    [runId, defaultModel],
+   );
+   const runtime = useLocalRuntime(adapter);
+ 
+@@ -91,4 +80,4 @@ export default function AskFabroSidebar({
+       </div>
+     </aside>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/apps/fabro-web/app/lib/ask-fabro-runtime.test.ts b/apps/fabro-web/app/lib/ask-fabro-runtime.test.ts
+new file mode 100644
+index 000000000..5d4b77ccf
+--- /dev/null
++++ b/apps/fabro-web/app/lib/ask-fabro-runtime.test.ts
+@@ -0,0 +1,217 @@
++import { describe, expect, test } from "bun:test";
++
++import {
++  applyTurnEvent,
++  createAskFabroAdapter,
++} from "./ask-fabro-runtime";
++import type { SessionStreamEvent } from "./session-stream";
++
++function event(name: string, properties: Record<string, unknown>): SessionStreamEvent {
++  return {
++    seq: 0,
++    event: { event: name, properties },
++  } as unknown as SessionStreamEvent;
++}
++
++describe("applyTurnEvent", () => {
++  test("appends assistant deltas into a single streaming text part", () => {
++    const acc = {
++      textParts: [],
++      activeTextIndex: null,
++      parts: [],
++      toolCallIndex: new Map(),
++    } as Parameters<typeof applyTurnEvent>[0];
++
++    expect(
++      applyTurnEvent(acc, event("run.session.assistant_delta", { delta: "Hel" })),
++    ).toBe(true);
++    expect(
++      applyTurnEvent(acc, event("run.session.assistant_delta", { delta: "lo" })),
++    ).toBe(true);
++
++    expect(acc.parts).toEqual([{ type: "text", text: "Hello" }]);
++  });
++
++  test("inserts a tool-call part and later attaches its result", () => {
++    const acc = {
++      textParts: [],
++      activeTextIndex: null,
++      parts: [],
++      toolCallIndex: new Map(),
++    } as Parameters<typeof applyTurnEvent>[0];
++
++    expect(
++      applyTurnEvent(
++        acc,
++        event("run.session.tool_call.started", {
++          tool_call_id: "tc_1",
++          tool_name: "fabro_run_events",
++          arguments: { run_id: "r" },
++        }),
++      ),
++    ).toBe(true);
++
++    expect(acc.parts).toHaveLength(1);
++    const callPart = acc.parts[0];
++    expect(callPart?.type).toBe("tool-call");
++    if (callPart?.type !== "tool-call") throw new Error("expected tool-call");
++    expect(callPart.toolName).toBe("fabro_run_events");
++    expect(callPart.toolCallId).toBe("tc_1");
++    expect(callPart.args).toEqual({ run_id: "r" });
++
++    expect(
++      applyTurnEvent(
++        acc,
++        event("run.session.tool_call.completed", {
++          tool_call_id: "tc_1",
++          tool_name: "fabro_run_events",
++          output: { events: [] },
++          is_error: false,
++        }),
++      ),
++    ).toBe(true);
++
++    const completed = acc.parts[0];
++    expect(completed?.type).toBe("tool-call");
++    if (completed?.type !== "tool-call") throw new Error("expected tool-call");
++    expect(completed.result).toEqual({ events: [] });
++  });
++
++  test("a text segment after a tool call starts a fresh text part", () => {
++    const acc = {
++      textParts: [],
++      activeTextIndex: null,
++      parts: [],
++      toolCallIndex: new Map(),
++    } as Parameters<typeof applyTurnEvent>[0];
++
++    applyTurnEvent(acc, event("run.session.assistant_delta", { delta: "Intro" }));
++    applyTurnEvent(acc, event("run.session.assistant_message", { text: "Intro" }));
++    applyTurnEvent(
++      acc,
++      event("run.session.tool_call.started", {
++        tool_call_id: "tc_a",
++        tool_name: "fabro_run_events",
++        arguments: {},
++      }),
++    );
++    applyTurnEvent(acc, event("run.session.assistant_delta", { delta: "After" }));
++
++    expect(acc.parts).toHaveLength(3);
++    expect(acc.parts[0]).toMatchObject({ type: "text", text: "Intro" });
++    expect(acc.parts[1]?.type).toBe("tool-call");
++    expect(acc.parts[2]).toMatchObject({ type: "text", text: "After" });
++  });
++});
++
++describe("createAskFabroAdapter", () => {
++  function ramSessionStore(initial: Record<string, string> = {}) {
++    const store: Record<string, string> = { ...initial };
++    return {
++      store,
++      persisted: {
++        read: (runId: string) => store[runId] ?? null,
++        write: (runId: string, sessionId: string) => {
++          store[runId] = sessionId;
++        },
++        clear: (runId: string) => {
++          delete store[runId];
++        },
++      },
++    };
++  }
++
++  type StreamArgs = Parameters<
++    NonNullable<Parameters<typeof createAskFabroAdapter>[0]["streamSessionTurnImpl"]>
++  >[0];
++
++  function userMessages(text: string) {
++    return [
++      {
++        role: "user",
++        content: [{ type: "text", text }],
++      },
++    ];
++  }
++
++  type RunArgs = Parameters<ReturnType<typeof createAskFabroAdapter>["run"]>[0];
++  function fakeRunArgs(
++    abortSignal: AbortSignal,
++    messages: ReturnType<typeof userMessages>,
++  ): RunArgs {
++    return {
++      messages,
++      abortSignal,
++      runConfig: {},
++      context: { tools: [] } as unknown as RunArgs["context"],
++      unstable_getMessage: () => ({}) as never,
++    } as RunArgs;
++  }
++
++  test("creates a session lazily on the first turn and persists its id", async () => {
++    let createCount = 0;
++    let lastCreateBody: { title?: string; model?: string } | null = null;
++    const { store, persisted } = ramSessionStore();
++
++    const adapter = createAskFabroAdapter({
++      runId: "r_1",
++      defaultModel: "claude-haiku-4-5",
++      persistedSession: persisted,
++      createSession: async (_runId, body) => {
++        createCount += 1;
++        lastCreateBody = body;
++        return { id: "ses_new" };
++      },
++      streamSessionTurnImpl: async (args: StreamArgs) => {
++        args.onEvent(
++          event("run.session.assistant_delta", { delta: "Hello" }),
++        );
++        return { turnId: "turn_1" };
++      },
++    });
++
++    const ctl = new AbortController();
++    const result = adapter.run(fakeRunArgs(ctl.signal, userMessages("Say hi")));
++    if (!(Symbol.asyncIterator in result)) {
++      throw new Error("expected async iterator");
++    }
++    for await (const _ of result) {
++      // drain
++    }
++
++    expect(createCount).toBe(1);
++    expect(lastCreateBody).toEqual({ title: "Ask Fabro", model: "claude-haiku-4-5" });
++    expect(store["r_1"]).toBe("ses_new");
++  });
++
++  test("reuses a cached session id across runs (no second createSession call)", async () => {
++    let createCount = 0;
++    const { persisted } = ramSessionStore({ r_2: "ses_cached" });
++    const submittedSessionIds: string[] = [];
++
++    const adapter = createAskFabroAdapter({
++      runId: "r_2",
++      persistedSession: persisted,
++      createSession: async () => {
++        createCount += 1;
++        return { id: "ses_should_not_be_called" };
++      },
++      streamSessionTurnImpl: async (args: StreamArgs) => {
++        submittedSessionIds.push(args.sessionId);
++        return { turnId: "turn_1" };
++      },
++    });
++
++    const ctl = new AbortController();
++    const result = adapter.run(fakeRunArgs(ctl.signal, userMessages("hi")));
++    if (!(Symbol.asyncIterator in result)) {
++      throw new Error("expected async iterator");
++    }
++    for await (const _ of result) {
++      // drain
++    }
++
++    expect(createCount).toBe(0);
++    expect(submittedSessionIds).toEqual(["ses_cached"]);
++  });
++});
+diff --git a/apps/fabro-web/app/lib/ask-fabro-runtime.ts b/apps/fabro-web/app/lib/ask-fabro-runtime.ts
+new file mode 100644
+index 000000000..2e97ee5bc
+--- /dev/null
++++ b/apps/fabro-web/app/lib/ask-fabro-runtime.ts
+@@ -0,0 +1,322 @@
++import type {
++  ChatModelAdapter,
++  ChatModelRunResult,
++  ThreadAssistantMessagePart,
++} from "@assistant-ui/react";
++
++import {
++  attachSessionEvents,
++  streamSessionTurn,
++  type SessionStreamEvent,
++} from "./session-stream";
++import { sessionsApi } from "./api-client";
++
++const SESSION_STORAGE_PREFIX = "fabro:ask-fabro-session:";
++
++function sessionStorageKey(runId: string): string {
++  return `${SESSION_STORAGE_PREFIX}${runId}`;
++}
++
++interface PersistedSessionState {
++  read(runId: string): string | null;
++  write(runId: string, sessionId: string): void;
++  clear(runId: string): void;
++}
++
++const defaultPersistedSessionState: PersistedSessionState = {
++  read(runId) {
++    if (typeof sessionStorage === "undefined") return null;
++    try {
++      return sessionStorage.getItem(sessionStorageKey(runId));
++    } catch {
++      return null;
++    }
++  },
++  write(runId, sessionId) {
++    if (typeof sessionStorage === "undefined") return;
++    try {
++      sessionStorage.setItem(sessionStorageKey(runId), sessionId);
++    } catch {
++      // ignore quota or privacy-mode failures; session will be recreated next time
++    }
++  },
++  clear(runId) {
++    if (typeof sessionStorage === "undefined") return;
++    try {
++      sessionStorage.removeItem(sessionStorageKey(runId));
++    } catch {
++      // best effort
++    }
++  },
++};
++
++export interface AskFabroAdapterOptions {
++  /** Run ID this Ask Fabro session is scoped to. */
++  runId: string;
++  /** Catalog model id used when creating a fresh session. */
++  defaultModel?: string | null;
++  /** Override session persistence; defaults to `sessionStorage` keyed by run. */
++  persistedSession?: PersistedSessionState;
++  /** Override stream impl for tests. */
++  streamSessionTurnImpl?: typeof streamSessionTurn;
++  /** Override attach impl for tests. */
++  attachSessionEventsImpl?: typeof attachSessionEvents;
++  /** Override session API for tests. */
++  createSession?: (
++    runId: string,
++    body: { title?: string; model?: string },
++  ) => Promise<{ id: string }>;
++}
++
++/**
++ * State accumulated as `run.session.*` events arrive during a single turn,
++ * mapped to assistant-ui's `ThreadAssistantMessagePart[]` view model. The
++ * assistant-ui runtime is given a snapshot after every event so users see
++ * streaming text and tool-call cards in real time.
++ */
++interface TurnAccumulator {
++  textParts: Array<{ text: string }>;
++  /** Active text part index, if the last delta added/extended text. */
++  activeTextIndex: number | null;
++  parts: ThreadAssistantMessagePart[];
++  /** Maps `tool_call_id` → index in `parts` for completing pairs. */
++  toolCallIndex: Map<string, number>;
++}
++
++function emptyAccumulator(): TurnAccumulator {
++  return {
++    textParts: [],
++    activeTextIndex: null,
++    parts: [],
++    toolCallIndex: new Map(),
++  };
++}
++
++function snapshot(acc: TurnAccumulator): ChatModelRunResult {
++  return { content: acc.parts.slice() };
++}
++
++/**
++ * Apply a single `EventEnvelope` to the accumulator. Returns true if the
++ * accumulator changed and a fresh `ChatModelRunResult` should be yielded.
++ */
++interface NestedRunEvent {
++  event?: string;
++  properties?: Record<string, unknown>;
++}
++
++export function applyTurnEvent(
++  acc: TurnAccumulator,
++  envelope: SessionStreamEvent,
++): boolean {
++  // The on-wire SSE envelope is `{ seq, event: { event: "...", properties } }`,
++  // but the generated OpenAPI `EventEnvelope` type flattens the inner event
++  // fields. Cast through `unknown` to read the nested runtime shape that the
++  // server actually emits (matches `session-stream.test.ts`).
++  const nested = (envelope as unknown as { event?: NestedRunEvent }).event ?? {};
++  const eventName = nested.event ?? "";
++  const props: Record<string, unknown> = nested.properties ?? {};
++
++  if (eventName === "run.session.assistant_delta") {
++    const delta = typeof props.delta === "string" ? props.delta : "";
++    if (!delta) return false;
++    if (acc.activeTextIndex == null) {
++      const textPart = { text: delta };
++      acc.textParts.push(textPart);
++      acc.parts.push({ type: "text", text: delta });
++      acc.activeTextIndex = acc.parts.length - 1;
++    } else {
++      const part = acc.parts[acc.activeTextIndex];
++      if (part && part.type === "text") {
++        const updated: ThreadAssistantMessagePart = {
++          ...part,
++          text: part.text + delta,
++        };
++        acc.parts[acc.activeTextIndex] = updated;
++      }
++    }
++    return true;
++  }
++
++  if (eventName === "run.session.assistant_message") {
++    // The full text was already streamed via deltas; the message event marks
++    // the end of an assistant text segment. Reset the active-text pointer so
++    // any following tool calls become separate parts, and any later text part
++    // starts fresh (matches the durable transcript projection).
++    if (acc.activeTextIndex != null) {
++      acc.activeTextIndex = null;
++      return true;
++    }
++    const text = typeof props.text === "string" ? props.text : "";
++    if (text) {
++      acc.parts.push({ type: "text", text });
++      return true;
++    }
++    return false;
++  }
++
++  if (eventName === "run.session.tool_call.started") {
++    const toolCallId = typeof props.tool_call_id === "string"
++      ? props.tool_call_id
++      : "";
++    const toolName = typeof props.tool_name === "string" ? props.tool_name : "";
++    if (!toolCallId || !toolName) return false;
++    const argsValue = props.arguments;
++    const args =
++      argsValue && typeof argsValue === "object" ? (argsValue as object) : {};
++    acc.parts.push({
++      type: "tool-call",
++      toolCallId,
++      toolName,
++      // Assistant-ui expects a JSON-shaped value here; the property's actual
++      // shape is whatever the tool's argument schema produces.
++      args: args as never,
++      argsText: JSON.stringify(args),
++    });
++    acc.toolCallIndex.set(toolCallId, acc.parts.length - 1);
++    acc.activeTextIndex = null;
++    return true;
++  }
++
++  if (eventName === "run.session.tool_call.completed") {
++    const toolCallId = typeof props.tool_call_id === "string"
++      ? props.tool_call_id
++      : "";
++    if (!toolCallId) return false;
++    const index = acc.toolCallIndex.get(toolCallId);
++    if (index == null) return false;
++    const part = acc.parts[index];
++    if (!part || part.type !== "tool-call") return false;
++    acc.parts[index] = { ...part, result: props.output };
++    return true;
++  }
++
++  return false;
++}
++
++type CreateSession = NonNullable<AskFabroAdapterOptions["createSession"]>;
++
++function defaultCreateSession(
++  runId: string,
++  body: { title?: string; model?: string },
++): Promise<{ id: string }> {
++  return sessionsApi
++    .createRunSession(runId, body)
++    .then((response) => ({ id: response.data.id }));
++}
++
++function lastUserText(
++  messages: ReadonlyArray<{ role: string; content: ReadonlyArray<unknown> }>,
++): string {
++  for (let i = messages.length - 1; i >= 0; i--) {
++    const message = messages[i];
++    if (!message || message.role !== "user") continue;
++    const text = message.content
++      .map((part) => {
++        if (
++          part &&
++          typeof part === "object" &&
++          (part as { type?: unknown }).type === "text" &&
++          typeof (part as { text?: unknown }).text === "string"
++        ) {
++          return (part as { text: string }).text;
++        }
++        return "";
++      })
++      .filter(Boolean)
++      .join("\n");
++    if (text) return text;
++  }
++  return "";
++}
++
++/**
++ * Build an assistant-ui `ChatModelAdapter` that talks to the Fabro Sessions
++ * API. The adapter is parameterized by a `runId`; the session is created
++ * lazily on the first turn (reusing a `sessionStorage`-cached id on reopen)
++ * and turns are submitted via streamed SSE.
++ */
++export function createAskFabroAdapter(
++  options: AskFabroAdapterOptions,
++): ChatModelAdapter {
++  const persisted = options.persistedSession ?? defaultPersistedSessionState;
++  const streamImpl = options.streamSessionTurnImpl ?? streamSessionTurn;
++  const createSession: CreateSession =
++    options.createSession ?? defaultCreateSession;
++
++  let sessionId: string | null = persisted.read(options.runId);
++
++  async function ensureSession(): Promise<string> {
++    if (sessionId) return sessionId;
++    const body: { title?: string; model?: string } = { title: "Ask Fabro" };
++    if (options.defaultModel) body.model = options.defaultModel;
++    const created = await createSession(options.runId, body);
++    sessionId = created.id;
++    persisted.write(options.runId, sessionId);
++    return sessionId;
++  }
++
++  return {
++    async *run({ messages, abortSignal }) {
++      const id = await ensureSession();
++      const input = lastUserText(messages as never);
++
++      const acc = emptyAccumulator();
++      const queue: SessionStreamEvent[] = [];
++      let resolveWaiter: (() => void) | null = null;
++      let streamDone = false;
++      let streamError: unknown = null;
++
++      const streamPromise = streamImpl({
++        sessionId: id,
++        input,
++        signal: abortSignal,
++        onEvent: (event) => {
++          queue.push(event);
++          if (resolveWaiter) {
++            const r = resolveWaiter;
++            resolveWaiter = null;
++            r();
++          }
++        },
++      }).then(
++        () => {
++          streamDone = true;
++          if (resolveWaiter) {
++            const r = resolveWaiter;
++            resolveWaiter = null;
++            r();
++          }
++        },
++        (err) => {
++          streamError = err;
++          streamDone = true;
++          if (resolveWaiter) {
++            const r = resolveWaiter;
++            resolveWaiter = null;
++            r();
++          }
++        },
++      );
++
++      while (true) {
++        if (queue.length === 0) {
++          if (streamDone) break;
++          await new Promise<void>((resolve) => {
++            resolveWaiter = resolve;
++          });
++          continue;
++        }
++        const event = queue.shift();
++        if (!event) continue;
++        if (applyTurnEvent(acc, event)) {
++          yield snapshot(acc);
++        }
++      }
++
++      await streamPromise;
++      if (streamError) throw streamError;
++      yield snapshot(acc);
++    },
++  };
++}
+\ No newline at end of file
+diff --git a/apps/fabro-web/app/routes/ask-fabro.tsx b/apps/fabro-web/app/routes/ask-fabro.tsx
+index 45b8dfde2..c3642db02 100644
+--- a/apps/fabro-web/app/routes/ask-fabro.tsx
++++ b/apps/fabro-web/app/routes/ask-fabro.tsx
+@@ -27,7 +27,11 @@ export default function AskFabro() {
+     // grows by the vertical padding amount to recover the full viewport area.
+     <div className="relative isolate -mx-4 -my-6 flex h-[calc(100%+3rem)] sm:-mx-6 lg:-mx-8">
+       <DemoWorkspace isOpen={isOpen} onOpen={() => setIsOpen(true)} />
+-      <AskFabroSidebar isOpen={isOpen} onClose={() => setIsOpen(false)} />
++      <AskFabroSidebar
++        isOpen={isOpen}
++        onClose={() => setIsOpen(false)}
++        runId="demo"
++      />
+     </div>
+   );
+ }
+@@ -148,4 +152,4 @@ const RUN_ROWS = [
+   { id: "r_8f27", title: "Bump assistant-ui to latest", duration: "0m 47s", dot: "bg-mint" },
+   { id: "r_8f26", title: "Generate release notes for v0.42", duration: "1m 19s", dot: "bg-mint" },
+   { id: "r_8f25", title: "Audit unused dependencies", duration: "5m 33s", dot: "bg-coral" },
+-];
++];
+\ No newline at end of file
+diff --git a/apps/fabro-web/app/routes/run-detail.tsx b/apps/fabro-web/app/routes/run-detail.tsx
+index f51735f40..8a8b917a0 100644
+--- a/apps/fabro-web/app/routes/run-detail.tsx
++++ b/apps/fabro-web/app/routes/run-detail.tsx
+@@ -22,13 +22,13 @@ import {
+   useLocation,
+   useMatches,
+   useNavigate,
+-  useSearchParams,
+ } from "react-router";
+ import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
+ 
+ import AskFabroSidebar, {
+   SIDEBAR_WIDTH,
+ } from "../components/chats/ask-fabro-sidebar";
++import type { AskFabro } from "@qltysh/fabro-api-client";
+ import { EditableRunTitle } from "../components/editable-run-title";
+ import { GitPullRequestIcon } from "../components/icons";
+ import { InterviewDock } from "../components/interview-dock";
+@@ -360,12 +360,15 @@ export default function RunDetail({ params }: { params: { id: string } }) {
+   const questionsQuery = useRunQuestions(params.id, isBlocked);
+   const pendingQuestions = questionsQuery.data ?? [];
+   const { pathname } = useLocation();
+-  const [searchParams] = useSearchParams();
+-  // The "Ask Fabro" assistant is gated behind ?ask=1 while the feature is in
+-  // prototype: the trigger button and the docked sidebar only render then.
+-  const askEnabled = searchParams.get("ask") === "1";
++  // Ask Fabro readiness is computed server-side per run: feature flag, the
++  // run's sandbox state, and whether any LLM provider is configured. The
++  // trigger button is always rendered for visibility; it disables when the
++  // server reports `available: false`, with a tooltip explaining why.
++  const askFabro = summary?.ask_fabro ?? null;
++  const askAvailable = askFabro?.available ?? false;
++  const askDefaultModel = askFabro?.default_model ?? null;
+   const [askOpen, setAskOpen] = useState(false);
+-  const sidebarWidth = askEnabled && askOpen ? SIDEBAR_WIDTH : 0;
++  const sidebarWidth = askAvailable && askOpen ? SIDEBAR_WIDTH : 0;
+   const { setSidebarWidth } = useAskFabroLayout();
+   const matches = useMatches();
+   const basePath = `/runs/${params.id}`;
+@@ -632,20 +635,11 @@ export default function RunDetail({ params }: { params: { id: string } }) {
+           onCancel={() => void cancelMutation.trigger()}
+         />
+ 
+-        {askEnabled && (
+-          <button
+-            type="button"
+-            onClick={() => setAskOpen(true)}
+-            disabled={askOpen}
+-            className={classNames(
+-              SECONDARY_BUTTON_CLASS,
+-              "disabled:cursor-not-allowed disabled:opacity-60",
+-            )}
+-          >
+-            <SparklesIcon className="size-4 text-teal-300" aria-hidden="true" />
+-            Ask Fabro
+-          </button>
+-        )}
++        <AskFabroTriggerButton
++          askFabro={askFabro}
++          askOpen={askOpen}
++          onOpen={() => setAskOpen(true)}
++        />
+       </div>
+ 
+       <ConfirmDialog
+@@ -721,11 +715,16 @@ export default function RunDetail({ params }: { params: { id: string } }) {
+         )}
+       </div>
+ 
+-      {askEnabled && (
++      {askAvailable && (
+         // Docked below the top nav (h-16) and above the steer bar (z-30); the
+         // sidebar animates its own width, so the wrapper collapses when closed.
+         <div className="fixed top-16 right-0 bottom-0 z-40">
+-          <AskFabroSidebar isOpen={askOpen} onClose={() => setAskOpen(false)} />
++          <AskFabroSidebar
++            isOpen={askOpen}
++            onClose={() => setAskOpen(false)}
++            runId={params.id}
++            defaultModel={askDefaultModel}
++          />
+         </div>
+       )}
+     </div>
+@@ -738,6 +737,46 @@ function isLifecycleActionFailure(
+   return "ok" in value && value.ok === false;
+ }
+ 
++const ASK_FABRO_UNAVAILABLE_TOOLTIPS: Record<string, string> = {
++  feature_disabled:  "Ask Fabro is disabled",
++  no_sandbox:        "Run sandbox isn't ready",
++  sandbox_not_ready: "Run sandbox isn't ready",
++  llm_unconfigured:  "No LLM configured",
++};
++
++function AskFabroTriggerButton({
++  askFabro,
++  askOpen,
++  onOpen,
++}: {
++  askFabro: AskFabro | null;
++  askOpen: boolean;
++  onOpen: () => void;
++}) {
++  const available = askFabro?.available ?? false;
++  const disabled = !available || askOpen;
++  const unavailableReason = askFabro?.unavailable_reason ?? null;
++  const button = (
++    <button
++      type="button"
++      onClick={onOpen}
++      disabled={disabled}
++      className={classNames(
++        SECONDARY_BUTTON_CLASS,
++        "disabled:cursor-not-allowed disabled:opacity-60",
++      )}
++    >
++      <SparklesIcon className="size-4 text-teal-300" aria-hidden="true" />
++      Ask Fabro
++    </button>
++  );
++  if (!available && unavailableReason) {
++    const tooltip = ASK_FABRO_UNAVAILABLE_TOOLTIPS[unavailableReason] ?? "Ask Fabro is unavailable";
++    return <Tooltip label={tooltip}>{button}</Tooltip>;
++  }
++  return button;
++}
++
+ export function handleLifecycleToastResult(
+   intent: LifecycleAction,
+   result: RunDetailActionResult | undefined,
+@@ -952,4 +991,4 @@ function ActionsMenu(props: ActionsMenuProps) {
+       </MenuItems>
+     </Menu>
+   );
+-}
++}
+\ No newline at end of file
+diff --git a/lib/crates/fabro-server/Cargo.toml b/lib/crates/fabro-server/Cargo.toml
+index ffc0a9af9..67fe98c99 100644
+--- a/lib/crates/fabro-server/Cargo.toml
++++ b/lib/crates/fabro-server/Cargo.toml
+@@ -42,6 +42,7 @@ fabro-tool = { path = "../fabro-tool" }
+ fabro-types = { path = "../fabro-types" }
+ fabro-util = { path = "../fabro-util" }
+ fabro-api = { path = "../fabro-api" }
++fabro-client = { path = "../fabro-client" }
+ fabro-store = { path = "../fabro-store" }
+ fabro-vault = { path = "../fabro-vault" }
+ fabro-http.workspace = true
+@@ -112,4 +113,4 @@ tokio-util.workspace = true
+ fabro-macros = { path = "../fabro-macros" }
+ fabro-sandbox = { path = "../fabro-sandbox", features = ["test-support"] }
+ fabro-test = { workspace = true }
+-fabro-types = { path = "../fabro-types", features = ["test-support"] }
++fabro-types = { path = "../fabro-types", features = ["test-support"] }
+\ No newline at end of file
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 6fff21ae1..d71ee3b3f 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -948,6 +948,26 @@ impl AppState {
+         &self.worker_tokens
+     }
+ 
++    /// Loopback target this server is bound to, derived from the runtime
++    /// daemon record. Used by in-process Ask Fabro sessions to call the local
++    /// API over the normal HTTP path (authed with a same-run worker token).
++    pub(crate) fn self_server_target(&self) -> anyhow::Result<fabro_client::ServerTarget> {
++        let storage_dir = self.server_storage_dir();
++        let runtime_directory = Storage::new(&storage_dir).runtime_directory();
++        let daemon = ServerDaemon::read(&runtime_directory)?.with_context(|| {
++            format!(
++                "server record {} is missing",
++                runtime_directory.record_path().display()
++            )
++        })?;
++        let target = daemon.bind.to_target();
++        if daemon.bind.tcp_port().is_some() {
++            fabro_client::ServerTarget::http_url(target)
++        } else {
++            fabro_client::ServerTarget::unix_socket_path(target)
++        }
++    }
++
+     pub(crate) fn resolve_interp(&self, value: &InterpString) -> anyhow::Result<String> {
+         value
+             .resolve(|name| (self.env_lookup)(name))
+diff --git a/lib/crates/fabro-server/src/server/handler/sessions.rs b/lib/crates/fabro-server/src/server/handler/sessions.rs
+index 1e27fbf62..acd3d4127 100644
+--- a/lib/crates/fabro-server/src/server/handler/sessions.rs
++++ b/lib/crates/fabro-server/src/server/handler/sessions.rs
+@@ -1,4 +1,5 @@
+ use std::convert::Infallible;
++use std::path::PathBuf;
+ use std::sync::Arc;
+ 
+ use axum::extract::{Path, Query, State};
+@@ -23,6 +24,7 @@ use fabro_sandbox::reconnect::reconnect_for_run;
+ use fabro_store::{
+     EventPayload, ProjectedRunSession, RunDatabase, project_run_session, project_run_sessions,
+ };
++use fabro_tool::fabro_client::ClientBackend;
+ use fabro_types::run_event::{
+     RunSessionAssistantDeltaProps, RunSessionAssistantMessageProps, RunSessionCreatedProps,
+     RunSessionToolCallCompletedProps, RunSessionToolCallStartedProps, RunSessionTurnFailedCode,
+@@ -33,6 +35,8 @@ use fabro_types::settings::{ModelRef as SettingsModelRef, ModelRegistry, Resolve
+ use fabro_types::{
+     EventBody, EventEnvelope, PermissionLevel, RunEvent, RunId, SessionDetail, SessionId, TurnId,
+ };
++use fabro_workflow::handler::llm::api::register_fabro_run_tools_subset;
++use fabro_workflow::services::FabroRunToolServices;
+ use serde_json::Value;
+ use tokio::sync::broadcast::error::RecvError;
+ use tokio::sync::mpsc;
+@@ -48,6 +52,7 @@ use super::super::{
+ use crate::error::ApiError;
+ use crate::principal_middleware::RequiredUser;
+ use crate::server_secrets::LlmClientResult;
++use crate::worker_token::{WorkerScopeSet, issue_worker_token_with_scopes};
+ 
+ const SESSION_SSE_BUFFER_CAPACITY: usize = 1024;
+ 
+@@ -682,13 +687,46 @@ async fn build_agent_session(
+     .await
+     .map_err(AskFabroBuildError::SandboxUnavailable)?;
+     let sandbox: Arc<dyn fabro_agent::Sandbox> = Arc::from(sandbox);
+-    let profile = build_profile(
++    let mut profile = build_profile(
+         provider_id,
+         profile_kind,
+         &model,
+         &llm_result.client,
+         Arc::clone(&catalog),
+     );
++
++    // Give the Ask Fabro agent access to run-control tools scoped to its
++    // owning run. The session reaches the local HTTP API via a same-run
++    // worker token; the server's auth middleware enforces the run scope so
++    // cross-run calls 403.
++    let worker_token = issue_worker_token_with_scopes(
++        state.worker_token_keys(),
++        &run_id,
++        WorkerScopeSet::run_worker_with_agent_run_tools(),
++    )
++    .map_err(|err| AskFabroBuildError::Agent(anyhow::anyhow!("{err:?}")))?;
++    let target = state
++        .self_server_target()
++        .map_err(AskFabroBuildError::Agent)?;
++    let api_client = fabro_client::Client::builder()
++        .target(target)
++        .credential(fabro_client::Credential::Worker(worker_token))
++        .connect()
++        .await
++        .map_err(AskFabroBuildError::Agent)?;
++    let backend = ClientBackend::new(Arc::new(api_client));
++    let services = FabroRunToolServices {
++        backend:            Arc::new(backend),
++        current_run_id:     run_id,
++        base_cwd:           PathBuf::new(),
++        user_settings_path: PathBuf::new(),
++    };
++    register_fabro_run_tools_subset(profile.tool_registry_mut(), &services, &[
++        fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
++        fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
++    ]);
++    let profile: Arc<dyn AgentProfile> = Arc::from(profile);
++
+     let config = SessionOptions {
+         tool_hooks: Some(Arc::new(ToolApprovalAdapter(
+             build_ask_fabro_tool_approval(),
+@@ -817,12 +855,12 @@ fn build_profile(
+     model: &str,
+     llm_client: &LlmClient,
+     catalog: Arc<Catalog>,
+-) -> Arc<dyn AgentProfile> {
++) -> Box<dyn AgentProfile> {
+     let summarizer = Some(WebFetchSummarizer {
+         client:   llm_client.clone(),
+         model_id: summarizer_model_id(&provider_id, profile_kind, &catalog, model),
+     });
+-    let profile: Box<dyn AgentProfile> = match profile_kind {
++    match profile_kind {
+         AgentProfileKind::OpenAi => Box::new(
+             OpenAiProfile::with_summarizer(model, summarizer)
+                 .with_provider_id(provider_id)
+@@ -838,8 +876,7 @@ fn build_profile(
+                 .with_provider_id(provider_id)
+                 .with_catalog(catalog),
+         ),
+-    };
+-    Arc::from(profile)
++    }
+ }
+ 
+ fn summarizer_model_id(
+@@ -864,14 +901,26 @@ fn summarizer_model_id(
+     }
+ }
+ 
++/// Tool approval policy for Ask Fabro agent sessions.
++///
++/// File and shell tools stay locked down to the `ReadOnly` permission level,
++/// matching the rest of the session sandbox. The two run-control tools
++/// (`fabro_run_interact`, `fabro_run_events`) get full access — they're
++/// scoped by the same-run worker token, so the agent cannot reach across
++/// runs even though `interact` exposes mutating actions (start, cancel,
++/// steer, archive, answer).
+ fn build_ask_fabro_tool_approval() -> ToolApprovalFn {
+     Arc::new(move |tool_name: &str, _args: &Value| {
++        if matches!(
++            tool_name,
++            fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME | fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME
++        ) {
++            return Ok(());
++        }
+         if is_tool_auto_approved(PermissionLevel::ReadOnly, tool_name) {
+             Ok(())
+         } else {
+-            Err(format!(
+-                "{tool_name} tool denied by Ask Fabro read-only policy"
+-            ))
++            Err(format!("{tool_name} tool denied by Ask Fabro tool policy"))
+         }
+     })
+ }
+@@ -1202,3 +1251,47 @@ fn parse_turn_id(value: &str) -> Result<TurnId, ApiError> {
+         .parse()
+         .map_err(|err| ApiError::bad_request(format!("Invalid turn ID: {err}")))
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn ask_fabro_tool_approval_allows_run_interact_and_run_events() {
++        let policy = build_ask_fabro_tool_approval();
++        assert!(policy("fabro_run_interact", &Value::Null).is_ok());
++        assert!(policy("fabro_run_events", &Value::Null).is_ok());
++    }
++
++    #[test]
++    fn ask_fabro_tool_approval_allows_read_only_tools() {
++        let policy = build_ask_fabro_tool_approval();
++        // read_file is part of the ReadOnly auto-approved set.
++        assert!(policy("read_file", &Value::Null).is_ok());
++    }
++
++    #[test]
++    fn ask_fabro_tool_approval_denies_write_and_shell_tools() {
++        let policy = build_ask_fabro_tool_approval();
++        let write = policy("write_file", &Value::Null).unwrap_err();
++        assert!(
++            write.contains("denied"),
++            "write_file should be denied; got: {write}"
++        );
++
++        let shell = policy("shell", &Value::Null).unwrap_err();
++        assert!(
++            shell.contains("denied"),
++            "shell should be denied; got: {shell}"
++        );
++    }
++
++    #[test]
++    fn ask_fabro_tool_approval_denies_other_mutating_run_tools() {
++        let policy = build_ask_fabro_tool_approval();
++        // Only `fabro_run_interact` and `fabro_run_events` are allow-listed.
++        // `fabro_run_create` and friends are not part of the Ask Fabro subset.
++        let err = policy("fabro_run_create", &Value::Null).unwrap_err();
++        assert!(err.contains("denied"), "fabro_run_create should be denied");
++    }
++}
+diff --git a/lib/crates/fabro-workflow/src/handler/llm/api.rs b/lib/crates/fabro-workflow/src/handler/llm/api.rs
+index ed8643ef4..6970474e2 100644
+--- a/lib/crates/fabro-workflow/src/handler/llm/api.rs
++++ b/lib/crates/fabro-workflow/src/handler/llm/api.rs
+@@ -191,12 +191,21 @@ fn build_profile(
+     }
+ }
+ 
+-pub(crate) fn register_fabro_run_tools(
++pub fn register_fabro_run_tools(registry: &mut ToolRegistry, services: &FabroRunToolServices) {
++    register_fabro_run_tools_subset(registry, services, &[]);
++}
++
++/// Register a subset of Fabro run tools by tool name. Pass an empty `only`
++/// slice to register the full set (matches `register_fabro_run_tools`).
++pub fn register_fabro_run_tools_subset(
+     registry: &mut ToolRegistry,
+     services: &FabroRunToolServices,
++    only: &[&str],
+ ) {
+     for definition in fabro_tool::tool_definitions() {
+-        registry.register(fabro_run_tool(definition, services.clone()));
++        if only.is_empty() || only.contains(&definition.name) {
++            registry.register(fabro_run_tool(definition, services.clone()));
++        }
+     }
+ }
+ 
+@@ -1456,6 +1465,42 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn agent_run_tools_subset_registers_only_listed_tools() {
++        let mut registry = ToolRegistry::new();
++        let (services, _backend) = fabro_run_tool_services();
++        register_fabro_run_tools_subset(&mut registry, &services, &[
++            fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
++            fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
++        ]);
++
++        let mut registered = registry
++            .names()
++            .into_iter()
++            .filter(|name| name.starts_with("fabro_run_"))
++            .collect::<Vec<_>>();
++        registered.sort();
++        assert_eq!(registered, vec![
++            fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
++            fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
++        ]);
++    }
++
++    #[test]
++    fn agent_run_tools_subset_empty_only_registers_all() {
++        let mut registry_full = ToolRegistry::new();
++        let mut registry_subset = ToolRegistry::new();
++        let (services, _backend) = fabro_run_tool_services();
++        register_fabro_run_tools(&mut registry_full, &services);
++        register_fabro_run_tools_subset(&mut registry_subset, &services, &[]);
++
++        let mut full = registry_full.names();
++        let mut subset = registry_subset.names();
++        full.sort();
++        subset.sort();
++        assert_eq!(full, subset);
++    }
++
+     #[tokio::test]
+     async fn agent_run_create_injects_current_run_as_parent() {
+         let (services, backend) = fabro_run_tool_services();
