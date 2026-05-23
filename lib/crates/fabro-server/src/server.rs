@@ -2642,7 +2642,7 @@ pub(crate) async fn reconcile_incomplete_runs_on_startup(
 ) -> anyhow::Result<usize> {
     let summaries = state
         .store
-        .list_runs(&fabro_store::ListRunsQuery::default())
+        .list_runs(&fabro_store::ListRunsQuery::default(), chrono::Utc::now())
         .await?;
     let mut reconciled = 0usize;
 
