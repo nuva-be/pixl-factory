@@ -1,0 +1,82 @@
+diff --git a/lib/crates/fabro-agent/src/apply_patch.rs b/lib/crates/fabro-agent/src/apply_patch.rs
+index fb7624160..7e06e6a89 100644
+--- a/lib/crates/fabro-agent/src/apply_patch.rs
++++ b/lib/crates/fabro-agent/src/apply_patch.rs
+@@ -504,6 +504,7 @@ mod tests {
+     use fabro_llm::types::{
+         ContentPart, FinishReason, Message as LlmMessage, Response, Role, TokenCounts, ToolCall,
+     };
++    use tokio::fs;
+     use tokio_util::sync::CancellationToken;
+ 
+     use super::*;
+@@ -900,8 +901,10 @@ mod tests {
+     async fn apply_patch_updates_raw_local_file_without_line_number_prefixes() {
+         let dir = tempfile::tempdir().unwrap();
+         let path = dir.path().join("src/lib.rs");
+-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+-        std::fs::write(&path, "fn hello() {\n    println!(\"old\");\n}\n").unwrap();
++        fs::create_dir_all(path.parent().unwrap()).await.unwrap();
++        fs::write(&path, "fn hello() {\n    println!(\"old\");\n}\n")
++            .await
++            .unwrap();
+         let env = LocalSandbox::new(dir.path().to_path_buf());
+         let patch = "\
+ *** Begin Patch
+@@ -919,7 +922,7 @@ mod tests {
+             "Success. Updated the following files:\nM src/lib.rs\n"
+         );
+         assert_eq!(
+-            std::fs::read_to_string(&path).unwrap(),
++            fs::read_to_string(&path).await.unwrap(),
+             "fn hello() {\n    println!(\"new\");\n}\n"
+         );
+     }
+@@ -1039,7 +1042,7 @@ mod tests {
+     async fn pure_addition_update_hunk_uses_raw_local_file_text() {
+         let dir = tempfile::tempdir().unwrap();
+         let path = dir.path().join("insert_only.txt");
+-        std::fs::write(&path, "alpha\nomega\n").unwrap();
++        fs::write(&path, "alpha\nomega\n").await.unwrap();
+         let env = LocalSandbox::new(dir.path().to_path_buf());
+         let patch = "\
+ *** Begin Patch
+@@ -1056,7 +1059,7 @@ mod tests {
+             "Success. Updated the following files:\nM insert_only.txt\n"
+         );
+         assert_eq!(
+-            std::fs::read_to_string(&path).unwrap(),
++            fs::read_to_string(&path).await.unwrap(),
+             "alpha\nomega\ninserted\n"
+         );
+     }
+diff --git a/lib/crates/fabro-sandbox/src/docker.rs b/lib/crates/fabro-sandbox/src/docker.rs
+index c7036687a..60ed3c19b 100644
+--- a/lib/crates/fabro-sandbox/src/docker.rs
++++ b/lib/crates/fabro-sandbox/src/docker.rs
+@@ -206,6 +206,12 @@ impl DockerSandbox {
+     }
+ 
+     async fn download_file_bytes(&self, remote_path: &str) -> crate::Result<Vec<u8>> {
++        #[expect(
++            clippy::disallowed_types,
++            reason = "tar entries are synchronous in-memory readers; bytes are collected before any await"
++        )]
++        use std::io::Read as _;
++
+         let container_id = self.container_id()?;
+         let container_path = self.resolve_container_path(remote_path);
+         let opts = DownloadFromContainerOptions {
+@@ -225,12 +231,6 @@ impl DockerSandbox {
+             archive_bytes.extend_from_slice(&chunk);
+         }
+ 
+-        #[expect(
+-            clippy::disallowed_types,
+-            reason = "tar entries are synchronous in-memory readers; bytes are collected before any await"
+-        )]
+-        use std::io::Read as _;
+-
+         let mut archive = tar::Archive::new(Cursor::new(archive_bytes));
+         let entries = archive.entries().map_err(|e| {
+             crate::Error::context(
