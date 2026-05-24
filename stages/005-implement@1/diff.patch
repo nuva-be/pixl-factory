@@ -1,0 +1,991 @@
+diff --git a/docs/public/administration/sandboxing.mdx b/docs/public/administration/sandboxing.mdx
+index 749eedeed..e74dad1cc 100644
+--- a/docs/public/administration/sandboxing.mdx
++++ b/docs/public/administration/sandboxing.mdx
+@@ -7,6 +7,11 @@ Sandboxes isolate agent execution from the host machine. When an agent runs a sh
+ 
+ Fabro supports three sandbox providers: `local` (no isolation), `docker` (container-level), and `daytona` (cloud VM). See [Environments](/execution/environments) for full provider-specific configuration.
+ 
++Operators can enable or disable which providers the server may launch with
++`[server.sandbox.providers.<provider>]` in `settings.toml`. Missing entries default to
++`enabled = true`; setting `enabled = false` rejects new runs whose effective provider is disabled.
++Dry-run Docker/Daytona runs execute locally, so they are governed by the `local` provider policy.
++
+ ## Network access control
+ 
+ For cloud sandboxes (Daytona), you can control outbound network access with `[environments.<slug>.network]`. Three modes are available: `"allow_all"` (default), `"block"`, and `"cidr_allow_list"` with an `allow = ["..."]` CIDR list.
+diff --git a/docs/public/administration/server-configuration.mdx b/docs/public/administration/server-configuration.mdx
+index 3822174ad..a6ad03475 100644
+--- a/docs/public/administration/server-configuration.mdx
++++ b/docs/public/administration/server-configuration.mdx
+@@ -17,7 +17,7 @@ Fabro only reads `settings.toml`. Older `server.toml`, `user.toml`, and `cli.tom
+ 
+ | Scope | Examples |
+ |---|---|
+-| Server-owned (runtime-only from local `settings.toml`) | `[server.listen]`, `[server.api]`, `[server.web]`, `[server.auth]`, `[server.storage]`, `[server.artifacts]`, `[server.slatedb]`, `[server.scheduler]`, `[server.logging]`, `[server.integrations]` |
++| Server-owned (runtime-only from local `settings.toml`) | `[server.listen]`, `[server.api]`, `[server.web]`, `[server.auth]`, `[server.sandbox]`, `[server.storage]`, `[server.artifacts]`, `[server.slatedb]`, `[server.scheduler]`, `[server.logging]`, `[server.integrations]` |
+ | Shared run defaults (layered through `.fabro/project.toml`/`workflow.toml`) | `[run.model]`, `[run.prepare]`, `[run.environment]`, `[environments.<slug>]`, `[run.checkpoint]`, `[run.inputs]`, `[run.pull_request]`, `[run.git]`, `[run.hooks]`, `[run.agent]` |
+ 
+ The CLI-only `[cli.*]` sections (including `[cli.target]`) belong in the client machine's `settings.toml`. They tell CLI commands how to reach a server. The server process does not read `[cli.*]` for its own binding or routing.
+@@ -46,6 +46,15 @@ methods = ["dev-token", "github"]
+ [server.auth.github]
+ allowed_usernames = ["alice", "bob"]
+ 
++[server.sandbox.providers.local]
++enabled = true
++
++[server.sandbox.providers.docker]
++enabled = true
++
++[server.sandbox.providers.daytona]
++enabled = true
++
+ [server.integrations.github]
+ app_id = "123456"
+ client_id = "Iv1.abc123"
+@@ -165,6 +174,24 @@ GitHub-specific auth policy.
+ 
+ The GitHub OAuth client ID still lives under `[server.integrations.github].client_id`.
+ 
++### `[server.sandbox.providers]` section
++
++Controls which sandbox providers the server may launch. Missing provider entries default to
++`enabled = true` for backward compatibility. Disabling a provider rejects new runs whose effective
++provider is disabled; dry-run Docker/Daytona runs use the local provider and are governed by
++`server.sandbox.providers.local.enabled`.
++
++```toml title="settings.toml"
++[server.sandbox.providers.local]
++enabled = true
++
++[server.sandbox.providers.docker]
++enabled = true
++
++[server.sandbox.providers.daytona]
++enabled = true
++```
++
+ ### `[server.slatedb]` section
+ 
+ Configure the embedded SlateDB key-value store used for run event storage.
+diff --git a/docs/public/api-reference/fabro-api.yaml b/docs/public/api-reference/fabro-api.yaml
+index 58a1e02e9..3ec1be7f8 100644
+--- a/docs/public/api-reference/fabro-api.yaml
++++ b/docs/public/api-reference/fabro-api.yaml
+@@ -11192,6 +11192,7 @@ components:
+         - web
+         - auth
+         - ip_allowlist
++        - sandbox
+         - storage
+         - artifacts
+         - slatedb
+@@ -11209,6 +11210,8 @@ components:
+           $ref: "#/components/schemas/ServerAuthSettings"
+         ip_allowlist:
+           $ref: "#/components/schemas/ServerIpAllowlistSettings"
++        sandbox:
++          $ref: "#/components/schemas/ServerSandboxSettings"
+         storage:
+           $ref: "#/components/schemas/ServerStorageSettings"
+         artifacts:
+@@ -11325,6 +11328,31 @@ components:
+       type: string
+       enum: [GitHubMetaHooks]
+ 
++    ServerSandboxSettings:
++      type: object
++      required: [providers]
++      properties:
++        providers:
++          $ref: "#/components/schemas/ServerSandboxProvidersSettings"
++
++    ServerSandboxProvidersSettings:
++      type: object
++      required: [local, docker, daytona]
++      properties:
++        local:
++          $ref: "#/components/schemas/ServerSandboxProviderSettings"
++        docker:
++          $ref: "#/components/schemas/ServerSandboxProviderSettings"
++        daytona:
++          $ref: "#/components/schemas/ServerSandboxProviderSettings"
++
++    ServerSandboxProviderSettings:
++      type: object
++      required: [enabled]
++      properties:
++        enabled:
++          type: boolean
++
+     ServerStorageSettings:
+       type: object
+       required: [root]
+diff --git a/lib/crates/fabro-api/build.rs b/lib/crates/fabro-api/build.rs
+index 4649ef19e..86e848f38 100644
+--- a/lib/crates/fabro-api/build.rs
++++ b/lib/crates/fabro-api/build.rs
+@@ -259,6 +259,21 @@ fn main() {
+             "fabro_types::settings::server::IpAllowEntry",
+             &[],
+         ),
++        (
++            "ServerSandboxSettings",
++            "fabro_types::settings::server::ServerSandboxSettings",
++            &[],
++        ),
++        (
++            "ServerSandboxProvidersSettings",
++            "fabro_types::settings::server::ServerSandboxProvidersSettings",
++            &[],
++        ),
++        (
++            "ServerSandboxProviderSettings",
++            "fabro_types::settings::server::ServerSandboxProviderSettings",
++            &[],
++        ),
+         (
+             "ServerStorageSettings",
+             "fabro_types::settings::server::ServerStorageSettings",
+diff --git a/lib/crates/fabro-api/src/lib.rs b/lib/crates/fabro-api/src/lib.rs
+index a148d9aac..b8f3a02a1 100644
+--- a/lib/crates/fabro-api/src/lib.rs
++++ b/lib/crates/fabro-api/src/lib.rs
+@@ -25,7 +25,8 @@ pub mod types {
+         IpAllowEntry, LogDestination, ObjectStoreSettings, ServerApiSettings,
+         ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings,
+         ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
+-        ServerListenSettings, ServerLoggingSettings, ServerSchedulerSettings,
++        ServerListenSettings, ServerLoggingSettings, ServerSandboxProviderSettings,
++        ServerSandboxProvidersSettings, ServerSandboxSettings, ServerSchedulerSettings,
+         ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
+         WebhookStrategy,
+     };
+diff --git a/lib/crates/fabro-api/tests/server_settings_round_trip.rs b/lib/crates/fabro-api/tests/server_settings_round_trip.rs
+index 45d8ef97e..a7421641b 100644
+--- a/lib/crates/fabro-api/tests/server_settings_round_trip.rs
++++ b/lib/crates/fabro-api/tests/server_settings_round_trip.rs
+@@ -2,12 +2,18 @@ use std::any::{TypeId, type_name};
+ 
+ use fabro_api::types::{
+     LogDestination as ApiLogDestination, ObjectStoreSettings as ApiObjectStoreSettings,
+-    ServerNamespace as ApiServerNamespace, ServerSettings as ApiServerSettings,
++    ServerNamespace as ApiServerNamespace,
++    ServerSandboxProviderSettings as ApiServerSandboxProviderSettings,
++    ServerSandboxProvidersSettings as ApiServerSandboxProvidersSettings,
++    ServerSandboxSettings as ApiServerSandboxSettings, ServerSettings as ApiServerSettings,
+ };
+ use fabro_config::ServerSettingsBuilder;
+ use fabro_types::ServerSettings;
+ use fabro_types::settings::ServerNamespace;
+-use fabro_types::settings::server::{LogDestination, ObjectStoreSettings};
++use fabro_types::settings::server::{
++    LogDestination, ObjectStoreSettings, ServerSandboxProviderSettings,
++    ServerSandboxProvidersSettings, ServerSandboxSettings,
++};
+ 
+ #[test]
+ fn server_settings_family_reuses_domain_types() {
+@@ -15,6 +21,9 @@ fn server_settings_family_reuses_domain_types() {
+     assert_same_type::<ApiServerNamespace, ServerNamespace>();
+     assert_same_type::<ApiObjectStoreSettings, ObjectStoreSettings>();
+     assert_same_type::<ApiLogDestination, LogDestination>();
++    assert_same_type::<ApiServerSandboxSettings, ServerSandboxSettings>();
++    assert_same_type::<ApiServerSandboxProvidersSettings, ServerSandboxProvidersSettings>();
++    assert_same_type::<ApiServerSandboxProviderSettings, ServerSandboxProviderSettings>();
+ }
+ 
+ #[test]
+@@ -40,6 +49,9 @@ methods = ["dev-token", "github"]
+ [server.auth.github]
+ allowed_usernames = ["alice"]
+ 
++[server.sandbox.providers.daytona]
++enabled = false
++
+ [server.storage]
+ root = "/srv/fabro"
+ 
+@@ -61,6 +73,18 @@ slug = "fabro-dev"
+     assert_eq!(json["server"]["listen"]["address"], "127.0.0.1:32276");
+     assert_eq!(json["server"]["storage"]["root"], "/srv/fabro");
+     assert_eq!(json["server"]["logging"]["destination"], "stdout");
++    assert_eq!(
++        json["server"]["sandbox"]["providers"]["local"]["enabled"],
++        true
++    );
++    assert_eq!(
++        json["server"]["sandbox"]["providers"]["docker"]["enabled"],
++        true
++    );
++    assert_eq!(
++        json["server"]["sandbox"]["providers"]["daytona"]["enabled"],
++        false
++    );
+     assert!(json.get("features").is_none());
+ 
+     let round_trip: ApiServerSettings =
+diff --git a/lib/crates/fabro-config/src/layers/mod.rs b/lib/crates/fabro-config/src/layers/mod.rs
+index bf5f0a38b..6c425c33d 100644
+--- a/lib/crates/fabro-config/src/layers/mod.rs
++++ b/lib/crates/fabro-config/src/layers/mod.rs
+@@ -42,8 +42,9 @@ pub use server::{
+     GithubIntegrationLayer, IntegrationWebhooksLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer,
+     ServerApiLayer, ServerArtifactsLayer, ServerAuthGithubLayer, ServerAuthLayer,
+     ServerIntegrationsLayer, ServerIpAllowlistLayer, ServerIpAllowlistOverrideLayer, ServerLayer,
+-    ServerListenLayer, ServerLoggingLayer, ServerSchedulerLayer, ServerSlateDbLayer,
+-    ServerStorageLayer, ServerWebLayer, SlackIntegrationLayer,
++    ServerListenLayer, ServerLoggingLayer, ServerSandboxLayer, ServerSandboxProviderLayer,
++    ServerSandboxProvidersLayer, ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer,
++    ServerWebLayer, SlackIntegrationLayer,
+ };
+ pub use settings::SettingsLayer;
+ pub use workflow::WorkflowLayer;
+diff --git a/lib/crates/fabro-config/src/layers/server.rs b/lib/crates/fabro-config/src/layers/server.rs
+index bc03a1824..62939a0e3 100644
+--- a/lib/crates/fabro-config/src/layers/server.rs
++++ b/lib/crates/fabro-config/src/layers/server.rs
+@@ -23,6 +23,8 @@ pub struct ServerLayer {
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub ip_allowlist: Option<ServerIpAllowlistLayer>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub sandbox:      Option<ServerSandboxLayer>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub storage:      Option<ServerStorageLayer>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub artifacts:    Option<ServerArtifactsLayer>,
+@@ -109,6 +111,32 @@ pub struct ServerIpAllowlistOverrideLayer {
+     pub trusted_proxy_count: Option<u32>,
+ }
+ 
++/// `[server.sandbox]` — server-owned sandbox provider policy.
++#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
++#[serde(deny_unknown_fields)]
++pub struct ServerSandboxLayer {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub providers: Option<ServerSandboxProvidersLayer>,
++}
++
++#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
++#[serde(deny_unknown_fields)]
++pub struct ServerSandboxProvidersLayer {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub local:   Option<ServerSandboxProviderLayer>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub docker:  Option<ServerSandboxProviderLayer>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub daytona: Option<ServerSandboxProviderLayer>,
++}
++
++#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
++#[serde(deny_unknown_fields)]
++pub struct ServerSandboxProviderLayer {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub enabled: Option<bool>,
++}
++
+ /// `[server.storage]` — single managed local disk root.
+ #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
+ #[serde(deny_unknown_fields)]
+diff --git a/lib/crates/fabro-config/src/lib.rs b/lib/crates/fabro-config/src/lib.rs
+index 7ae698007..0fb321caa 100644
+--- a/lib/crates/fabro-config/src/lib.rs
++++ b/lib/crates/fabro-config/src/lib.rs
+@@ -57,6 +57,7 @@ pub use layers::{
+     RunRunBranchLayer, RunScmLayer, ScmGitHubLayer, ServerApiLayer, ServerArtifactsLayer,
+     ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
+     ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerLoggingLayer,
++    ServerSandboxLayer, ServerSandboxProviderLayer, ServerSandboxProvidersLayer,
+     ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer, SettingsLayer,
+     SlackIntegrationLayer, StickyMap, StringOrSplice, WorkflowLayer,
+ };
+diff --git a/lib/crates/fabro-config/src/resolve/server.rs b/lib/crates/fabro-config/src/resolve/server.rs
+index f6c22c699..cfdf08c7a 100644
+--- a/lib/crates/fabro-config/src/resolve/server.rs
++++ b/lib/crates/fabro-config/src/resolve/server.rs
+@@ -4,7 +4,8 @@ use fabro_types::settings::server::{
+     IpAllowEntry, ObjectStoreProvider, ObjectStoreSettings, ServerApiSettings,
+     ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings,
+     ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
+-    ServerListenSettings, ServerLoggingSettings, ServerNamespace, ServerSchedulerSettings,
++    ServerListenSettings, ServerLoggingSettings, ServerNamespace, ServerSandboxProviderSettings,
++    ServerSandboxProvidersSettings, ServerSandboxSettings, ServerSchedulerSettings,
+     ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
+     WebhookStrategy,
+ };
+@@ -15,8 +16,8 @@ use crate::user::default_storage_dir;
+ use crate::{
+     IntegrationWebhooksLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer, ServerApiLayer,
+     ServerArtifactsLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
+-    ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerSlateDbLayer,
+-    ServerStorageLayer, ServerWebLayer,
++    ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerSandboxLayer,
++    ServerSandboxProviderLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer,
+ };
+ 
+ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> ServerNamespace {
+@@ -38,6 +39,7 @@ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> Se
+         web,
+         auth,
+         ip_allowlist,
++        sandbox: resolve_sandbox(layer.sandbox.as_ref()),
+         storage: storage.clone(),
+         artifacts: resolve_artifacts(layer.artifacts.as_ref(), &storage.root, errors),
+         slatedb: resolve_slatedb(layer.slatedb.as_ref(), &storage.root, errors),
+@@ -64,6 +66,31 @@ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> Se
+     }
+ }
+ 
++fn resolve_sandbox(layer: Option<&ServerSandboxLayer>) -> ServerSandboxSettings {
++    let providers = layer.and_then(|sandbox| sandbox.providers.as_ref());
++    ServerSandboxSettings {
++        providers: ServerSandboxProvidersSettings {
++            local:   resolve_sandbox_provider(
++                providers.and_then(|providers| providers.local.as_ref()),
++            ),
++            docker:  resolve_sandbox_provider(
++                providers.and_then(|providers| providers.docker.as_ref()),
++            ),
++            daytona: resolve_sandbox_provider(
++                providers.and_then(|providers| providers.daytona.as_ref()),
++            ),
++        },
++    }
++}
++
++fn resolve_sandbox_provider(
++    layer: Option<&ServerSandboxProviderLayer>,
++) -> ServerSandboxProviderSettings {
++    ServerSandboxProviderSettings {
++        enabled: layer.and_then(|provider| provider.enabled).unwrap_or(true),
++    }
++}
++
+ fn resolve_storage(layer: Option<&ServerStorageLayer>) -> ServerStorageSettings {
+     ServerStorageSettings {
+         root: layer
+diff --git a/lib/crates/fabro-config/src/tests/resolve_server.rs b/lib/crates/fabro-config/src/tests/resolve_server.rs
+index d3c7899d4..edd419619 100644
+--- a/lib/crates/fabro-config/src/tests/resolve_server.rs
++++ b/lib/crates/fabro-config/src/tests/resolve_server.rs
+@@ -135,6 +135,66 @@ fn resolved_server_integrations_are_slack_only_for_chat() {
+     );
+ }
+ 
++#[test]
++fn server_sandbox_defaults_all_providers_enabled() {
++    let settings = ServerSettingsBuilder::from_toml(
++        r#"
++_version = 1
++
++[server.auth]
++methods = ["dev-token"]
++"#,
++    )
++    .expect("server settings should resolve");
++
++    let sandbox = settings.server.sandbox;
++    assert!(sandbox.providers.local.enabled);
++    assert!(sandbox.providers.docker.enabled);
++    assert!(sandbox.providers.daytona.enabled);
++}
++
++#[test]
++fn server_sandbox_allows_partial_provider_overrides() {
++    let settings = ServerSettingsBuilder::from_toml(
++        r#"
++_version = 1
++
++[server.auth]
++methods = ["dev-token"]
++
++[server.sandbox.providers.daytona]
++enabled = false
++"#,
++    )
++    .expect("server settings should resolve");
++
++    let sandbox = settings.server.sandbox;
++    assert!(sandbox.providers.local.enabled);
++    assert!(sandbox.providers.docker.enabled);
++    assert!(!sandbox.providers.daytona.enabled);
++}
++
++#[test]
++fn parsing_rejects_unknown_server_sandbox_provider() {
++    let err = ServerSettingsBuilder::from_toml(
++        r#"
++_version = 1
++
++[server.auth]
++methods = ["dev-token"]
++
++[server.sandbox.providers.exe]
++enabled = true
++"#,
++    )
++    .expect_err("unknown sandbox provider should be rejected");
++
++    assert!(
++        err.to_string().contains("unknown field `exe`"),
++        "unexpected error: {err}"
++    );
++}
++
+ #[test]
+ fn parsing_rejects_unknown_server_integrations() {
+     let source = r"
+diff --git a/lib/crates/fabro-install/src/lib.rs b/lib/crates/fabro-install/src/lib.rs
+index f62de5414..2176b7fb2 100644
+--- a/lib/crates/fabro-install/src/lib.rs
++++ b/lib/crates/fabro-install/src/lib.rs
+@@ -442,6 +442,25 @@ pub fn write_object_store_settings(
+     }
+ }
+ 
++fn write_sandbox_provider_enabled(
++    providers: &mut toml::Table,
++    provider: &str,
++    enabled: bool,
++) -> Result<()> {
++    let table = ensure_table(providers, provider)?;
++    table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
++    Ok(())
++}
++
++fn write_sandbox_provider_policy(server: &mut toml::Table) -> Result<()> {
++    let sandbox = ensure_table(server, "sandbox")?;
++    let providers = ensure_table(sandbox, "providers")?;
++    write_sandbox_provider_enabled(providers, "local", true)?;
++    write_sandbox_provider_enabled(providers, "docker", true)?;
++    write_sandbox_provider_enabled(providers, "daytona", true)?;
++    Ok(())
++}
++
+ pub fn write_sandbox_settings(
+     doc: &mut toml::Value,
+     selection: InstallSandboxSelection,
+@@ -461,6 +480,8 @@ pub fn write_sandbox_settings(
+         "provider".to_string(),
+         toml::Value::String(provider.to_string()),
+     );
++    let server = ensure_table(root, "server")?;
++    write_sandbox_provider_policy(server)?;
+     Ok(())
+ }
+ 
+@@ -1407,6 +1428,9 @@ stale = "remove-me"
+                 .and_then(toml::Value::as_str),
+             Some("docker")
+         );
++        assert_eq!(sandbox_provider_enabled(&doc, "local"), Some(true));
++        assert_eq!(sandbox_provider_enabled(&doc, "docker"), Some(true));
++        assert_eq!(sandbox_provider_enabled(&doc, "daytona"), Some(true));
+     }
+ 
+     #[test]
+@@ -1433,6 +1457,22 @@ stale = "remove-me"
+                 .and_then(toml::Value::as_str),
+             Some("daytona")
+         );
++        assert_eq!(sandbox_provider_enabled(&doc, "local"), Some(true));
++        assert_eq!(sandbox_provider_enabled(&doc, "docker"), Some(true));
++        assert_eq!(sandbox_provider_enabled(&doc, "daytona"), Some(true));
++    }
++
++    fn sandbox_provider_enabled(doc: &toml::Value, provider: &str) -> Option<bool> {
++        doc.get("server")
++            .and_then(toml::Value::as_table)
++            .and_then(|server| server.get("sandbox"))
++            .and_then(toml::Value::as_table)
++            .and_then(|sandbox| sandbox.get("providers"))
++            .and_then(toml::Value::as_table)
++            .and_then(|providers| providers.get(provider))
++            .and_then(toml::Value::as_table)
++            .and_then(|provider| provider.get("enabled"))
++            .and_then(toml::Value::as_bool)
+     }
+ 
+     #[test]
+diff --git a/lib/crates/fabro-server/src/run_manifest.rs b/lib/crates/fabro-server/src/run_manifest.rs
+index ecc61e589..e7f9884a6 100644
+--- a/lib/crates/fabro-server/src/run_manifest.rs
++++ b/lib/crates/fabro-server/src/run_manifest.rs
+@@ -26,7 +26,7 @@ use fabro_static::EnvVars;
+ use fabro_types::settings::cli::OutputVerbosity;
+ use fabro_types::settings::interp::InterpString;
+ use fabro_types::settings::run::{EnvironmentProvider, RunGoal, RunMode, RunNamespace};
+-use fabro_types::{ManifestPath, RunId, WorkflowSettings};
++use fabro_types::{ManifestPath, RunId, ServerSettings, WorkflowSettings};
+ use fabro_util::check_report::{CheckDetail, CheckReport, CheckResult, CheckSection, CheckStatus};
+ use fabro_validate::Severity;
+ use fabro_workflow::Error as WorkflowError;
+@@ -502,13 +502,26 @@ async fn build_preflight_report(
+     let resolved_run = materialized.run;
+     let server_settings = state.server_settings();
+     let github_integration = &server_settings.server.integrations.github;
+-    let sandbox_provider = resolve_sandbox_provider(&resolved_run);
+-    let sandbox_provider =
+-        if resolved_run.execution.mode == RunMode::DryRun && !sandbox_provider.is_local() {
+-            SandboxProvider::Local
+-        } else {
+-            sandbox_provider
+-        };
++    let sandbox_provider = effective_sandbox_provider(&resolved_run);
++    if let Some(error) = sandbox_provider_policy_error(&server_settings, sandbox_provider) {
++        checks.push(CheckResult {
++            name:        "Sandbox Provider Policy".into(),
++            status:      CheckStatus::Error,
++            summary:     error,
++            details:     Vec::new(),
++            remediation: None,
++        });
++        return Ok((
++            CheckReport {
++                title:    "Run Preflight".into(),
++                sections: vec![CheckSection {
++                    title: String::new(),
++                    checks,
++                }],
++            },
++            false,
++        ));
++    }
+     run_environment_capability_check(&mut checks, &resolved_run);
+     let needs_github_credentials =
+         sandbox_provider.is_clone_based() || resolved_run.integrations.github.is_token_requested();
+@@ -621,6 +634,32 @@ fn resolve_sandbox_provider(settings: &RunNamespace) -> SandboxProvider {
+     SandboxProvider::from(settings.environment.provider)
+ }
+ 
++pub(crate) fn sandbox_provider_policy_error(
++    server_settings: &ServerSettings,
++    provider: SandboxProvider,
++) -> Option<String> {
++    let enabled = match provider {
++        SandboxProvider::Local => server_settings.server.sandbox.providers.local.enabled,
++        SandboxProvider::Docker => server_settings.server.sandbox.providers.docker.enabled,
++        SandboxProvider::Daytona => server_settings.server.sandbox.providers.daytona.enabled,
++    };
++
++    (!enabled).then(|| {
++        format!(
++            "sandbox provider \"{provider}\" is disabled by server.sandbox.providers.{provider}.enabled"
++        )
++    })
++}
++
++pub(crate) fn effective_sandbox_provider(settings: &RunNamespace) -> SandboxProvider {
++    let provider = resolve_sandbox_provider(settings);
++    if settings.execution.mode == RunMode::DryRun && !provider.is_local() {
++        SandboxProvider::Local
++    } else {
++        provider
++    }
++}
++
+ fn resolve_daytona_config(settings: &RunNamespace) -> DaytonaConfig {
+     daytona_config_from_environment(&settings.environment, !settings.clone.enabled)
+ }
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 3b6069115..d2f1813f9 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -3580,6 +3580,15 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
+         finish_cancelled_run_before_execution(&state, run_id).await;
+         return;
+     }
++    let effective_provider =
++        run_manifest::effective_sandbox_provider(&persisted.run_spec().settings.run);
++    if let Some(error) =
++        run_manifest::sandbox_provider_policy_error(&server_settings, effective_provider)
++    {
++        tracing::error!(run_id = %run_id, error = %error, "Sandbox provider disabled by server policy");
++        fail_run_before_execution(&state, run_id, FailureReason::LaunchFailed, error).await;
++        return;
++    }
+     let github_app_result = {
+         let run_spec = persisted.run_spec();
+         let settings = &run_spec.settings.run;
+@@ -3804,6 +3813,15 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
+         }
+     };
+     let agent_fabro_tools_enabled = run_state.spec.settings.run.agent.fabro_tools;
++    let server_settings = state.server_settings();
++    let effective_provider = run_manifest::effective_sandbox_provider(&run_state.spec.settings.run);
++    if let Some(error) =
++        run_manifest::sandbox_provider_policy_error(&server_settings, effective_provider)
++    {
++        tracing::error!(run_id = %run_id, error = %error, "Sandbox provider disabled by server policy");
++        fail_run_before_execution(&state, run_id, FailureReason::LaunchFailed, error).await;
++        return;
++    }
+ 
+     let state_for_build = Arc::clone(&state);
+     let run_dir_for_build = run_dir.clone();
+diff --git a/lib/crates/fabro-server/src/server/handler/runs.rs b/lib/crates/fabro-server/src/server/handler/runs.rs
+index cfc8dba88..a313d3fda 100644
+--- a/lib/crates/fabro-server/src/server/handler/runs.rs
++++ b/lib/crates/fabro-server/src/server/handler/runs.rs
+@@ -606,6 +606,12 @@ async fn create_run(
+         Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
+     };
+     let run_id = prepared.run_id.unwrap_or_else(RunId::new);
++    let provider = run_manifest::effective_sandbox_provider(&prepared.settings.run);
++    if let Some(error) =
++        run_manifest::sandbox_provider_policy_error(&state.server_settings(), provider)
++    {
++        return ApiError::bad_request(error).into_response();
++    }
+     if let Some(parent_id) = prepared.parent_id {
+         if parent_id == run_id {
+             return ApiError::bad_request("A run cannot be its own parent.").into_response();
+diff --git a/lib/crates/fabro-server/src/server/tests.rs b/lib/crates/fabro-server/src/server/tests.rs
+index 6488ab364..fe8bce65c 100644
+--- a/lib/crates/fabro-server/src/server/tests.rs
++++ b/lib/crates/fabro-server/src/server/tests.rs
+@@ -915,6 +915,29 @@ id = "missing"
+     );
+ }
+ 
++#[test]
++fn sandbox_provider_policy_error_reports_disabled_provider() {
++    let settings = server_settings_from_toml(
++        r#"
++_version = 1
++
++[server.auth]
++methods = ["dev-token"]
++
++[server.sandbox.providers.daytona]
++enabled = false
++"#,
++    );
++
++    assert_eq!(
++        crate::run_manifest::sandbox_provider_policy_error(&settings, SandboxProvider::Daytona)
++            .as_deref(),
++        Some(
++            "sandbox provider \"daytona\" is disabled by server.sandbox.providers.daytona.enabled"
++        )
++    );
++}
++
+ #[test]
+ fn clone_sandbox_credentials_are_available_for_clone_based_providers() {
+     use fabro_types::settings::run::EnvironmentProvider;
+diff --git a/lib/crates/fabro-server/tests/it/api/install.rs b/lib/crates/fabro-server/tests/it/api/install.rs
+index 8b9bea24e..d5c431fde 100644
+--- a/lib/crates/fabro-server/tests/it/api/install.rs
++++ b/lib/crates/fabro-server/tests/it/api/install.rs
+@@ -34,6 +34,22 @@ fn spa_fixture_root() -> PathBuf {
+     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/spa")
+ }
+ 
++fn assert_sandbox_provider_policy_enabled(settings: &str) {
++    assert!(settings.contains("[server.sandbox.providers.local]"));
++    assert!(settings.contains("[server.sandbox.providers.docker]"));
++    assert!(settings.contains("[server.sandbox.providers.daytona]"));
++    assert!(settings.contains("enabled = true"));
++
++    let resolved = ServerSettingsBuilder::from_toml(settings)
++        .expect("settings should resolve")
++        .server
++        .sandbox
++        .providers;
++    assert!(resolved.local.enabled);
++    assert!(resolved.docker.enabled);
++    assert!(resolved.daytona.enabled);
++}
++
+ async fn mock_daytona_auth_probe(server: &MockServer) -> httpmock::Mock<'_> {
+     server
+         .mock_async(|when, then| {
+@@ -918,6 +934,7 @@ async fn token_install_finish_persists_settings_env_and_vault() {
+         settings.contains("provider = \"docker\""),
+         "settings.toml should record explicit docker sandbox provider"
+     );
++    assert_sandbox_provider_policy_enabled(&settings);
+     let resolved = ServerSettingsBuilder::from_toml(&settings)
+         .expect("settings should resolve")
+         .server;
+@@ -2677,6 +2694,7 @@ async fn daytona_install_finish_writes_settings_and_vault_secret() {
+         settings.contains("provider = \"daytona\""),
+         "settings.toml should record daytona sandbox provider"
+     );
++    assert_sandbox_provider_policy_enabled(&settings);
+ 
+     let vault = Vault::load(Storage::new(temp_dir.path()).secrets_path()).unwrap();
+     assert_eq!(vault.get("DAYTONA_API_KEY"), Some(api_key));
+diff --git a/lib/crates/fabro-server/tests/it/api/runs.rs b/lib/crates/fabro-server/tests/it/api/runs.rs
+index 32c205c1e..c6521ee7c 100644
+--- a/lib/crates/fabro-server/tests/it/api/runs.rs
++++ b/lib/crates/fabro-server/tests/it/api/runs.rs
+@@ -52,6 +52,84 @@ async fn request_json(
+     .await
+ }
+ 
++fn daytona_manifest() -> serde_json::Value {
++    let mut manifest = minimal_manifest_json(MINIMAL_DOT);
++    manifest["args"] = serde_json::json!({ "environment": "daytona" });
++    manifest
++}
++
++fn daytona_disabled_settings() -> crate::helpers::TestAppSettings {
++    settings_from_toml(
++        r"
++_version = 1
++
++[server.sandbox.providers.daytona]
++enabled = false
++",
++    )
++}
++
++#[tokio::test]
++async fn create_run_rejects_disabled_sandbox_provider() {
++    let app = fabro_server::test_support::build_test_router(test_app_state_with_options(
++        daytona_disabled_settings(),
++        5,
++    ));
++
++    let request = Request::builder()
++        .method("POST")
++        .uri(api("/runs"))
++        .header("content-type", "application/json")
++        .body(Body::from(daytona_manifest().to_string()))
++        .expect("create run request should build");
++    let body = response_json(
++        app.clone().oneshot(request).await.unwrap(),
++        StatusCode::BAD_REQUEST,
++        "POST /api/v1/runs",
++    )
++    .await;
++
++    assert_eq!(
++        body["errors"][0]["detail"],
++        "sandbox provider \"daytona\" is disabled by server.sandbox.providers.daytona.enabled"
++    );
++}
++
++#[tokio::test]
++async fn preflight_reports_disabled_sandbox_provider() {
++    let app = fabro_server::test_support::build_test_router(test_app_state_with_options(
++        daytona_disabled_settings(),
++        5,
++    ));
++
++    let request = Request::builder()
++        .method("POST")
++        .uri(api("/preflight"))
++        .header("content-type", "application/json")
++        .body(Body::from(daytona_manifest().to_string()))
++        .expect("preflight request should build");
++    let body = response_json(
++        app.clone().oneshot(request).await.unwrap(),
++        StatusCode::OK,
++        "POST /api/v1/preflight",
++    )
++    .await;
++
++    assert_eq!(body["ok"], false);
++    let checks = body["checks"]["sections"][0]["checks"]
++        .as_array()
++        .expect("preflight checks should be an array");
++    let policy_check = checks
++        .iter()
++        .find(|check| check["name"] == "Sandbox Provider Policy")
++        .expect("policy check should be present");
++    assert_eq!(policy_check["status"], "error");
++    assert_eq!(
++        policy_check["summary"],
++        "sandbox provider \"daytona\" is disabled by server.sandbox.providers.daytona.enabled"
++    );
++}
++
+ #[tokio::test]
+ async fn run_responses_include_ask_fabro_affordance() {
+     let settings = settings_from_toml(
+diff --git a/lib/crates/fabro-types/src/settings/server.rs b/lib/crates/fabro-types/src/settings/server.rs
+index fa92d3f64..9f7daba0d 100644
+--- a/lib/crates/fabro-types/src/settings/server.rs
++++ b/lib/crates/fabro-types/src/settings/server.rs
+@@ -29,6 +29,7 @@ pub struct ServerNamespace {
+     pub web:          ServerWebSettings,
+     pub auth:         ServerAuthSettings,
+     pub ip_allowlist: ServerIpAllowlistSettings,
++    pub sandbox:      ServerSandboxSettings,
+     pub storage:      ServerStorageSettings,
+     pub artifacts:    ServerArtifactsSettings,
+     pub slatedb:      ServerSlateDbSettings,
+@@ -50,6 +51,7 @@ impl ServerNamespace {
+             web:          ServerWebSettings::default(),
+             auth:         ServerAuthSettings::default(),
+             ip_allowlist: ServerIpAllowlistSettings::default(),
++            sandbox:      ServerSandboxSettings::default(),
+             storage:      ServerStorageSettings::default(),
+             artifacts:    ServerArtifactsSettings::default(),
+             slatedb:      ServerSlateDbSettings::default(),
+@@ -133,6 +135,29 @@ pub struct ServerIpAllowlistOverrideSettings {
+     pub trusted_proxy_count: Option<u32>,
+ }
+ 
++#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
++pub struct ServerSandboxSettings {
++    pub providers: ServerSandboxProvidersSettings,
++}
++
++#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
++pub struct ServerSandboxProvidersSettings {
++    pub local:   ServerSandboxProviderSettings,
++    pub docker:  ServerSandboxProviderSettings,
++    pub daytona: ServerSandboxProviderSettings,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
++pub struct ServerSandboxProviderSettings {
++    pub enabled: bool,
++}
++
++impl Default for ServerSandboxProviderSettings {
++    fn default() -> Self {
++        Self { enabled: true }
++    }
++}
++
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+ pub enum IpAllowEntry {
+     Literal(IpNet),
+diff --git a/lib/packages/fabro-api-client/src/.openapi-generator/FILES b/lib/packages/fabro-api-client/src/.openapi-generator/FILES
+index f8d333e14..633d462aa 100644
+--- a/lib/packages/fabro-api-client/src/.openapi-generator/FILES
++++ b/lib/packages/fabro-api-client/src/.openapi-generator/FILES
+@@ -389,6 +389,9 @@ models/server-listen-tcp-settings.ts
+ models/server-listen-unix-settings.ts
+ models/server-logging-settings.ts
+ models/server-namespace.ts
++models/server-sandbox-provider-settings.ts
++models/server-sandbox-providers-settings.ts
++models/server-sandbox-settings.ts
+ models/server-scheduler-settings.ts
+ models/server-settings.ts
+ models/server-slate-db-settings.ts
+diff --git a/lib/packages/fabro-api-client/src/models/index.ts b/lib/packages/fabro-api-client/src/models/index.ts
+index 78d106d70..26530b0fe 100644
+--- a/lib/packages/fabro-api-client/src/models/index.ts
++++ b/lib/packages/fabro-api-client/src/models/index.ts
+@@ -365,6 +365,9 @@ export * from './server-listen-tcp-settings';
+ export * from './server-listen-unix-settings';
+ export * from './server-logging-settings';
+ export * from './server-namespace';
++export * from './server-sandbox-provider-settings';
++export * from './server-sandbox-providers-settings';
++export * from './server-sandbox-settings';
+ export * from './server-scheduler-settings';
+ export * from './server-settings';
+ export * from './server-slate-db-settings';
+diff --git a/lib/packages/fabro-api-client/src/models/server-namespace.ts b/lib/packages/fabro-api-client/src/models/server-namespace.ts
+index f162fe6cc..315243e88 100644
+--- a/lib/packages/fabro-api-client/src/models/server-namespace.ts
++++ b/lib/packages/fabro-api-client/src/models/server-namespace.ts
+@@ -36,6 +36,9 @@ import type { ServerListenSettings } from './server-listen-settings';
+ import type { ServerLoggingSettings } from './server-logging-settings';
+ // May contain unused imports in some cases
+ // @ts-ignore
++import type { ServerSandboxSettings } from './server-sandbox-settings';
++// May contain unused imports in some cases
++// @ts-ignore
+ import type { ServerSchedulerSettings } from './server-scheduler-settings';
+ // May contain unused imports in some cases
+ // @ts-ignore
+@@ -53,6 +56,7 @@ export interface ServerNamespace {
+     'web': ServerWebSettings;
+     'auth': ServerAuthSettings;
+     'ip_allowlist': ServerIpAllowlistSettings;
++    'sandbox': ServerSandboxSettings;
+     'storage': ServerStorageSettings;
+     'artifacts': ServerArtifactsSettings;
+     'slatedb': ServerSlateDbSettings;
+diff --git a/lib/packages/fabro-api-client/src/models/server-sandbox-provider-settings.ts b/lib/packages/fabro-api-client/src/models/server-sandbox-provider-settings.ts
+new file mode 100644
+index 000000000..c50d09f6d
+--- /dev/null
++++ b/lib/packages/fabro-api-client/src/models/server-sandbox-provider-settings.ts
+@@ -0,0 +1,19 @@
++/* tslint:disable */
++/* eslint-disable */
++/**
++ * Fabro Run API
++ * HTTP API for managing Fabro workflow run executions.
++ *
++ * The version of the OpenAPI document: 0.1.0
++ *
++ *
++ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
++ * https://openapi-generator.tech
++ * Do not edit the class manually.
++ */
++
++
++
++export interface ServerSandboxProviderSettings {
++    'enabled': boolean;
++}
+diff --git a/lib/packages/fabro-api-client/src/models/server-sandbox-providers-settings.ts b/lib/packages/fabro-api-client/src/models/server-sandbox-providers-settings.ts
+new file mode 100644
+index 000000000..9fa9a35a1
+--- /dev/null
++++ b/lib/packages/fabro-api-client/src/models/server-sandbox-providers-settings.ts
+@@ -0,0 +1,24 @@
++/* tslint:disable */
++/* eslint-disable */
++/**
++ * Fabro Run API
++ * HTTP API for managing Fabro workflow run executions.
++ *
++ * The version of the OpenAPI document: 0.1.0
++ *
++ *
++ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
++ * https://openapi-generator.tech
++ * Do not edit the class manually.
++ */
++
++
++// May contain unused imports in some cases
++// @ts-ignore
++import type { ServerSandboxProviderSettings } from './server-sandbox-provider-settings';
++
++export interface ServerSandboxProvidersSettings {
++    'local': ServerSandboxProviderSettings;
++    'docker': ServerSandboxProviderSettings;
++    'daytona': ServerSandboxProviderSettings;
++}
+diff --git a/lib/packages/fabro-api-client/src/models/server-sandbox-settings.ts b/lib/packages/fabro-api-client/src/models/server-sandbox-settings.ts
+new file mode 100644
+index 000000000..cb6a3b2d6
+--- /dev/null
++++ b/lib/packages/fabro-api-client/src/models/server-sandbox-settings.ts
+@@ -0,0 +1,22 @@
++/* tslint:disable */
++/* eslint-disable */
++/**
++ * Fabro Run API
++ * HTTP API for managing Fabro workflow run executions.
++ *
++ * The version of the OpenAPI document: 0.1.0
++ *
++ *
++ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
++ * https://openapi-generator.tech
++ * Do not edit the class manually.
++ */
++
++
++// May contain unused imports in some cases
++// @ts-ignore
++import type { ServerSandboxProvidersSettings } from './server-sandbox-providers-settings';
++
++export interface ServerSandboxSettings {
++    'providers': ServerSandboxProvidersSettings;
++}
