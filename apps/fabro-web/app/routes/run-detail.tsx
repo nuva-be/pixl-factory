@@ -76,7 +76,12 @@ import {
   type LifecycleMutationResult,
   type PreviewMutationResult,
 } from "../lib/mutations";
-import { formatAbsoluteTs, formatDurationMs, formatRelativeTime } from "../lib/format";
+import {
+  formatAbsoluteTs,
+  formatDurationMs,
+  formatRelativeTime,
+  formatUsdMicros,
+} from "../lib/format";
 import { queryKeys } from "../lib/query-keys";
 import { useRunEvents } from "../lib/run-events";
 import { useRunToasts } from "../hooks/use-run-toasts";
@@ -551,6 +556,14 @@ export default function RunDetail({ params }: { params: { id: string } }) {
       {run.workflow}
     </span>
   );
+  const totalUsdMicros = summary.billing?.total_usd_micros;
+  const sizeChip = totalUsdMicros != null && (
+    <Tooltip label={`Size ${summary.size} · ${formatUsdMicros(totalUsdMicros)} billed`}>
+      <span className="rounded bg-overlay px-1.5 py-0.5 font-mono text-xs font-bold text-fg-muted tabular-nums">
+        {summary.size}
+      </span>
+    </Tooltip>
+  );
 
   const visibility = lifecycleActionVisibility(run.lifecycleStatus);
   const previewPending = previewMutation.isMutating;
@@ -670,6 +683,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
                 </span>
               </Tooltip>
             )}
+            {sizeChip}
           </div>
         </div>
 
