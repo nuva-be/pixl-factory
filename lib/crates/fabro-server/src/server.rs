@@ -23,25 +23,26 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use bytes::Bytes;
 pub use fabro_api::types::{
     AggregateBilling, AggregateBillingTotals, ApiQuestion, AppendEventResponse, ArtifactEntry,
-    ArtifactListResponse, BatchRunLifecycleRequest, BatchRunLifecycleResponse,
-    BatchRunLifecycleResult, BatchRunLifecycleResultOutcome, BatchRunLifecycleSummary,
-    BillingByModel, BillingStageRef, CloseRunPullRequestResponse, CompletionContentPart,
-    CompletionMessage, CompletionMessageRole, CompletionResponse, CompletionToolChoiceMode,
-    CompletionUsage, CreateCompletionRequest, CreateRunPullRequestRequest, CreateSecretRequest,
-    DeleteRunResponse, DeleteRunSandbox, DeleteSecretRequest, DenyRunRequest, DiskUsageResponse,
-    DiskUsageRunRow, DiskUsageSummaryRow, ErrorResponseEntry, ForkRequest, ForkResponse,
-    LinkRunPullRequestRequest, MergeRunPullRequestRequest, MergeRunPullRequestResponse,
-    ModelReference, PaginatedEventList, PaginatedRunList, PaginationMeta, PreflightResponse,
-    PreviewUrlRequest, PreviewUrlResponse, Provider, ProviderList, PruneRunEntry, PruneRunsRequest,
-    PruneRunsResponse, RenderWorkflowGraphDirection, RenderWorkflowGraphRequest, RewindRequest,
-    RewindResponse, Run, RunArtifactEntry, RunArtifactListResponse, RunBilling, RunBillingStage,
-    RunBillingTotals, RunError, RunManifest, RunStage, SandboxDetails, SandboxFileEntry,
-    SandboxFileListResponse, SandboxService, SandboxServiceListResponse, SshAccessRequest,
-    SshAccessResponse, StageHandler, StageState, StartRunRequest, SubmitAnswerRequest,
-    SystemCpuResourceScope, SystemCpuResources, SystemDiskResourceScope, SystemDiskResources,
-    SystemInfoResponse, SystemMemoryResourceScope, SystemMemoryResources, SystemRepairRunIssue,
-    SystemRepairRunsResponse, SystemResourcesResponse, SystemRunCounts, TimelineEntryResponse,
-    VncPreviewResponse, WriteBlobResponse,
+    ArtifactListResponse, BatchDeleteRunsRequest, BatchDeleteRunsResponse, BatchDeleteRunsResult,
+    BatchDeleteRunsResultOutcome, BatchDeleteRunsSummary, BatchRunLifecycleRequest,
+    BatchRunLifecycleResponse, BatchRunLifecycleResult, BatchRunLifecycleResultOutcome,
+    BatchRunLifecycleSummary, BillingByModel, BillingStageRef, CloseRunPullRequestResponse,
+    CompletionContentPart, CompletionMessage, CompletionMessageRole, CompletionResponse,
+    CompletionToolChoiceMode, CompletionUsage, CreateCompletionRequest,
+    CreateRunPullRequestRequest, CreateSecretRequest, DeleteRunResponse, DeleteRunSandbox,
+    DeleteSecretRequest, DenyRunRequest, DiskUsageResponse, DiskUsageRunRow, DiskUsageSummaryRow,
+    ErrorResponseEntry, ForkRequest, ForkResponse, LinkRunPullRequestRequest,
+    MergeRunPullRequestRequest, MergeRunPullRequestResponse, ModelReference, PaginatedEventList,
+    PaginatedRunList, PaginationMeta, PreflightResponse, PreviewUrlRequest, PreviewUrlResponse,
+    Provider, ProviderList, PruneRunEntry, PruneRunsRequest, PruneRunsResponse,
+    RenderWorkflowGraphDirection, RenderWorkflowGraphRequest, RewindRequest, RewindResponse, Run,
+    RunArtifactEntry, RunArtifactListResponse, RunBilling, RunBillingStage, RunBillingTotals,
+    RunError, RunManifest, RunStage, SandboxDetails, SandboxFileEntry, SandboxFileListResponse,
+    SandboxService, SandboxServiceListResponse, SshAccessRequest, SshAccessResponse, StageHandler,
+    StageState, StartRunRequest, SubmitAnswerRequest, SystemCpuResourceScope, SystemCpuResources,
+    SystemDiskResourceScope, SystemDiskResources, SystemInfoResponse, SystemMemoryResourceScope,
+    SystemMemoryResources, SystemRepairRunIssue, SystemRepairRunsResponse, SystemResourcesResponse,
+    SystemRunCounts, TimelineEntryResponse, VncPreviewResponse, WriteBlobResponse,
 };
 use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
 #[cfg(test)]
@@ -2175,17 +2176,27 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
 const MAX_PAGE_OFFSET: u32 = 1_000_000;
 
 enum DeleteRunOutcome {
-    NoContent,
+    Deleted,
+    AlreadyAbsent,
+    Preserved(DeleteRunResponse),
+}
+
+enum SandboxDeleteOutcome {
+    /// The durable run store did not exist; nothing to delete.
+    Absent,
+    /// The sandbox resource was cleaned up (or there was none to clean).
+    Cleaned,
+    /// Sandbox is being handed off to the operator instead of deleted.
     Preserved(DeleteRunResponse),
 }
 
 async fn delete_run_internal(
-    state: &Arc<AppState>,
+    state: &AppState,
     id: RunId,
     force: bool,
-) -> Result<DeleteRunOutcome, Response> {
+) -> Result<DeleteRunOutcome, ApiError> {
     if !force {
-        reject_active_delete_without_force(state.as_ref(), &id).await?;
+        reject_active_delete_without_force(state, &id).await?;
     }
 
     let mut managed_run = if let Ok(mut runs) = state.runs.lock() {
@@ -2193,8 +2204,9 @@ async fn delete_run_internal(
     } else {
         None
     };
+    let had_managed_run = managed_run.is_some();
     let durable_status = if managed_run.is_some() {
-        load_durable_run_status(state.as_ref(), &id).await
+        load_durable_run_status(state, &id).await
     } else {
         None
     };
@@ -2232,29 +2244,32 @@ async fn delete_run_internal(
 
     if let Some(mut managed_run) = managed_run {
         if let Some(run_dir) = managed_run.run_dir.take() {
-            remove_run_dir(&run_dir).map_err(|err| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
-            })?;
+            remove_run_dir(&run_dir)
+                .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
         }
     } else {
         let storage = Storage::new(state.server_storage_dir());
         let run_dir = storage.run_scratch(&id).root().to_path_buf();
-        remove_run_dir(&run_dir).map_err(|err| {
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
-        })?;
+        remove_run_dir(&run_dir)
+            .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     }
 
-    state.store.delete_run(&id).await.map_err(|err| {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
-    })?;
+    state
+        .store
+        .delete_run(&id)
+        .await
+        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     state
         .artifact_store
         .delete_for_run(&id)
         .await
-        .map_err(|err| {
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
-        })?;
-    Ok(delete_outcome)
+        .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    match delete_outcome {
+        SandboxDeleteOutcome::Preserved(response) => Ok(DeleteRunOutcome::Preserved(response)),
+        SandboxDeleteOutcome::Cleaned => Ok(DeleteRunOutcome::Deleted),
+        SandboxDeleteOutcome::Absent if had_managed_run => Ok(DeleteRunOutcome::Deleted),
+        SandboxDeleteOutcome::Absent => Ok(DeleteRunOutcome::AlreadyAbsent),
+    }
 }
 
 async fn load_durable_run_status(state: &AppState, id: &RunId) -> Option<RunStatus> {
@@ -2264,12 +2279,12 @@ async fn load_durable_run_status(state: &AppState, id: &RunId) -> Option<RunStat
 }
 
 async fn delete_run_sandbox_resource(
-    state: &Arc<AppState>,
+    state: &AppState,
     id: RunId,
     force: bool,
-) -> Result<DeleteRunOutcome, Response> {
+) -> Result<SandboxDeleteOutcome, ApiError> {
     let Ok(run_store) = state.store.open_run(&id).await else {
-        return Ok(DeleteRunOutcome::NoContent);
+        return Ok(SandboxDeleteOutcome::Absent);
     };
     let projection = match run_store.state().await {
         Ok(projection) => projection,
@@ -2279,12 +2294,13 @@ async fn delete_run_sandbox_resource(
                 error = %render_with_causes(&err.to_string(), &collect_causes(&err)),
                 "Skipping sandbox provider delete because run projection cannot be loaded"
             );
-            return Ok(DeleteRunOutcome::NoContent);
+            return Ok(SandboxDeleteOutcome::Cleaned);
         }
         Err(err) => {
-            return Err(
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
-            );
+            return Err(ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                err.to_string(),
+            ));
         }
     };
     let delete_started = matches!(projection.status, RunStatus::Removing);
@@ -2292,9 +2308,7 @@ async fn delete_run_sandbox_resource(
     if !delete_started && can_mark_removing {
         workflow_event::append_event(&run_store, &id, &workflow_event::Event::RunRemoving)
             .await
-            .map_err(|err| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response()
-            })?;
+            .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     }
 
     let preserve = projection
@@ -2305,19 +2319,18 @@ async fn delete_run_sandbox_resource(
         .lifecycle
         .preserve;
     let Some(record) = projection.sandbox else {
-        return Ok(DeleteRunOutcome::NoContent);
+        return Ok(SandboxDeleteOutcome::Cleaned);
+    };
+    let Some(runtime) = record.runtime.as_ref() else {
+        return Ok(SandboxDeleteOutcome::Cleaned);
     };
     if preserve {
-        return Ok(DeleteRunOutcome::Preserved(DeleteRunResponse {
+        return Ok(SandboxDeleteOutcome::Preserved(DeleteRunResponse {
             deleted:           true,
             sandbox_preserved: true,
             sandbox:           DeleteRunSandbox {
                 provider: record.provider,
-                id:       record
-                    .runtime
-                    .as_ref()
-                    .map(|runtime| runtime.id.clone())
-                    .unwrap_or_default(),
+                id:       runtime.id.clone(),
             },
         }));
     }
@@ -2331,11 +2344,11 @@ async fn delete_run_sandbox_resource(
                 error = %render_with_causes(&err.to_string(), &collect_causes(err.as_ref())),
                 "Skipping sandbox provider delete during run deletion"
             );
-            return Ok(DeleteRunOutcome::NoContent);
+            return Ok(SandboxDeleteOutcome::Cleaned);
         }
         Err(err) => {
             let detail = render_with_causes(&err.to_string(), &collect_causes(err.as_ref()));
-            return Err(ApiError::new(StatusCode::CONFLICT, detail).into_response());
+            return Err(ApiError::new(StatusCode::CONFLICT, detail));
         }
     };
     if let Err(err) = sandbox.delete().await {
@@ -2345,18 +2358,21 @@ async fn delete_run_sandbox_resource(
                 error = %err.display_with_causes(),
                 "Skipping failed sandbox provider delete during run deletion"
             );
-            return Ok(DeleteRunOutcome::NoContent);
+            return Ok(SandboxDeleteOutcome::Cleaned);
         }
-        return Err(ApiError::new(StatusCode::CONFLICT, err.display_with_causes()).into_response());
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            err.display_with_causes(),
+        ));
     }
 
-    Ok(DeleteRunOutcome::NoContent)
+    Ok(SandboxDeleteOutcome::Cleaned)
 }
 
 async fn reject_active_delete_without_force(
     state: &AppState,
     run_id: &RunId,
-) -> Result<(), Response> {
+) -> Result<(), ApiError> {
     let managed_status = state
         .runs
         .lock()
@@ -2367,8 +2383,7 @@ async fn reject_active_delete_without_force(
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 active_run_delete_message(*run_id, status),
-            )
-            .into_response());
+            ));
         }
         return Ok(());
     }
@@ -2378,13 +2393,13 @@ async fn reject_active_delete_without_force(
             Err(ApiError::new(
                 StatusCode::CONFLICT,
                 active_run_delete_message(*run_id, summary.lifecycle.status),
-            )
-            .into_response())
+            ))
         }
         Ok(_) => Ok(()),
-        Err(err) => {
-            Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())
-        }
+        Err(err) => Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            err.to_string(),
+        )),
     }
 }
 
