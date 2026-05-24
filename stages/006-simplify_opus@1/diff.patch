@@ -1,0 +1,215 @@
+diff --git a/apps/fabro-web/app/lib/run-actions.ts b/apps/fabro-web/app/lib/run-actions.ts
+index 4dfea7175..2fefd2e5e 100644
+--- a/apps/fabro-web/app/lib/run-actions.ts
++++ b/apps/fabro-web/app/lib/run-actions.ts
+@@ -85,6 +85,9 @@ export async function deleteRuns(
+   request?: Request,
+ ): Promise<BatchDeleteRunsResponse> {
+   try {
++    // See `batchRunLifecycleAction` for the `as unknown as` rationale:
++    // openapi-generator types `uniqueItems` arrays as `Set<T>` while the wire
++    // contract is a JSON array.
+     const body = { run_ids: runIds, force } as unknown as BatchDeleteRunsRequest;
+     return await apiData(() => runsApi.batchDeleteRuns(body, requestSignalOptions(request)));
+   } catch (error) {
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 5c60cd35e..94d6b820c 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -2181,6 +2181,15 @@ enum DeleteRunOutcome {
+     Preserved(DeleteRunResponse),
+ }
+ 
++enum SandboxDeleteOutcome {
++    /// The durable run store did not exist; nothing to delete.
++    Absent,
++    /// The sandbox resource was cleaned up (or there was none to clean).
++    Cleaned,
++    /// Sandbox is being handed off to the operator instead of deleted.
++    Preserved(DeleteRunResponse),
++}
++
+ async fn delete_run_internal(
+     state: &Arc<AppState>,
+     id: RunId,
+@@ -2196,7 +2205,6 @@ async fn delete_run_internal(
+         None
+     };
+     let had_managed_run = managed_run.is_some();
+-    let durable_run_exists = state.store.open_run(&id).await.is_ok();
+     let durable_status = if managed_run.is_some() {
+         load_durable_run_status(state.as_ref(), &id).await
+     } else {
+@@ -2257,14 +2265,10 @@ async fn delete_run_internal(
+         .await
+         .map_err(|err| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+     match delete_outcome {
+-        DeleteRunOutcome::Preserved(response) => Ok(DeleteRunOutcome::Preserved(response)),
+-        DeleteRunOutcome::Deleted | DeleteRunOutcome::AlreadyAbsent => {
+-            if had_managed_run || durable_run_exists {
+-                Ok(DeleteRunOutcome::Deleted)
+-            } else {
+-                Ok(DeleteRunOutcome::AlreadyAbsent)
+-            }
+-        }
++        SandboxDeleteOutcome::Preserved(response) => Ok(DeleteRunOutcome::Preserved(response)),
++        SandboxDeleteOutcome::Cleaned => Ok(DeleteRunOutcome::Deleted),
++        SandboxDeleteOutcome::Absent if had_managed_run => Ok(DeleteRunOutcome::Deleted),
++        SandboxDeleteOutcome::Absent => Ok(DeleteRunOutcome::AlreadyAbsent),
+     }
+ }
+ 
+@@ -2278,9 +2282,9 @@ async fn delete_run_sandbox_resource(
+     state: &Arc<AppState>,
+     id: RunId,
+     force: bool,
+-) -> Result<DeleteRunOutcome, ApiError> {
++) -> Result<SandboxDeleteOutcome, ApiError> {
+     let Ok(run_store) = state.store.open_run(&id).await else {
+-        return Ok(DeleteRunOutcome::AlreadyAbsent);
++        return Ok(SandboxDeleteOutcome::Absent);
+     };
+     let projection = match run_store.state().await {
+         Ok(projection) => projection,
+@@ -2290,7 +2294,7 @@ async fn delete_run_sandbox_resource(
+                 error = %render_with_causes(&err.to_string(), &collect_causes(&err)),
+                 "Skipping sandbox provider delete because run projection cannot be loaded"
+             );
+-            return Ok(DeleteRunOutcome::Deleted);
++            return Ok(SandboxDeleteOutcome::Cleaned);
+         }
+         Err(err) => {
+             return Err(ApiError::new(
+@@ -2315,13 +2319,13 @@ async fn delete_run_sandbox_resource(
+         .lifecycle
+         .preserve;
+     let Some(record) = projection.sandbox else {
+-        return Ok(DeleteRunOutcome::Deleted);
++        return Ok(SandboxDeleteOutcome::Cleaned);
+     };
+     let Some(runtime) = record.runtime.as_ref() else {
+-        return Ok(DeleteRunOutcome::Deleted);
++        return Ok(SandboxDeleteOutcome::Cleaned);
+     };
+     if preserve {
+-        return Ok(DeleteRunOutcome::Preserved(DeleteRunResponse {
++        return Ok(SandboxDeleteOutcome::Preserved(DeleteRunResponse {
+             deleted:           true,
+             sandbox_preserved: true,
+             sandbox:           DeleteRunSandbox {
+@@ -2340,7 +2344,7 @@ async fn delete_run_sandbox_resource(
+                 error = %render_with_causes(&err.to_string(), &collect_causes(err.as_ref())),
+                 "Skipping sandbox provider delete during run deletion"
+             );
+-            return Ok(DeleteRunOutcome::Deleted);
++            return Ok(SandboxDeleteOutcome::Cleaned);
+         }
+         Err(err) => {
+             let detail = render_with_causes(&err.to_string(), &collect_causes(err.as_ref()));
+@@ -2354,7 +2358,7 @@ async fn delete_run_sandbox_resource(
+                 error = %err.display_with_causes(),
+                 "Skipping failed sandbox provider delete during run deletion"
+             );
+-            return Ok(DeleteRunOutcome::Deleted);
++            return Ok(SandboxDeleteOutcome::Cleaned);
+         }
+         return Err(ApiError::new(
+             StatusCode::CONFLICT,
+@@ -2362,7 +2366,7 @@ async fn delete_run_sandbox_resource(
+         ));
+     }
+ 
+-    Ok(DeleteRunOutcome::Deleted)
++    Ok(SandboxDeleteOutcome::Cleaned)
+ }
+ 
+ async fn reject_active_delete_without_force(
+diff --git a/lib/crates/fabro-server/src/server/handler/lifecycle.rs b/lib/crates/fabro-server/src/server/handler/lifecycle.rs
+index 0b67d8d3e..1be5d81e8 100644
+--- a/lib/crates/fabro-server/src/server/handler/lifecycle.rs
++++ b/lib/crates/fabro-server/src/server/handler/lifecycle.rs
+@@ -726,7 +726,7 @@ async fn batch_delete_runs(
+     Json(request): Json<BatchDeleteRunsRequest>,
+ ) -> Response {
+     let force = request.force;
+-    let ids = match validate_batch_run_id_strings(request.run_ids) {
++    let ids = match validate_batch_run_ids(request.run_ids) {
+         Ok(ids) => ids,
+         Err(err) => return err.into_response(),
+     };
+@@ -952,7 +952,7 @@ async fn batch_run_archive_action(
+     request: BatchRunLifecycleRequest,
+     action: ArchiveAction,
+ ) -> Response {
+-    let ids = match validate_batch_run_ids(request) {
++    let ids = match validate_batch_run_ids(request.run_ids) {
+         Ok(ids) => ids,
+         Err(err) => return err.into_response(),
+     };
+@@ -984,11 +984,7 @@ async fn batch_run_archive_action(
+         .into_response()
+ }
+ 
+-fn validate_batch_run_ids(request: BatchRunLifecycleRequest) -> Result<Vec<RunId>, ApiError> {
+-    validate_batch_run_id_strings(request.run_ids)
+-}
+-
+-fn validate_batch_run_id_strings(run_ids: Vec<String>) -> Result<Vec<RunId>, ApiError> {
++fn validate_batch_run_ids(run_ids: Vec<String>) -> Result<Vec<RunId>, ApiError> {
+     if run_ids.is_empty() {
+         return Err(ApiError::bad_request(
+             "run_ids must contain at least one run ID.",
+diff --git a/lib/crates/fabro-server/src/server/tests.rs b/lib/crates/fabro-server/src/server/tests.rs
+index 6d7322f11..6c41b624d 100644
+--- a/lib/crates/fabro-server/src/server/tests.rs
++++ b/lib/crates/fabro-server/src/server/tests.rs
+@@ -11280,48 +11280,7 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
+     let state = test_app_state();
+     let app = crate::test_support::build_test_router(Arc::clone(&state));
+     let run_id = RunId::new();
+-    let mut settings = fabro_types::WorkflowSettings::default();
+-    settings.run.environment.lifecycle.preserve = true;
+-    let graph = Graph::new("test");
+-
+-    create_durable_run_with_events(&state, run_id, &[
+-        workflow_event::Event::RunCreated {
+-            run_id,
+-            title: None,
+-            settings: serde_json::to_value(settings).unwrap(),
+-            graph: serde_json::to_value(graph).unwrap(),
+-            workflow_source: None,
+-            workflow_config: None,
+-            labels: std::collections::BTreeMap::default(),
+-            run_dir: "/tmp/fabro-run".to_string(),
+-            source_directory: Some("/tmp/fabro-run".to_string()),
+-            workflow_slug: Some("test".to_string()),
+-            db_prefix: None,
+-            provenance: None,
+-            manifest_blob: None,
+-            git: None,
+-            fork_source_ref: None,
+-            retried_from: None,
+-            parent_id: None,
+-            web_url: None,
+-        },
+-        workflow_event::Event::RunSubmitted {
+-            definition_blob: None,
+-        },
+-        workflow_event::Event::SandboxInitialized {
+-            provider:          SandboxProvider::Local,
+-            id:                "sandbox-preserve-1".to_string(),
+-            working_directory: "/tmp/fabro-preserved-sandbox".to_string(),
+-            repo_cloned:       None,
+-            clone_origin_url:  None,
+-            clone_branch:      None,
+-            workspace_root:    None,
+-            repos_root:        None,
+-            primary_repo_path: None,
+-            primary_repo_link: None,
+-        },
+-    ])
+-    .await;
++    create_preserved_local_sandbox_run(&state, run_id).await;
+ 
+     let req = Request::builder()
+         .method("DELETE")
