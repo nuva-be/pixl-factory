@@ -1,0 +1,241 @@
+diff --git a/lib/crates/fabro-install/src/lib.rs b/lib/crates/fabro-install/src/lib.rs
+index 2176b7fb2..64e191fe0 100644
+--- a/lib/crates/fabro-install/src/lib.rs
++++ b/lib/crates/fabro-install/src/lib.rs
+@@ -442,22 +442,18 @@ pub fn write_object_store_settings(
+     }
+ }
+ 
+-fn write_sandbox_provider_enabled(
+-    providers: &mut toml::Table,
+-    provider: &str,
+-    enabled: bool,
+-) -> Result<()> {
+-    let table = ensure_table(providers, provider)?;
+-    table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
+-    Ok(())
+-}
+-
+ fn write_sandbox_provider_policy(server: &mut toml::Table) -> Result<()> {
++    use fabro_types::SandboxProvider;
+     let sandbox = ensure_table(server, "sandbox")?;
+     let providers = ensure_table(sandbox, "providers")?;
+-    write_sandbox_provider_enabled(providers, "local", true)?;
+-    write_sandbox_provider_enabled(providers, "docker", true)?;
+-    write_sandbox_provider_enabled(providers, "daytona", true)?;
++    for provider in [
++        SandboxProvider::Local,
++        SandboxProvider::Docker,
++        SandboxProvider::Daytona,
++    ] {
++        let entry = ensure_table(providers, &provider.to_string())?;
++        entry.insert("enabled".to_string(), toml::Value::Boolean(true));
++    }
+     Ok(())
+ }
+ 
+diff --git a/lib/crates/fabro-server/src/run_manifest.rs b/lib/crates/fabro-server/src/run_manifest.rs
+index e7f9884a6..0aefe8f78 100644
+--- a/lib/crates/fabro-server/src/run_manifest.rs
++++ b/lib/crates/fabro-server/src/run_manifest.rs
+@@ -25,7 +25,7 @@ use fabro_sandbox::{DockerSandboxOptions, Sandbox, SandboxProvider, SandboxSpec}
+ use fabro_static::EnvVars;
+ use fabro_types::settings::cli::OutputVerbosity;
+ use fabro_types::settings::interp::InterpString;
+-use fabro_types::settings::run::{EnvironmentProvider, RunGoal, RunMode, RunNamespace};
++use fabro_types::settings::run::{EnvironmentProvider, RunGoal, RunNamespace};
+ use fabro_types::{ManifestPath, RunId, ServerSettings, WorkflowSettings};
+ use fabro_util::check_report::{CheckDetail, CheckReport, CheckResult, CheckSection, CheckStatus};
+ use fabro_validate::Severity;
+@@ -630,20 +630,16 @@ fn base_preflight_checks(prepared: &PreparedManifest, graph: &Graph) -> Vec<Chec
+     ]
+ }
+ 
+-fn resolve_sandbox_provider(settings: &RunNamespace) -> SandboxProvider {
+-    SandboxProvider::from(settings.environment.provider)
+-}
+-
+ pub(crate) fn sandbox_provider_policy_error(
+     server_settings: &ServerSettings,
+     provider: SandboxProvider,
+ ) -> Option<String> {
+-    let enabled = match provider {
+-        SandboxProvider::Local => server_settings.server.sandbox.providers.local.enabled,
+-        SandboxProvider::Docker => server_settings.server.sandbox.providers.docker.enabled,
+-        SandboxProvider::Daytona => server_settings.server.sandbox.providers.daytona.enabled,
+-    };
+-
++    let enabled = server_settings
++        .server
++        .sandbox
++        .providers
++        .for_provider(provider)
++        .enabled;
+     (!enabled).then(|| {
+         format!(
+             "sandbox provider \"{provider}\" is disabled by server.sandbox.providers.{provider}.enabled"
+@@ -652,12 +648,7 @@ pub(crate) fn sandbox_provider_policy_error(
+ }
+ 
+ pub(crate) fn effective_sandbox_provider(settings: &RunNamespace) -> SandboxProvider {
+-    let provider = resolve_sandbox_provider(settings);
+-    if settings.execution.mode == RunMode::DryRun && !provider.is_local() {
+-        SandboxProvider::Local
+-    } else {
+-        provider
+-    }
++    SandboxProvider::from(settings.environment.provider).effective_for(settings.execution.mode)
+ }
+ 
+ fn resolve_daytona_config(settings: &RunNamespace) -> DaytonaConfig {
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index d2f1813f9..81a8adeda 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -2831,6 +2831,23 @@ async fn finish_cancelled_run_before_execution(state: &Arc<AppState>, run_id: Ru
+     state.scheduler_notify.notify_one();
+ }
+ 
++/// Reject the run before execution if its effective sandbox provider is
++/// disabled by server policy. Returns `true` when the run was failed.
++async fn fail_if_sandbox_provider_disabled(
++    state: &Arc<AppState>,
++    server_settings: &ServerSettings,
++    run_id: RunId,
++    settings: &RunNamespace,
++) -> bool {
++    let provider = run_manifest::effective_sandbox_provider(settings);
++    let Some(error) = run_manifest::sandbox_provider_policy_error(server_settings, provider) else {
++        return false;
++    };
++    tracing::error!(run_id = %run_id, error = %error, "Sandbox provider disabled by server policy");
++    fail_run_before_execution(state, run_id, FailureReason::LaunchFailed, error).await;
++    true
++}
++
+ async fn fail_run_before_execution(
+     state: &Arc<AppState>,
+     run_id: RunId,
+@@ -3580,13 +3597,14 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
+         finish_cancelled_run_before_execution(&state, run_id).await;
+         return;
+     }
+-    let effective_provider =
+-        run_manifest::effective_sandbox_provider(&persisted.run_spec().settings.run);
+-    if let Some(error) =
+-        run_manifest::sandbox_provider_policy_error(&server_settings, effective_provider)
++    if fail_if_sandbox_provider_disabled(
++        &state,
++        &server_settings,
++        run_id,
++        &persisted.run_spec().settings.run,
++    )
++    .await
+     {
+-        tracing::error!(run_id = %run_id, error = %error, "Sandbox provider disabled by server policy");
+-        fail_run_before_execution(&state, run_id, FailureReason::LaunchFailed, error).await;
+         return;
+     }
+     let github_app_result = {
+@@ -3813,13 +3831,14 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
+         }
+     };
+     let agent_fabro_tools_enabled = run_state.spec.settings.run.agent.fabro_tools;
+-    let server_settings = state.server_settings();
+-    let effective_provider = run_manifest::effective_sandbox_provider(&run_state.spec.settings.run);
+-    if let Some(error) =
+-        run_manifest::sandbox_provider_policy_error(&server_settings, effective_provider)
++    if fail_if_sandbox_provider_disabled(
++        &state,
++        &state.server_settings(),
++        run_id,
++        &run_state.spec.settings.run,
++    )
++    .await
+     {
+-        tracing::error!(run_id = %run_id, error = %error, "Sandbox provider disabled by server policy");
+-        fail_run_before_execution(&state, run_id, FailureReason::LaunchFailed, error).await;
+         return;
+     }
+ 
+diff --git a/lib/crates/fabro-types/src/sandbox_provider.rs b/lib/crates/fabro-types/src/sandbox_provider.rs
+index 18cbbdb81..1034fe2b2 100644
+--- a/lib/crates/fabro-types/src/sandbox_provider.rs
++++ b/lib/crates/fabro-types/src/sandbox_provider.rs
+@@ -1,6 +1,8 @@
+ use serde::{Deserialize, Serialize};
+ use strum::{Display, EnumString};
+ 
++use crate::settings::run::RunMode;
++
+ /// Sandbox provider for agent tool operations.
+ #[derive(
+     Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Display, EnumString,
+@@ -31,6 +33,17 @@ impl SandboxProvider {
+     pub fn is_clone_based(&self) -> bool {
+         matches!(self, Self::Docker | Self::Daytona)
+     }
++
++    /// Coerce non-local providers to `Local` under dry-run; otherwise
++    /// unchanged.
++    #[must_use]
++    pub fn effective_for(self, mode: RunMode) -> Self {
++        if mode == RunMode::DryRun && !self.is_local() {
++            Self::Local
++        } else {
++            self
++        }
++    }
+ }
+ 
+ #[cfg(test)]
+diff --git a/lib/crates/fabro-types/src/settings/server.rs b/lib/crates/fabro-types/src/settings/server.rs
+index 9f7daba0d..c6fe71305 100644
+--- a/lib/crates/fabro-types/src/settings/server.rs
++++ b/lib/crates/fabro-types/src/settings/server.rs
+@@ -147,12 +147,26 @@ pub struct ServerSandboxProvidersSettings {
+     pub daytona: ServerSandboxProviderSettings,
+ }
+ 
++impl ServerSandboxProvidersSettings {
++    /// Per-provider policy entry.
++    #[must_use]
++    pub fn for_provider(&self, provider: crate::SandboxProvider) -> &ServerSandboxProviderSettings {
++        match provider {
++            crate::SandboxProvider::Local => &self.local,
++            crate::SandboxProvider::Docker => &self.docker,
++            crate::SandboxProvider::Daytona => &self.daytona,
++        }
++    }
++}
++
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct ServerSandboxProviderSettings {
+     pub enabled: bool,
+ }
+ 
+ impl Default for ServerSandboxProviderSettings {
++    // The resolver defaults each provider to enabled; keep the struct default
++    // aligned with that so callers that bypass the resolver behave identically.
+     fn default() -> Self {
+         Self { enabled: true }
+     }
+diff --git a/lib/crates/fabro-workflow/src/operations/start.rs b/lib/crates/fabro-workflow/src/operations/start.rs
+index 71e030cc9..6027b0c3c 100644
+--- a/lib/crates/fabro-workflow/src/operations/start.rs
++++ b/lib/crates/fabro-workflow/src/operations/start.rs
+@@ -336,13 +336,8 @@ impl RunSession {
+ 
+         let resolved = &settings.run;
+ 
+-        let sandbox_provider = resolve_sandbox_provider(resolved);
+         let sandbox_provider =
+-            if resolved.execution.mode == RunMode::DryRun && !sandbox_provider.is_local() {
+-                SandboxProvider::Local
+-            } else {
+-                sandbox_provider
+-            };
++            resolve_sandbox_provider(resolved).effective_for(resolved.execution.mode);
+         let catalog = Arc::clone(&services.catalog);
+         let configured =
+             configured_providers_for_start(services.vault.as_ref(), Arc::clone(&catalog)).await;
