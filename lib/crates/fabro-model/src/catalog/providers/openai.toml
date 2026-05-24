@@ -19,7 +19,7 @@ estimated_output_tps = 65
 aliases = ["gpt5"]
 
 [models."gpt-5.2".limits]
-context_window = 1047576
+context_window = 272000
 max_output = 128000
 
 [models."gpt-5.2".features]
@@ -44,7 +44,7 @@ estimated_output_tps = 100
 aliases = ["codex"]
 
 [models."gpt-5.3-codex".limits]
-context_window = 1047576
+context_window = 272000
 max_output = 128000
 
 [models."gpt-5.3-codex".features]
@@ -90,7 +90,7 @@ estimated_output_tps = 70
 aliases = ["gpt54", "gpt-54"]
 
 [models."gpt-5.4".limits]
-context_window = 1047576
+context_window = 272000
 max_output = 128000
 
 [models."gpt-5.4".features]
@@ -115,7 +115,7 @@ estimated_output_tps = 70
 aliases = ["gpt55", "gpt-55"]
 
 [models."gpt-5.5".limits]
-context_window = 1050000
+context_window = 272000
 max_output = 128000
 
 [models."gpt-5.5".features]
@@ -192,7 +192,7 @@ probe = true
 small_default = true
 
 [models."gpt-5.4-mini".limits]
-context_window = 400000
+context_window = 272000
 max_output = 128000
 
 [models."gpt-5.4-mini".features]

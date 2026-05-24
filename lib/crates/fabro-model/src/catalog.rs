@@ -3883,7 +3883,7 @@ reasoning_effort = "levels"
             family: "gpt-5",
             display_name: "GPT-5.4",
             limits: ModelLimits {
-                context_window: 1047576,
+                context_window: 272000,
                 max_output: Some(
                     128000,
                 ),
@@ -4057,6 +4057,40 @@ reasoning_effort = "levels"
             Catalog::builtin().get("codex-spark").unwrap().id,
             "gpt-5.3-codex-spark"
         );
+    }
+
+    #[test]
+    fn openai_codex_default_context_windows_match_codex_catalog() {
+        let catalog = Catalog::builtin();
+
+        for model in [
+            "gpt-5.2",
+            "gpt-5.3-codex",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.5",
+        ] {
+            assert_eq!(
+                catalog.get(model).unwrap().context_window(),
+                272_000,
+                "{model} should use the Codex-safe default context window"
+            );
+        }
+    }
+
+    #[test]
+    fn openai_context_window_can_be_overridden_for_direct_api_usage() {
+        let catalog = Catalog::from_builtin_with_overrides(&minimal_settings(
+            r#"
+[models."gpt-5.5".limits]
+context_window = 1050000
+"#,
+        ))
+        .expect("sparse built-in model limit override should build");
+
+        let model = catalog.get("gpt-5.5").unwrap();
+        assert_eq!(model.context_window(), 1_050_000);
+        assert_eq!(model.max_output(), Some(128_000));
     }
 
     // ---- Closest model tests ----
