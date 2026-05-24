@@ -1,0 +1,149 @@
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 94d6b820c..3b6069115 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -2191,12 +2191,12 @@ enum SandboxDeleteOutcome {
+ }
+ 
+ async fn delete_run_internal(
+-    state: &Arc<AppState>,
++    state: &AppState,
+     id: RunId,
+     force: bool,
+ ) -> Result<DeleteRunOutcome, ApiError> {
+     if !force {
+-        reject_active_delete_without_force(state.as_ref(), &id).await?;
++        reject_active_delete_without_force(state, &id).await?;
+     }
+ 
+     let mut managed_run = if let Ok(mut runs) = state.runs.lock() {
+@@ -2206,7 +2206,7 @@ async fn delete_run_internal(
+     };
+     let had_managed_run = managed_run.is_some();
+     let durable_status = if managed_run.is_some() {
+-        load_durable_run_status(state.as_ref(), &id).await
++        load_durable_run_status(state, &id).await
+     } else {
+         None
+     };
+@@ -2279,7 +2279,7 @@ async fn load_durable_run_status(state: &AppState, id: &RunId) -> Option<RunStat
+ }
+ 
+ async fn delete_run_sandbox_resource(
+-    state: &Arc<AppState>,
++    state: &AppState,
+     id: RunId,
+     force: bool,
+ ) -> Result<SandboxDeleteOutcome, ApiError> {
+diff --git a/lib/crates/fabro-server/src/server/handler/lifecycle.rs b/lib/crates/fabro-server/src/server/handler/lifecycle.rs
+index 1be5d81e8..f3559a12c 100644
+--- a/lib/crates/fabro-server/src/server/handler/lifecycle.rs
++++ b/lib/crates/fabro-server/src/server/handler/lifecycle.rs
+@@ -733,7 +733,7 @@ async fn batch_delete_runs(
+ 
+     let mut results = Vec::with_capacity(ids.len());
+     for id in ids {
+-        results.push(batch_delete_run_item(&state, id, force).await);
++        results.push(batch_delete_run_item(state.as_ref(), id, force).await);
+     }
+ 
+     let requested = results.len() as u64;
+@@ -944,7 +944,7 @@ enum ArchiveAction {
+     Unarchive,
+ }
+ 
+-const MAX_BATCH_RUN_LIFECYCLE_IDS: usize = 250;
++const MAX_BATCH_RUN_IDS: usize = 250;
+ 
+ async fn batch_run_archive_action(
+     state: Arc<AppState>,
+@@ -990,9 +990,9 @@ fn validate_batch_run_ids(run_ids: Vec<String>) -> Result<Vec<RunId>, ApiError>
+             "run_ids must contain at least one run ID.",
+         ));
+     }
+-    if run_ids.len() > MAX_BATCH_RUN_LIFECYCLE_IDS {
++    if run_ids.len() > MAX_BATCH_RUN_IDS {
+         return Err(ApiError::bad_request(format!(
+-            "run_ids must contain no more than {MAX_BATCH_RUN_LIFECYCLE_IDS} run IDs.",
++            "run_ids must contain no more than {MAX_BATCH_RUN_IDS} run IDs.",
+         )));
+     }
+ 
+@@ -1012,11 +1012,7 @@ fn validate_batch_run_ids(run_ids: Vec<String>) -> Result<Vec<RunId>, ApiError>
+     Ok(ids)
+ }
+ 
+-async fn batch_delete_run_item(
+-    state: &Arc<AppState>,
+-    id: RunId,
+-    force: bool,
+-) -> BatchDeleteRunsResult {
++async fn batch_delete_run_item(state: &AppState, id: RunId, force: bool) -> BatchDeleteRunsResult {
+     match delete_run_internal(state, id, force).await {
+         Ok(DeleteRunOutcome::Deleted) => {
+             batch_delete_success(id, BatchDeleteRunsResultOutcome::Deleted, None)
+diff --git a/lib/crates/fabro-server/src/server/handler/runs.rs b/lib/crates/fabro-server/src/server/handler/runs.rs
+index 50894a68c..cfc8dba88 100644
+--- a/lib/crates/fabro-server/src/server/handler/runs.rs
++++ b/lib/crates/fabro-server/src/server/handler/runs.rs
+@@ -32,10 +32,11 @@ use tokio::fs;
+ use tracing::info;
+ 
+ use super::super::{
+-    AppState, ListResponse, PaginationParams, RunExecutionMode, answer_from_request,
+-    api_question_from_pending_interview, default_page_limit, delete_run_internal,
+-    load_pending_interview, managed_run, paginate_items, parse_run_id_path, parse_stage_id_path,
+-    reject_if_archived, resolve_interp_string, submit_pending_interview_answer, workflow_event,
++    AppState, DeleteRunOutcome, ListResponse, PaginationParams, RunExecutionMode,
++    answer_from_request, api_question_from_pending_interview, default_page_limit,
++    delete_run_internal, load_pending_interview, managed_run, paginate_items, parse_run_id_path,
++    parse_stage_id_path, reject_if_archived, resolve_interp_string,
++    submit_pending_interview_answer, workflow_event,
+ };
+ use crate::error::ApiError;
+ use crate::principal_middleware::{
+@@ -508,11 +509,11 @@ async fn delete_run(
+         Err(response) => return response,
+     };
+ 
+-    match delete_run_internal(&state, id, query.force).await {
+-        Ok(
+-            super::super::DeleteRunOutcome::Deleted | super::super::DeleteRunOutcome::AlreadyAbsent,
+-        ) => StatusCode::NO_CONTENT.into_response(),
+-        Ok(super::super::DeleteRunOutcome::Preserved(response)) => {
++    match delete_run_internal(state.as_ref(), id, query.force).await {
++        Ok(DeleteRunOutcome::Deleted | DeleteRunOutcome::AlreadyAbsent) => {
++            StatusCode::NO_CONTENT.into_response()
++        }
++        Ok(DeleteRunOutcome::Preserved(response)) => {
+             (StatusCode::OK, Json(response)).into_response()
+         }
+         Err(error) => error.into_response(),
+diff --git a/lib/crates/fabro-server/src/server/handler/system.rs b/lib/crates/fabro-server/src/server/handler/system.rs
+index 37e48ea4f..87cc06132 100644
+--- a/lib/crates/fabro-server/src/server/handler/system.rs
++++ b/lib/crates/fabro-server/src/server/handler/system.rs
+@@ -207,7 +207,7 @@ async fn prune_runs(
+     }
+ 
+     for run_id in &prune_plan.run_ids {
+-        if let Err(error) = delete_run_internal(&state, *run_id, true).await {
++        if let Err(error) = delete_run_internal(state.as_ref(), *run_id, true).await {
+             return error.into_response();
+         }
+     }
+diff --git a/lib/crates/fabro-server/src/server/tests.rs b/lib/crates/fabro-server/src/server/tests.rs
+index 6c41b624d..a61e65649 100644
+--- a/lib/crates/fabro-server/src/server/tests.rs
++++ b/lib/crates/fabro-server/src/server/tests.rs
+@@ -3725,7 +3725,9 @@ async fn delete_terminal_managed_run_does_not_send_cancel_signal() {
+         .expect("runs lock poisoned")
+         .insert(run_id, run);
+ 
+-    delete_run_internal(&state, run_id, true).await.unwrap();
++    delete_run_internal(state.as_ref(), run_id, true)
++        .await
++        .unwrap();
+ 
+     assert!(!cancel_token.is_cancelled());
+ }
