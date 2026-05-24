@@ -1,0 +1,516 @@
+{
+  "title": "---",
+  "spec": {
+    "run_id": "01KSD2W90DVJ6Q4T0AD2H0DM7F",
+    "settings": {
+      "project": {
+        "name": null,
+        "description": null,
+        "metadata": {}
+      },
+      "workflow": {
+        "name": null,
+        "description": null,
+        "graph": "workflow.fabro",
+        "metadata": {}
+      },
+      "run": {
+        "goal": {
+          "type": "inline",
+          "value": "---\ntitle: feat: StageProjection agent tools API\ntype: feat\nstatus: active\ndate: 2026-05-24\n---\n\n# feat: StageProjection Agent Tools API\n\n## Overview\n\nExpose the complete effective tool list for each agent-backed stage through `StageProjection`, so UI and API consumers can show actual tools such as `apply_patch`, `grep`, `glob`, `read_file`, MCP tools, skill tools, and subagent tools without inferring them from `permission_level`.\n\nThe API should expose tool summaries with `name`, `description`, `source`, `category`, and `invoked`. It must not expose full JSON parameter schemas in the run projection.\n\n## Problem Frame\n\nThe stage sidebar currently has permission metadata such as \"Full access\", but `permission_level` is only an access mode. It does not tell consumers which tools were actually exposed to the model after provider profile setup, optional tool registration, MCP integration, and tool access policy filtering.\n\nThe authoritative list already exists at request-build time in the agent session registry. The API needs to capture that effective list once per stage session and project it onto the stage.\n\n## Requirements Trace\n\n- R1. Add a StageProjection API field containing the complete effective tools for a stage session.\n- R2. Include `name`, `description`, `source`, `category`, and `invoked` for each tool.\n- R3. Do not infer tools from `permission_level` in backend or frontend code.\n- R4. Do not expose full tool parameter schemas through StageProjection.\n- R5. Preserve existing `permission_level` and `mcp_servers` fields for compatibility.\n- R6. Mark individual tools as invoked when matching `agent.tool.started` events are projected.\n- R7. Keep legacy runs backward compatible by defaulting missing tool lists to empty.\n\n## Scope Boundaries\n\n- Do not remove or rename `StageProjection.permission_level`.\n- Do not remove the existing MCP server projection or `AgentMcpToolSummary`.\n- Do not change completion API tool definitions.\n- Do not add ACP-native tool discovery in this pass unless an ACP path already has an equivalent effective tool list available.\n- Do not render parameter schemas in the web UI.\n\n## Context & Research\n\n### Relevant Code and Patterns\n\n- OpenAPI is the source of truth for HTTP contracts in `docs/public/api-reference/fabro-api.yaml`.\n- Shared API/projection DTOs should live in `fabro-types`, with `fabro-api/build.rs` replacements to avoid duplicate generated Rust types.\n- `StageProjection` lives in `lib/crates/fabro-types/src/run_projection.rs`.\n- Durable run event props live in `lib/crates/fabro-types/src/run_event/agent.rs` and `lib/crates/fabro-types/src/run_event/mod.rs`.\n- Workflow event conversion and event names live in `lib/crates/fabro-workflow/src/event/convert.rs`, `events.rs`, and `names.rs`.\n- Projection replay lives in `lib/crates/fabro-store/src/run_state.rs`.\n- The effective request tool list is built in `lib/crates/fabro-agent/src/session.rs` from `ToolRegistry::definitions_with_source_for_policy`.\n- Tool source metadata already exists as `ToolSource` and `ToolDefinitionWithSource` in `lib/crates/fabro-agent/src/tool_registry.rs`.\n- Tool category mapping already exists in `lib/crates/fabro-agent/src/tool_permissions.rs`.\n- The sidebar display lives in `apps/fabro-web/app/components/stage-insights-sidebar.tsx`.\n\n### Strategy Docs\n\n- Read `docs/internal/events-strategy.md` before adding the new durable event.\n- Read `docs/internal/testing-strategy.md` before adding or reorganizing tests.\n- Follow the OpenAPI type ownership guidance in `AGENTS.md`: reuse `fabro-types` through `fabro-api/build.rs` replacements when the API schema has the same product meaning and serde shape.\n\n## Key Technical Decisions\n\n- Add a new StageProjection field named `agent_tools`, not `tools`, to avoid ambiguity with MCP nested tools and completion tool definitions.\n- Add a dedicated durable event named `agent.tools.available` instead of overloading `agent.session.activated`.\n- Capture the effective tool list after session setup and filtering, using the same path as model request construction.\n- Store descriptions in the summary because they are useful API/UI metadata; omit parameter schemas to keep projection payloads small and avoid leaking full implementation detail.\n- Keep `AgentMcpToolSummary` MCP-only. Add a new general-purpose `AgentToolSummary` instead of stretching the MCP type beyond its meaning.\n- Treat `invoked` as projected state. The availability event should emit tools with `invoked: false`; replay of `agent.tool.started` flips matching tools to true.\n\n## API Contract\n\nAdd these schemas to OpenAPI and map them to `fabro_types` replacements:\n\n- `AgentToolSummary`\n  - required: `name`, `description`, `source`, `category`, `invoked`\n  - `name`: exposed tool name, e.g. `apply_patch` or `mcp__filesystem__read_file`\n  - `description`: model-facing tool description\n  - `source`: `AgentToolSource`\n  - `category`: `AgentToolCategory`\n  - `invoked`: boolean\n- `AgentToolSource`\n  - tagged by `kind`\n  - `native`\n  - `mcp` with `server_name` and `original_name`\n  - `skill`\n- `AgentToolCategory`\n  - enum: `read`, `write`, `shell`, `subagent`, `other`\n- `AgentToolsAvailableProps`\n  - required: `tools`, `visit`\n  - `tools`: array of `AgentToolSummary`\n  - `visit`: stage visit number\n\nAdd to `StageProjection`:\n\n- `agent_tools`: array of `AgentToolSummary`\n- Default to an empty array when omitted.\n- Skip serializing when empty, matching existing projection optional-list style.\n\nAdd event body:\n\n- Serialized event name: `agent.tools.available`\n- Event body type: `AgentToolsAvailableProps`\n\n## Implementation Units\n\n- [ ] **Unit 1: Add shared tool summary types**\n\n**Goal:** Define the canonical API/projection DTOs in `fabro-types`.\n\n**Files:**\n- Modify: `lib/crates/fabro-types/src/run_event/agent.rs`\n- Modify: `lib/crates/fabro-types/src/run_event/mod.rs`\n- Modify: `lib/crates/fabro-types/src/run_projection.rs`\n- Modify: `lib/crates/fabro-types/src/lib.rs`\n\n**Work:**\n- Add `AgentToolSummary`, `AgentToolSource`, `AgentToolCategory`, and `AgentToolsAvailableProps`.\n- Add `EventBody::AgentToolsAvailable` serialized as `agent.tools.available`.\n- Add `agent_tools: Vec<AgentToolSummary>` to `StageProjection`.\n- Ensure all new fields default cleanly for older persisted events/projections.\n- Export the new public types from `fabro-types`.\n\n- [ ] **Unit 2: Capture effective session tools**\n\n**Goal:** Provide an authoritative one-time source for the list that the model can actually call.\n\n**Files:**\n- Modify: `lib/crates/fabro-agent/src/session.rs`\n- Modify: `lib/crates/fabro-workflow/src/handler/llm/api.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/events.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/names.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/convert.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/stored_fields.rs` only if the new event needs non-standard stored fields.\n\n**Work:**\n- Add `Session::available_tools()` that returns the same effective `ToolDefinitionWithSource` list as `build_request()`.\n- Map `ToolDefinitionWithSource` to `AgentToolSummary` at the workflow boundary.\n- Populate `description` from `ToolDefinition.description`.\n- Populate `source` from `ToolSource`.\n- For MCP tools, include the server name from `ToolSource::Mcp` and derive `original_name` from the qualified exposed name using the existing MCP naming convention.\n- Populate `category` from the existing tool category mapping for known exposed names; use `other` when no category mapping applies.\n- Emit `agent.tools.available` once for the stage session after session setup and filtering are complete.\n\n- [ ] **Unit 3: Project available and invoked tools**\n\n**Goal:** Make `StageProjection.agent_tools` replay-authoritative.\n\n**Files:**\n- Modify: `lib/crates/fabro-store/src/run_state.rs`\n\n**Work:**\n- On `EventBody::AgentToolsAvailable`, replace the current stage visit's `agent_tools` with the event tools.\n- On `EventBody::AgentToolStarted`, find a matching `agent_tools` entry by exposed `tool_name` and set `invoked = true`.\n- Keep the existing MCP server `invoked` update unchanged.\n- If a legacy run has no availability event, do not synthesize a full list from permissions.\n\n- [ ] **Unit 4: Update OpenAPI and generated clients**\n\n**Goal:** Expose the new projection field and event contract through public API clients without duplicate Rust API types.\n\n**Files:**\n- Modify: `docs/public/api-reference/fabro-api.yaml`\n- Modify: `lib/crates/fabro-api/build.rs`\n- Modify: `lib/crates/fabro-api/src/lib.rs`\n- Modify generated files under `lib/crates/fabro-api/src/generated.rs` via `cargo build -p fabro-api`.\n- Modify generated files under `lib/packages/fabro-api-client/src` via TypeScript client generation.\n\n**Work:**\n- Add the OpenAPI schemas listed in the API Contract section.\n- Add `StageProjection.agent_tools`.\n- Add `fabro-api/build.rs` replacements for the new `fabro-types` types.\n- Regenerate Rust API code.\n- Regenerate TypeScript API client code.\n\n- [ ] **Unit 5: Render tools in the web sidebar**\n\n**Goal:** Replace the permission-derived sidebar display with the actual projected tool list.\n\n**Files:**\n- Modify: `apps/fabro-web/app/components/stage-insights-sidebar.tsx`\n- Modify: `apps/fabro-web/app/components/stage-insights-sidebar.test.tsx`\n\n**Work:**\n- Render `stage.agent_tools` when present.\n- Show each tool's name, description, source/category, and invoked state.\n- Keep permission level as secondary metadata or fallback for legacy stages with no `agent_tools`.\n- Do not infer tool availability from permission level.\n\n## Test Plan\n\n- `fabro-types`\n  - JSON round-trip for `agent.tools.available`.\n  - Serialization checks for `AgentToolSource` and `AgentToolCategory`.\n  - Backward compatibility check that missing `agent_tools` deserializes to an empty list.\n\n- `fabro-workflow`\n  - Event name and conversion tests for `agent.tools.available`.\n  - Capture test proving native tools such as `apply_patch`, `grep`, and `glob` are emitted from the effective registry path.\n  - MCP source mapping test for a qualified MCP tool name.\n\n- `fabro-store`\n  - Projection test that `agent.tools.available` populates `StageProjection.agent_tools`.\n  - Projection test that `agent.tool.started` marks only the matching tool as invoked.\n  - Regression test that MCP server `invoked` status still updates as before.\n\n- `fabro-api`\n  - Type identity/parity tests confirming API types reuse `fabro_types::AgentToolSummary`, `AgentToolSource`, `AgentToolCategory`, and `AgentToolsAvailableProps`.\n  - StageProjection round-trip test including `agent_tools`.\n\n- `fabro-web`\n  - Sidebar test rendering tool names and descriptions from `stage.agent_tools`.\n  - Sidebar test showing invoked state.\n  - Legacy fallback test for stages without `agent_tools`.\n\n## Run Checks\n\n- `cargo +nightly-2026-04-14 fmt --check --all`\n- `cargo nextest run -p fabro-types -p fabro-workflow -p fabro-store -p fabro-api`\n- `cargo build -p fabro-api`\n- `cd lib/packages/fabro-api-client && bun run generate`\n- `cd apps/fabro-web && bun test && bun run typecheck`\n\n## Assumptions\n\n- The first implementation targets normal API-backed agent sessions, not ACP-native sessions.\n- `description` is safe to expose because it is already model-facing tool metadata, but parameter schemas remain out of scope for StageProjection.\n- `agent_tools` is a complete list only for runs that emit `agent.tools.available`; legacy runs return an empty list and may still show existing permission/MCP metadata.\n- If tool registration becomes mutable later, the event contract can be re-emitted and projection replacement semantics will still work.\n"
+        },
+        "working_dir": null,
+        "metadata": {},
+        "inputs": {},
+        "model": {
+          "provider": "anthropic",
+          "name": "claude-sonnet-4-6",
+          "fallbacks": [],
+          "controls": {
+            "reasoning_effort": null,
+            "speed": null
+          }
+        },
+        "git": {
+          "author": null
+        },
+        "prepare": {
+          "commands": [],
+          "timeout_ms": 300000
+        },
+        "execution": {
+          "mode": "normal",
+          "approval": "prompt"
+        },
+        "checkpoint": {
+          "exclude_globs": [],
+          "skip_git_hooks": false
+        },
+        "clone": {
+          "enabled": true
+        },
+        "run_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "meta_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "environment": {
+          "id": "fabro-dev",
+          "provider": "daytona",
+          "image": {
+            "ref": "fabro-v12",
+            "dockerfile": {
+              "type": "inline",
+              "value": "FROM ubuntu:24.04\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        curl git ripgrep ca-certificates build-essential pkg-config libssl-dev unzip python3 \\\n        xvfb xfce4 xfce4-terminal x11vnc novnc dbus-x11 \\\n        libx11-6 libxrandr2 libxext6 libxrender1 libxfixes3 libxss1 libxtst6 libxi6 \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Install real Chromium (not the snap stub) via xtradeb PPA\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        software-properties-common curl gnupg \\\n    && add-apt-repository -y ppa:xtradeb/apps \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends chromium \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Wrapper: Chromium needs --no-sandbox when running as root in a container,\n# and --disable-dev-shm-usage avoids crashes from small /dev/shm\nRUN printf '#!/bin/bash\\nexec /usr/bin/chromium --no-sandbox --disable-dev-shm-usage \"$@\"\\n' \\\n        > /usr/local/bin/chromium-wrapper \\\n    && chmod +x /usr/local/bin/chromium-wrapper\n\n# Make the wrapper the default in the system .desktop file and via alternatives\nRUN sed -i 's|^Exec=.*|Exec=/usr/local/bin/chromium-wrapper %U|' \\\n        /usr/share/applications/chromium.desktop \\\n    && update-alternatives --install /usr/bin/x-www-browser x-www-browser \\\n        /usr/local/bin/chromium-wrapper 100\n\n# Tell XFCE's exo-open that Chromium is the WebBrowser helper (system-wide)\nRUN mkdir -p /etc/xdg/xfce4 /usr/share/xfce4/helpers \\\n    && printf 'WebBrowser=custom-WebBrowser\\n' > /etc/xdg/xfce4/helpers.rc \\\n    && printf '[Desktop Entry]\\n\\\nVersion=1.0\\n\\\nType=X-XFCE-Helper\\n\\\nName=Chromium\\n\\\nIcon=chromium\\n\\\nX-XFCE-Category=WebBrowser\\n\\\nX-XFCE-CommandsWithParameter=/usr/local/bin/chromium-wrapper \"%%s\"\\n\\\nX-XFCE-Commands=/usr/local/bin/chromium-wrapper\\n' \\\n        > /usr/share/xfce4/helpers/custom-WebBrowser.desktop\n\n# GitHub CLI\nRUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\\n        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" \\\n        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \\\n    && apt-get update && apt-get install -y --no-install-recommends gh \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Rust\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y\nENV PATH=\"/root/.cargo/bin:${PATH}\"\nRUN rustup toolchain install nightly-2026-04-14 --profile minimal --component clippy,rustfmt\nRUN cargo install cargo-nextest --locked\nENV CARGO_INCREMENTAL=0\n\n# Bun\nRUN curl -fsSL https://bun.sh/install | bash\nENV PATH=\"/root/.bun/bin:${PATH}\"\n\nWORKDIR /root\n"
+            }
+          },
+          "resources": {
+            "cpu": 8,
+            "memory": "16GB",
+            "disk": "20GB"
+          },
+          "network": {
+            "mode": "allow_all",
+            "allow": []
+          },
+          "lifecycle": {
+            "preserve": false,
+            "stop_on_terminal": true,
+            "auto_stop": "30m"
+          },
+          "labels": {
+            "repo": "fabro-sh/fabro"
+          },
+          "volumes": [],
+          "env": {}
+        },
+        "notifications": {},
+        "interviews": {
+          "provider": null,
+          "slack": null
+        },
+        "agent": {
+          "fabro_tools": false,
+          "permissions": null,
+          "mcps": {}
+        },
+        "hooks": [],
+        "scm": {
+          "provider": null,
+          "owner": null,
+          "repository": null,
+          "github": null
+        },
+        "pull_request": {
+          "enabled": true,
+          "draft": false,
+          "auto_merge": false,
+          "merge_strategy": "squash"
+        },
+        "artifacts": {
+          "include": []
+        },
+        "integrations": {
+          "github": {
+            "permissions": {}
+          }
+        }
+      }
+    },
+    "graph": {
+      "name": "ImplementPlan",
+      "nodes": {
+        "fix_lints": {
+          "id": "fix_lints",
+          "attrs": {
+            "prompt": {
+              "String": "The preflight lint step failed. Read the build output from context and fix all clippy lint warnings."
+            },
+            "label": {
+              "String": "Fix Lints"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "max_visits": {
+              "Integer": 3
+            },
+            "provider": {
+              "String": "anthropic"
+            }
+          }
+        },
+        "start": {
+          "id": "start",
+          "attrs": {
+            "provider": {
+              "String": "anthropic"
+            },
+            "shape": {
+              "String": "Mdiamond"
+            },
+            "label": {
+              "String": "Start"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            }
+          }
+        },
+        "preflight_lint": {
+          "id": "preflight_lint",
+          "attrs": {
+            "max_retries": {
+              "Integer": 0
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "script": {
+              "String": "cargo +nightly-2026-04-14 clippy -q --workspace --all-targets -- -D warnings 2>&1"
+            },
+            "shape": {
+              "String": "parallelogram"
+            },
+            "label": {
+              "String": "Preflight Lint"
+            }
+          }
+        },
+        "toolchain": {
+          "id": "toolchain",
+          "attrs": {
+            "max_retries": {
+              "Integer": 0
+            },
+            "script": {
+              "String": "command -v cargo >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && sudo ln -sf $HOME/.cargo/bin/* /usr/local/bin/; }; cargo --version 2>&1"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "shape": {
+              "String": "parallelogram"
+            },
+            "label": {
+              "String": "Toolchain"
+            }
+          }
+        },
+        "preflight_compile": {
+          "id": "preflight_compile",
+          "attrs": {
+            "provider": {
+              "String": "anthropic"
+            },
+            "shape": {
+              "String": "parallelogram"
+            },
+            "max_retries": {
+              "Integer": 0
+            },
+            "label": {
+              "String": "Preflight Compile"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "script": {
+              "String": "cargo check -q --workspace 2>&1"
+            }
+          }
+        },
+        "fixup": {
+          "id": "fixup",
+          "attrs": {
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "label": {
+              "String": "Fixup"
+            },
+            "max_visits": {
+              "Integer": 3
+            },
+            "prompt": {
+              "String": "The verify step failed. Read the build output from context and fix all format, clippy, Rust test, docs, TypeScript typecheck/test, and build failures."
+            },
+            "provider": {
+              "String": "anthropic"
+            }
+          }
+        },
+        "verify": {
+          "id": "verify",
+          "attrs": {
+            "retry_target": {
+              "String": "fixup"
+            },
+            "script": {
+              "String": "git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\"disabled\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1"
+            },
+            "goal_gate": {
+              "Boolean": true
+            },
+            "label": {
+              "String": "Verify"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "shape": {
+              "String": "parallelogram"
+            }
+          }
+        },
+        "simplify_gpt": {
+          "id": "simplify_gpt",
+          "attrs": {
+            "model": {
+              "String": "gpt-5.5"
+            },
+            "prompt": {
+              "String": "# Simplify: Code Review and Cleanup\n\nReview changes vs. origin for reuse, quality, and efficiency. Fix any issues found.\n\n## Phase 1: Identify Changes\n\nRun git diff (or git diff HEAD if there are staged changes) to see what changed. If there are no git changes, review the most recently modified files that the user mentioned or that you edited earlier in this conversation.\n\n## Phase 2: Launch Three Review Agents in Parallel\n\nUse the Agent tool to launch all three agents concurrently in a single message. Pass each agent the full diff so it has the complete context.\n\n### Agent 1: Code Reuse Review\n\nFor each change:\n\n1. Search for existing utilities and helpers that could replace newly written code. Use Grep to find similar patterns elsewhere in the codebase — common locations are utility directories, shared modules, and files adjacent to the changed ones.\n2. Flag any new function that duplicates existing functionality. Suggest the existing function to use instead.\n3. Flag any inline logic that could use an existing utility — hand-rolled string manipulation, manual path handling, custom environment checks, ad-hoc type guards, and similar patterns are common candidates.\n\nNote: This is a greenfield app, so focus on maximizing simplicity and don't worry about changing things to achieve it.\n\n### Agent 2: Code Quality Review\n\nReview the same changes for hacky patterns:\n\n1. Redundant state: state that duplicates existing state, cached values that could be derived, observers/effects that could be direct calls\n2. Parameter sprawl: adding new parameters to a function instead of generalizing or restructuring existing ones\n3. Copy-paste with slight variation: near-duplicate code blocks that should be unified with a shared abstraction\n4. Leaky abstractions: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries\n5. Stringly-typed code: using raw strings where constants, enums (string unions), or branded types already exist in the codebase\n\nNote: This is a greenfield app, so be aggressive in optimizing quality.\n\n### Agent 3: Efficiency Review\n\nReview the same changes for efficiency:\n\n1. Unnecessary work: redundant computations, repeated file reads, duplicate network/API calls, N+1 patterns\n2. Missed concurrency: independent operations run sequentially when they could run in parallel\n3. Hot-path bloat: new blocking work added to startup or per-request/per-render hot paths\n4. Unnecessary existence checks: pre-checking file/resource existence before operating (TOCTOU anti-pattern) — operate directly and handle the error\n5. Memory: unbounded data structures, missing cleanup, event listener leaks\n6. Overly broad operations: reading entire files when only a portion is needed, loading all items when filtering for one\n\n## Phase 3: Fix Issues\n\nWait for all three agents to complete. Aggregate their findings and fix each issue directly. If a finding is a false positive or not worth addressing, note it and move on — do not argue with the finding, just skip it.\n\nWhen done, briefly summarize what was fixed (or confirm the code was already clean)."
+            },
+            "provider": {
+              "String": "openai"
+            },
+            "label": {
+              "String": "Simplify (GPT-55)"
+            }
+          }
+        },
+        "implement": {
+          "id": "implement",
+          "attrs": {
+            "provider": {
+              "String": "openai"
+            },
+            "reasoning_effort": {
+              "String": "xhigh"
+            },
+            "prompt": {
+              "String": "Read the plan file referenced in the goal and implement every step. Make all the code changes described in the plan. Use red/green TDD."
+            },
+            "label": {
+              "String": "Implement"
+            },
+            "model": {
+              "String": "gpt-5.5"
+            }
+          }
+        },
+        "exit": {
+          "id": "exit",
+          "attrs": {
+            "shape": {
+              "String": "Msquare"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "label": {
+              "String": "Exit"
+            },
+            "provider": {
+              "String": "anthropic"
+            }
+          }
+        },
+        "simplify_opus": {
+          "id": "simplify_opus",
+          "attrs": {
+            "provider": {
+              "String": "anthropic"
+            },
+            "label": {
+              "String": "Simplify (Opus)"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "prompt": {
+              "String": "# Simplify: Code Review and Cleanup\n\nReview changes vs. origin for reuse, quality, and efficiency. Fix any issues found.\n\n## Phase 1: Identify Changes\n\nRun git diff (or git diff HEAD if there are staged changes) to see what changed. If there are no git changes, review the most recently modified files that the user mentioned or that you edited earlier in this conversation.\n\n## Phase 2: Launch Three Review Agents in Parallel\n\nUse the Agent tool to launch all three agents concurrently in a single message. Pass each agent the full diff so it has the complete context.\n\n### Agent 1: Code Reuse Review\n\nFor each change:\n\n1. Search for existing utilities and helpers that could replace newly written code. Use Grep to find similar patterns elsewhere in the codebase — common locations are utility directories, shared modules, and files adjacent to the changed ones.\n2. Flag any new function that duplicates existing functionality. Suggest the existing function to use instead.\n3. Flag any inline logic that could use an existing utility — hand-rolled string manipulation, manual path handling, custom environment checks, ad-hoc type guards, and similar patterns are common candidates.\n\nNote: This is a greenfield app, so focus on maximizing simplicity and don't worry about changing things to achieve it.\n\n### Agent 2: Code Quality Review\n\nReview the same changes for hacky patterns:\n\n1. Redundant state: state that duplicates existing state, cached values that could be derived, observers/effects that could be direct calls\n2. Parameter sprawl: adding new parameters to a function instead of generalizing or restructuring existing ones\n3. Copy-paste with slight variation: near-duplicate code blocks that should be unified with a shared abstraction\n4. Leaky abstractions: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries\n5. Stringly-typed code: using raw strings where constants, enums (string unions), or branded types already exist in the codebase\n\nNote: This is a greenfield app, so be aggressive in optimizing quality.\n\n### Agent 3: Efficiency Review\n\nReview the same changes for efficiency:\n\n1. Unnecessary work: redundant computations, repeated file reads, duplicate network/API calls, N+1 patterns\n2. Missed concurrency: independent operations run sequentially when they could run in parallel\n3. Hot-path bloat: new blocking work added to startup or per-request/per-render hot paths\n4. Unnecessary existence checks: pre-checking file/resource existence before operating (TOCTOU anti-pattern) — operate directly and handle the error\n5. Memory: unbounded data structures, missing cleanup, event listener leaks\n6. Overly broad operations: reading entire files when only a portion is needed, loading all items when filtering for one\n\n## Phase 3: Fix Issues\n\nWait for all three agents to complete. Aggregate their findings and fix each issue directly. If a finding is a false positive or not worth addressing, note it and move on — do not argue with the finding, just skip it.\n\nWhen done, briefly summarize what was fixed (or confirm the code was already clean)."
+            }
+          }
+        }
+      },
+      "edges": [
+        {
+          "from": "start",
+          "to": "toolchain",
+          "attrs": {}
+        },
+        {
+          "from": "toolchain",
+          "to": "preflight_compile",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "toolchain",
+          "to": "exit",
+          "attrs": {}
+        },
+        {
+          "from": "preflight_compile",
+          "to": "preflight_lint",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "preflight_compile",
+          "to": "exit",
+          "attrs": {}
+        },
+        {
+          "from": "preflight_lint",
+          "to": "implement",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "preflight_lint",
+          "to": "fix_lints",
+          "attrs": {}
+        },
+        {
+          "from": "fix_lints",
+          "to": "preflight_lint",
+          "attrs": {}
+        },
+        {
+          "from": "implement",
+          "to": "simplify_opus",
+          "attrs": {}
+        },
+        {
+          "from": "simplify_opus",
+          "to": "simplify_gpt",
+          "attrs": {}
+        },
+        {
+          "from": "simplify_gpt",
+          "to": "verify",
+          "attrs": {}
+        },
+        {
+          "from": "verify",
+          "to": "exit",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "verify",
+          "to": "fixup",
+          "attrs": {}
+        },
+        {
+          "from": "fixup",
+          "to": "verify",
+          "attrs": {}
+        }
+      ],
+      "attrs": {
+        "model_stylesheet": {
+          "String": "\n            * { model: claude-opus-4-7; }\n        "
+        },
+        "goal": {
+          "String": "---\ntitle: feat: StageProjection agent tools API\ntype: feat\nstatus: active\ndate: 2026-05-24\n---\n\n# feat: StageProjection Agent Tools API\n\n## Overview\n\nExpose the complete effective tool list for each agent-backed stage through `StageProjection`, so UI and API consumers can show actual tools such as `apply_patch`, `grep`, `glob`, `read_file`, MCP tools, skill tools, and subagent tools without inferring them from `permission_level`.\n\nThe API should expose tool summaries with `name`, `description`, `source`, `category`, and `invoked`. It must not expose full JSON parameter schemas in the run projection.\n\n## Problem Frame\n\nThe stage sidebar currently has permission metadata such as \"Full access\", but `permission_level` is only an access mode. It does not tell consumers which tools were actually exposed to the model after provider profile setup, optional tool registration, MCP integration, and tool access policy filtering.\n\nThe authoritative list already exists at request-build time in the agent session registry. The API needs to capture that effective list once per stage session and project it onto the stage.\n\n## Requirements Trace\n\n- R1. Add a StageProjection API field containing the complete effective tools for a stage session.\n- R2. Include `name`, `description`, `source`, `category`, and `invoked` for each tool.\n- R3. Do not infer tools from `permission_level` in backend or frontend code.\n- R4. Do not expose full tool parameter schemas through StageProjection.\n- R5. Preserve existing `permission_level` and `mcp_servers` fields for compatibility.\n- R6. Mark individual tools as invoked when matching `agent.tool.started` events are projected.\n- R7. Keep legacy runs backward compatible by defaulting missing tool lists to empty.\n\n## Scope Boundaries\n\n- Do not remove or rename `StageProjection.permission_level`.\n- Do not remove the existing MCP server projection or `AgentMcpToolSummary`.\n- Do not change completion API tool definitions.\n- Do not add ACP-native tool discovery in this pass unless an ACP path already has an equivalent effective tool list available.\n- Do not render parameter schemas in the web UI.\n\n## Context & Research\n\n### Relevant Code and Patterns\n\n- OpenAPI is the source of truth for HTTP contracts in `docs/public/api-reference/fabro-api.yaml`.\n- Shared API/projection DTOs should live in `fabro-types`, with `fabro-api/build.rs` replacements to avoid duplicate generated Rust types.\n- `StageProjection` lives in `lib/crates/fabro-types/src/run_projection.rs`.\n- Durable run event props live in `lib/crates/fabro-types/src/run_event/agent.rs` and `lib/crates/fabro-types/src/run_event/mod.rs`.\n- Workflow event conversion and event names live in `lib/crates/fabro-workflow/src/event/convert.rs`, `events.rs`, and `names.rs`.\n- Projection replay lives in `lib/crates/fabro-store/src/run_state.rs`.\n- The effective request tool list is built in `lib/crates/fabro-agent/src/session.rs` from `ToolRegistry::definitions_with_source_for_policy`.\n- Tool source metadata already exists as `ToolSource` and `ToolDefinitionWithSource` in `lib/crates/fabro-agent/src/tool_registry.rs`.\n- Tool category mapping already exists in `lib/crates/fabro-agent/src/tool_permissions.rs`.\n- The sidebar display lives in `apps/fabro-web/app/components/stage-insights-sidebar.tsx`.\n\n### Strategy Docs\n\n- Read `docs/internal/events-strategy.md` before adding the new durable event.\n- Read `docs/internal/testing-strategy.md` before adding or reorganizing tests.\n- Follow the OpenAPI type ownership guidance in `AGENTS.md`: reuse `fabro-types` through `fabro-api/build.rs` replacements when the API schema has the same product meaning and serde shape.\n\n## Key Technical Decisions\n\n- Add a new StageProjection field named `agent_tools`, not `tools`, to avoid ambiguity with MCP nested tools and completion tool definitions.\n- Add a dedicated durable event named `agent.tools.available` instead of overloading `agent.session.activated`.\n- Capture the effective tool list after session setup and filtering, using the same path as model request construction.\n- Store descriptions in the summary because they are useful API/UI metadata; omit parameter schemas to keep projection payloads small and avoid leaking full implementation detail.\n- Keep `AgentMcpToolSummary` MCP-only. Add a new general-purpose `AgentToolSummary` instead of stretching the MCP type beyond its meaning.\n- Treat `invoked` as projected state. The availability event should emit tools with `invoked: false`; replay of `agent.tool.started` flips matching tools to true.\n\n## API Contract\n\nAdd these schemas to OpenAPI and map them to `fabro_types` replacements:\n\n- `AgentToolSummary`\n  - required: `name`, `description`, `source`, `category`, `invoked`\n  - `name`: exposed tool name, e.g. `apply_patch` or `mcp__filesystem__read_file`\n  - `description`: model-facing tool description\n  - `source`: `AgentToolSource`\n  - `category`: `AgentToolCategory`\n  - `invoked`: boolean\n- `AgentToolSource`\n  - tagged by `kind`\n  - `native`\n  - `mcp` with `server_name` and `original_name`\n  - `skill`\n- `AgentToolCategory`\n  - enum: `read`, `write`, `shell`, `subagent`, `other`\n- `AgentToolsAvailableProps`\n  - required: `tools`, `visit`\n  - `tools`: array of `AgentToolSummary`\n  - `visit`: stage visit number\n\nAdd to `StageProjection`:\n\n- `agent_tools`: array of `AgentToolSummary`\n- Default to an empty array when omitted.\n- Skip serializing when empty, matching existing projection optional-list style.\n\nAdd event body:\n\n- Serialized event name: `agent.tools.available`\n- Event body type: `AgentToolsAvailableProps`\n\n## Implementation Units\n\n- [ ] **Unit 1: Add shared tool summary types**\n\n**Goal:** Define the canonical API/projection DTOs in `fabro-types`.\n\n**Files:**\n- Modify: `lib/crates/fabro-types/src/run_event/agent.rs`\n- Modify: `lib/crates/fabro-types/src/run_event/mod.rs`\n- Modify: `lib/crates/fabro-types/src/run_projection.rs`\n- Modify: `lib/crates/fabro-types/src/lib.rs`\n\n**Work:**\n- Add `AgentToolSummary`, `AgentToolSource`, `AgentToolCategory`, and `AgentToolsAvailableProps`.\n- Add `EventBody::AgentToolsAvailable` serialized as `agent.tools.available`.\n- Add `agent_tools: Vec<AgentToolSummary>` to `StageProjection`.\n- Ensure all new fields default cleanly for older persisted events/projections.\n- Export the new public types from `fabro-types`.\n\n- [ ] **Unit 2: Capture effective session tools**\n\n**Goal:** Provide an authoritative one-time source for the list that the model can actually call.\n\n**Files:**\n- Modify: `lib/crates/fabro-agent/src/session.rs`\n- Modify: `lib/crates/fabro-workflow/src/handler/llm/api.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/events.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/names.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/convert.rs`\n- Modify: `lib/crates/fabro-workflow/src/event/stored_fields.rs` only if the new event needs non-standard stored fields.\n\n**Work:**\n- Add `Session::available_tools()` that returns the same effective `ToolDefinitionWithSource` list as `build_request()`.\n- Map `ToolDefinitionWithSource` to `AgentToolSummary` at the workflow boundary.\n- Populate `description` from `ToolDefinition.description`.\n- Populate `source` from `ToolSource`.\n- For MCP tools, include the server name from `ToolSource::Mcp` and derive `original_name` from the qualified exposed name using the existing MCP naming convention.\n- Populate `category` from the existing tool category mapping for known exposed names; use `other` when no category mapping applies.\n- Emit `agent.tools.available` once for the stage session after session setup and filtering are complete.\n\n- [ ] **Unit 3: Project available and invoked tools**\n\n**Goal:** Make `StageProjection.agent_tools` replay-authoritative.\n\n**Files:**\n- Modify: `lib/crates/fabro-store/src/run_state.rs`\n\n**Work:**\n- On `EventBody::AgentToolsAvailable`, replace the current stage visit's `agent_tools` with the event tools.\n- On `EventBody::AgentToolStarted`, find a matching `agent_tools` entry by exposed `tool_name` and set `invoked = true`.\n- Keep the existing MCP server `invoked` update unchanged.\n- If a legacy run has no availability event, do not synthesize a full list from permissions.\n\n- [ ] **Unit 4: Update OpenAPI and generated clients**\n\n**Goal:** Expose the new projection field and event contract through public API clients without duplicate Rust API types.\n\n**Files:**\n- Modify: `docs/public/api-reference/fabro-api.yaml`\n- Modify: `lib/crates/fabro-api/build.rs`\n- Modify: `lib/crates/fabro-api/src/lib.rs`\n- Modify generated files under `lib/crates/fabro-api/src/generated.rs` via `cargo build -p fabro-api`.\n- Modify generated files under `lib/packages/fabro-api-client/src` via TypeScript client generation.\n\n**Work:**\n- Add the OpenAPI schemas listed in the API Contract section.\n- Add `StageProjection.agent_tools`.\n- Add `fabro-api/build.rs` replacements for the new `fabro-types` types.\n- Regenerate Rust API code.\n- Regenerate TypeScript API client code.\n\n- [ ] **Unit 5: Render tools in the web sidebar**\n\n**Goal:** Replace the permission-derived sidebar display with the actual projected tool list.\n\n**Files:**\n- Modify: `apps/fabro-web/app/components/stage-insights-sidebar.tsx`\n- Modify: `apps/fabro-web/app/components/stage-insights-sidebar.test.tsx`\n\n**Work:**\n- Render `stage.agent_tools` when present.\n- Show each tool's name, description, source/category, and invoked state.\n- Keep permission level as secondary metadata or fallback for legacy stages with no `agent_tools`.\n- Do not infer tool availability from permission level.\n\n## Test Plan\n\n- `fabro-types`\n  - JSON round-trip for `agent.tools.available`.\n  - Serialization checks for `AgentToolSource` and `AgentToolCategory`.\n  - Backward compatibility check that missing `agent_tools` deserializes to an empty list.\n\n- `fabro-workflow`\n  - Event name and conversion tests for `agent.tools.available`.\n  - Capture test proving native tools such as `apply_patch`, `grep`, and `glob` are emitted from the effective registry path.\n  - MCP source mapping test for a qualified MCP tool name.\n\n- `fabro-store`\n  - Projection test that `agent.tools.available` populates `StageProjection.agent_tools`.\n  - Projection test that `agent.tool.started` marks only the matching tool as invoked.\n  - Regression test that MCP server `invoked` status still updates as before.\n\n- `fabro-api`\n  - Type identity/parity tests confirming API types reuse `fabro_types::AgentToolSummary`, `AgentToolSource`, `AgentToolCategory`, and `AgentToolsAvailableProps`.\n  - StageProjection round-trip test including `agent_tools`.\n\n- `fabro-web`\n  - Sidebar test rendering tool names and descriptions from `stage.agent_tools`.\n  - Sidebar test showing invoked state.\n  - Legacy fallback test for stages without `agent_tools`.\n\n## Run Checks\n\n- `cargo +nightly-2026-04-14 fmt --check --all`\n- `cargo nextest run -p fabro-types -p fabro-workflow -p fabro-store -p fabro-api`\n- `cargo build -p fabro-api`\n- `cd lib/packages/fabro-api-client && bun run generate`\n- `cd apps/fabro-web && bun test && bun run typecheck`\n\n## Assumptions\n\n- The first implementation targets normal API-backed agent sessions, not ACP-native sessions.\n- `description` is safe to expose because it is already model-facing tool metadata, but parameter schemas remain out of scope for StageProjection.\n- `agent_tools` is a complete list only for runs that emit `agent.tools.available`; legacy runs return an empty list and may still show existing permission/MCP metadata.\n- If tool registration becomes mutable later, the event contract can be re-emitted and projection replacement semantics will still work.\n"
+        },
+        "rankdir": {
+          "String": "LR"
+        }
+      }
+    },
+    "graph_source": "digraph ImplementPlan {\n    graph [\n        goal=\"Implement and simplify\",\n        model_stylesheet=\"\n            * { model: claude-opus-4-7; }\n        \"\n    ]\n    rankdir=LR\n\n    start [shape=Mdiamond, label=\"Start\"]\n    exit  [shape=Msquare, label=\"Exit\"]\n\n    toolchain         [label=\"Toolchain\", shape=parallelogram, script=\"command -v cargo >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && sudo ln -sf $HOME/.cargo/bin/* /usr/local/bin/; }; cargo --version 2>&1\", max_retries=0]\n    preflight_compile [label=\"Preflight Compile\", shape=parallelogram, script=\"cargo check -q --workspace 2>&1\", max_retries=0]\n    preflight_lint    [label=\"Preflight Lint\", shape=parallelogram, script=\"cargo +nightly-2026-04-14 clippy -q --workspace --all-targets -- -D warnings 2>&1\", max_retries=0]\n    fix_lints         [label=\"Fix Lints\", prompt=\"The preflight lint step failed. Read the build output from context and fix all clippy lint warnings.\", max_visits=3]\n    implement         [label=\"Implement\", prompt=\"Read the plan file referenced in the goal and implement every step. Make all the code changes described in the plan. Use red/green TDD.\", model=\"gpt-55\", reasoning_effort=\"xhigh\"]\n    simplify_opus     [label=\"Simplify (Opus)\", prompt=\"@prompts/simplify.md\"]\n    simplify_gpt      [label=\"Simplify (GPT-55)\", prompt=\"@prompts/simplify.md\", model=\"gpt-55\"]\n    verify            [label=\"Verify\", shape=parallelogram, script=\"git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\\\"disabled\\\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1\", goal_gate=true, retry_target=\"fixup\"]\n    fixup             [label=\"Fixup\", prompt=\"The verify step failed. Read the build output from context and fix all format, clippy, Rust test, docs, TypeScript typecheck/test, and build failures.\", max_visits=3]\n\n    start -> toolchain\n    toolchain -> preflight_compile [condition=\"outcome=succeeded\"]\n    toolchain -> exit\n    preflight_compile -> preflight_lint [condition=\"outcome=succeeded\"]\n    preflight_compile -> exit\n    preflight_lint -> implement [condition=\"outcome=succeeded\"]\n    preflight_lint -> fix_lints\n    fix_lints -> preflight_lint\n    implement -> simplify_opus -> simplify_gpt -> verify\n    verify -> exit  [condition=\"outcome=succeeded\"]\n    verify -> fixup\n    fixup -> verify\n}\n",
+    "workflow_slug": "implement-plan",
+    "source_directory": "/Users/bhelmkamp/p/fabro-sh/fabro",
+    "provenance": {
+      "server": {
+        "version": "0.243.0-nightly.1"
+      },
+      "client": {
+        "user_agent": "fabro-cli/0.243.0-nightly.1",
+        "name": "fabro-cli",
+        "version": "0.243.0-nightly.1"
+      },
+      "subject": {
+        "kind": "user",
+        "identity": {
+          "issuer": "https://github.com",
+          "subject": "19"
+        },
+        "login": "brynary",
+        "auth_method": "github",
+        "avatar_url": "https://avatars.githubusercontent.com/u/19?v=4"
+      }
+    },
+    "manifest_blob": "68c116f0acc30662af1f1664b600da7fd17dc69502278175a894945104249916",
+    "definition_blob": "f13f100f4f1f386c63f22b375c331077f1c1b3bd2df0dd17388b26786f23b9a6",
+    "git": {
+      "origin_url": "https://github.com/fabro-sh/fabro",
+      "branch": "main",
+      "sha": "b79ba12bbf9527b9b6a1417da61b8fd1c9b05a41",
+      "dirty": "dirty",
+      "push_outcome": {
+        "type": "succeeded",
+        "remote": "origin",
+        "branch": "main"
+      }
+    }
+  },
+  "web_url": "http://127.0.0.1:32276/runs/01KSD2W90DVJ6Q4T0AD2H0DM7F",
+  "start": null,
+  "status": {
+    "kind": "starting"
+  },
+  "status_updated_at": "2026-05-24T13:30:33.965489Z",
+  "last_event_at": "2026-05-24T13:30:50.225985Z",
+  "pending_control": null,
+  "checkpoints": [],
+  "conclusion": null,
+  "sandbox": {
+    "provider": "daytona",
+    "snapshot": "fabro-v12",
+    "runtime": {
+      "id": "fabro-01KSD2W90DVJ6Q4T0AD2H0DM7F",
+      "working_directory": "/home/daytona/workspace/fabro",
+      "repo_cloned": true,
+      "clone_origin_url": "https://github.com/fabro-sh/fabro",
+      "clone_branch": "main",
+      "workspace_root": "/home/daytona/workspace",
+      "repos_root": "/home/daytona/repos",
+      "primary_repo_path": "/home/daytona/repos/fabro-sh/fabro",
+      "primary_repo_link": "/home/daytona/workspace/fabro"
+    }
+  },
+  "pull_request": null,
+  "superseded_by": null,
+  "pending_interviews": {},
+  "stages": {}
+}
