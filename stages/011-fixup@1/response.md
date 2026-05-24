@@ -1,0 +1,1 @@
+Fixed. The pre-existing failure in `app/routes/run-overview.test.tsx` was that the mock of `../lib/queries` did not include `useRunStageEvents`, which is transitively imported through `StagePopover` (rendered inside `RunOverview`). Added the missing key to the mock; all 488 web tests now pass and typecheck succeeds.
