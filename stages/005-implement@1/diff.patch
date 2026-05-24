@@ -1,0 +1,286 @@
+diff --git a/lib/crates/fabro-types/src/lib.rs b/lib/crates/fabro-types/src/lib.rs
+index 622e8729f..d2bbdfbcd 100644
+--- a/lib/crates/fabro-types/src/lib.rs
++++ b/lib/crates/fabro-types/src/lib.rs
+@@ -96,9 +96,10 @@ pub use run::{
+ pub use run_blob_id::RunBlobId;
+ pub use run_event::{
+     AgentMcpToolSummary, AgentMemoryFileProps, AgentSkillActivationSource, AgentSkillSummary,
+-    EventBody, ExecOutputTail, InterviewOption, MetadataSnapshotFailureKind, MetadataSnapshotPhase,
+-    RunEvent, RunNoticeCode, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason,
+-    RunRunnableSource, SessionCapability, TodoCreatedProps, TodoDeletedProps, TodoUpdatedProps,
++    AgentToolCategory, AgentToolSource, AgentToolSummary, AgentToolsAvailableProps, EventBody,
++    ExecOutputTail, InterviewOption, MetadataSnapshotFailureKind, MetadataSnapshotPhase, RunEvent,
++    RunNoticeCode, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason, RunRunnableSource,
++    SessionCapability, TodoCreatedProps, TodoDeletedProps, TodoUpdatedProps,
+ };
+ pub use run_failure::RunFailure;
+ pub use run_id::{RunId, fixtures};
+diff --git a/lib/crates/fabro-types/src/run_event/agent.rs b/lib/crates/fabro-types/src/run_event/agent.rs
+index d172b2c9e..7c72dc354 100644
+--- a/lib/crates/fabro-types/src/run_event/agent.rs
++++ b/lib/crates/fabro-types/src/run_event/agent.rs
+@@ -53,6 +53,42 @@ pub struct AgentSessionDeactivatedProps {
+     pub visit: u32,
+ }
+ 
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++pub struct AgentToolsAvailableProps {
++    pub tools: Vec<AgentToolSummary>,
++    pub visit: u32,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++pub struct AgentToolSummary {
++    pub name:        String,
++    pub description: String,
++    pub source:      AgentToolSource,
++    pub category:    AgentToolCategory,
++    pub invoked:     bool,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(tag = "kind", rename_all = "snake_case")]
++pub enum AgentToolSource {
++    Native,
++    Mcp {
++        server_name:   String,
++        original_name: String,
++    },
++    Skill,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum AgentToolCategory {
++    Read,
++    Write,
++    Shell,
++    Subagent,
++    Other,
++}
++
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ pub struct AgentProcessingEndProps {
+     pub visit: u32,
+@@ -420,6 +456,48 @@ mod tests {
+         assert_eq!(back, props);
+     }
+ 
++    #[test]
++    fn agent_tools_available_props_round_trips_without_parameter_schemas() {
++        let props = AgentToolsAvailableProps {
++            tools: vec![
++                AgentToolSummary {
++                    name:        "apply_patch".to_string(),
++                    description: "Apply a patch to files".to_string(),
++                    source:      AgentToolSource::Native,
++                    category:    AgentToolCategory::Write,
++                    invoked:     false,
++                },
++                AgentToolSummary {
++                    name:        "mcp__filesystem__read_file".to_string(),
++                    description: "Read a file via MCP".to_string(),
++                    source:      AgentToolSource::Mcp {
++                        server_name:   "filesystem".to_string(),
++                        original_name: "read_file".to_string(),
++                    },
++                    category:    AgentToolCategory::Other,
++                    invoked:     true,
++                },
++            ],
++            visit: 1,
++        };
++
++        let value = serde_json::to_value(&props).unwrap();
++        assert_eq!(value["tools"][0]["source"], json!({ "kind": "native" }));
++        assert_eq!(
++            value["tools"][1]["source"],
++            json!({
++                "kind": "mcp",
++                "server_name": "filesystem",
++                "original_name": "read_file"
++            })
++        );
++        assert_eq!(value["tools"][0]["category"], "write");
++        assert!(value["tools"][0].get("parameters").is_none());
++
++        let back: AgentToolsAvailableProps = serde_json::from_value(value).unwrap();
++        assert_eq!(back, props);
++    }
++
+     #[test]
+     fn agent_tool_completed_props_back_compat_deserializes_without_canonical_fields() {
+         let v = json!({
+diff --git a/lib/crates/fabro-types/src/run_event/mod.rs b/lib/crates/fabro-types/src/run_event/mod.rs
+index 84a58ef16..389158364 100644
+--- a/lib/crates/fabro-types/src/run_event/mod.rs
++++ b/lib/crates/fabro-types/src/run_event/mod.rs
+@@ -200,6 +200,8 @@ pub enum EventBody {
+     AgentSessionActivated(AgentSessionActivatedProps),
+     #[serde(rename = "agent.session.deactivated")]
+     AgentSessionDeactivated(AgentSessionDeactivatedProps),
++    #[serde(rename = "agent.tools.available")]
++    AgentToolsAvailable(AgentToolsAvailableProps),
+     #[serde(rename = "agent.session.ended")]
+     AgentSessionEnded(AgentSessionEndedProps),
+     #[serde(rename = "agent.processing.end")]
+@@ -501,6 +503,7 @@ impl EventBody {
+             Self::AgentSessionStarted(_) => "agent.session.started",
+             Self::AgentSessionActivated(_) => "agent.session.activated",
+             Self::AgentSessionDeactivated(_) => "agent.session.deactivated",
++            Self::AgentToolsAvailable(_) => "agent.tools.available",
+             Self::AgentSessionEnded(_) => "agent.session.ended",
+             Self::AgentProcessingEnd(_) => "agent.processing.end",
+             Self::AgentInput(_) => "agent.input",
+@@ -683,6 +686,7 @@ fn is_known_event_name(event: &str) -> bool {
+             | "agent.session.started"
+             | "agent.session.activated"
+             | "agent.session.deactivated"
++            | "agent.tools.available"
+             | "agent.session.ended"
+             | "agent.processing.end"
+             | "agent.input"
+@@ -1053,6 +1057,50 @@ mod tests {
+         assert!(matches!(parsed.body, EventBody::RunCreated(_)));
+     }
+ 
++    #[test]
++    fn agent_tools_available_run_event_round_trips_json() {
++        let value = json!({
++            "id": "evt_tools",
++            "ts": "2026-04-04T12:00:00.000Z",
++            "run_id": fixtures::RUN_1,
++            "node_id": "code",
++            "stage_id": "code@1",
++            "session_id": "session-1",
++            "event": "agent.tools.available",
++            "properties": {
++                "visit": 1,
++                "tools": [
++                    {
++                        "name": "grep",
++                        "description": "Search files",
++                        "source": { "kind": "native" },
++                        "category": "read",
++                        "invoked": false
++                    },
++                    {
++                        "name": "mcp__filesystem__read_file",
++                        "description": "Read via MCP",
++                        "source": {
++                            "kind": "mcp",
++                            "server_name": "filesystem",
++                            "original_name": "read_file"
++                        },
++                        "category": "other",
++                        "invoked": false
++                    }
++                ]
++            }
++        });
++
++        let parsed = RunEvent::from_value(value.clone()).unwrap();
++        assert!(matches!(
++            parsed.body,
++            EventBody::AgentToolsAvailable(AgentToolsAvailableProps { .. })
++        ));
++        assert_eq!(parsed.event_name(), "agent.tools.available");
++        assert_eq!(parsed.to_value().unwrap(), value);
++    }
++
+     #[test]
+     fn run_created_round_trip_preserves_manifest_blob() {
+         let line = json!({
+diff --git a/lib/crates/fabro-types/src/run_projection.rs b/lib/crates/fabro-types/src/run_projection.rs
+index fca145920..60e4c2964 100644
+--- a/lib/crates/fabro-types/src/run_projection.rs
++++ b/lib/crates/fabro-types/src/run_projection.rs
+@@ -9,7 +9,8 @@ use strum::{Display, EnumString, IntoStaticStr};
+ use crate::run_event::{AgentSessionActivatedProps, StagePromptProps};
+ use crate::{
+     AgentBackend, AgentMcpToolSummary, AgentSkillActivationSource, AgentSkillSummary,
+-    BilledTokenCounts, Checkpoint, Conclusion, InterviewQuestionRecord, InvalidTransition,
++    AgentToolSummary, BilledTokenCounts, Checkpoint, Conclusion, InterviewQuestionRecord,
++    InvalidTransition,
+     ModelRef, PermissionLevel, PullRequestLink, RunApproval, RunControlAction, RunDiff, RunId,
+     RunSandbox, RunSpec, RunStatus, RunTiming, StageCompletion, StageHandler, StageId, StageState,
+     StageTiming, StartRecord, TodoListProjection,
+@@ -360,6 +361,8 @@ pub struct StageProjection {
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub permission_level:  Option<PermissionLevel>,
+     #[serde(default, skip_serializing_if = "Vec::is_empty")]
++    pub agent_tools:       Vec<AgentToolSummary>,
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub mcp_servers:       Vec<McpServerProjection>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub context_window:    Option<StageContextWindowProjection>,
+@@ -440,6 +443,7 @@ impl StageProjection {
+             subagents: Vec::new(),
+             skills: SkillsProjection::default(),
+             permission_level: None,
++            agent_tools: Vec::new(),
+             mcp_servers: Vec::new(),
+             context_window: None,
+             provider_used: None,
+@@ -671,6 +675,60 @@ impl RunProjection {
+     }
+ }
+ 
++#[cfg(test)]
++mod stage_projection_tests {
++    use serde_json::json;
++
++    use super::StageProjection;
++    use crate::{AgentToolCategory, AgentToolSource, AgentToolSummary, first_event_seq};
++
++    #[test]
++    fn missing_agent_tools_defaults_to_empty_and_serializes_omitted() {
++        let value = json!({
++            "first_event_seq": 1,
++            "prompt": null,
++            "response": null,
++            "completion": null,
++            "provider_used": null,
++            "diff": null,
++            "script_invocation": null,
++            "script_timing": null,
++            "parallel_results": null,
++            "output": null,
++            "usage": {
++                "input_tokens": 0,
++                "output_tokens": 0,
++                "total_tokens": 0
++            },
++            "state": "running"
++        });
++
++        let projection: StageProjection = serde_json::from_value(value.clone()).unwrap();
++        assert!(projection.agent_tools.is_empty());
++        assert_eq!(serde_json::to_value(projection).unwrap(), value);
++    }
++
++    #[test]
++    fn stage_projection_serializes_agent_tools_when_present() {
++        let mut projection = StageProjection::new(first_event_seq(1));
++        projection.agent_tools.push(AgentToolSummary {
++            name:        "grep".to_string(),
++            description: "Search files".to_string(),
++            source:      AgentToolSource::Native,
++            category:    AgentToolCategory::Read,
++            invoked:     true,
++        });
++
++        let value = serde_json::to_value(projection).unwrap();
++        assert_eq!(value["agent_tools"][0]["name"], "grep");
++        assert_eq!(value["agent_tools"][0]["description"], "Search files");
++        assert_eq!(value["agent_tools"][0]["source"], json!({"kind": "native"}));
++        assert_eq!(value["agent_tools"][0]["category"], "read");
++        assert_eq!(value["agent_tools"][0]["invoked"], true);
++        assert!(value["agent_tools"][0].get("parameters").is_none());
++    }
++}
++
+ #[cfg(test)]
+ mod title_tests {
+     use std::collections::HashMap;
