@@ -1,0 +1,4211 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 9c2f56b80..5949b1eca 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -105,7 +105,7 @@ dependencies = [
+  "serde",
+  "serde_json",
+  "serde_with",
+- "strum",
++ "strum 0.28.0",
+  "tracing",
+ ]
+ 
+@@ -1022,6 +1022,17 @@ dependencies = [
+  "syn 2.0.117",
+ ]
+ 
++[[package]]
++name = "croner"
++version = "3.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4aa42bcd3d846ebf66e15bd528d1087f75d1c6c1c66ebff626178a106353c576"
++dependencies = [
++ "chrono",
++ "derive_builder",
++ "strum 0.27.2",
++]
++
+ [[package]]
+ name = "crossbeam"
+ version = "0.8.4"
+@@ -1166,6 +1177,16 @@ dependencies = [
+  "darling_macro 0.14.4",
+ ]
+ 
++[[package]]
++name = "darling"
++version = "0.20.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee"
++dependencies = [
++ "darling_core 0.20.11",
++ "darling_macro 0.20.11",
++]
++
+ [[package]]
+ name = "darling"
+ version = "0.23.0"
+@@ -1190,6 +1211,20 @@ dependencies = [
+  "syn 1.0.109",
+ ]
+ 
++[[package]]
++name = "darling_core"
++version = "0.20.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
++dependencies = [
++ "fnv",
++ "ident_case",
++ "proc-macro2",
++ "quote",
++ "strsim 0.11.1",
++ "syn 2.0.117",
++]
++
+ [[package]]
+ name = "darling_core"
+ version = "0.23.0"
+@@ -1214,6 +1249,17 @@ dependencies = [
+  "syn 1.0.109",
+ ]
+ 
++[[package]]
++name = "darling_macro"
++version = "0.20.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead"
++dependencies = [
++ "darling_core 0.20.11",
++ "quote",
++ "syn 2.0.117",
++]
++
+ [[package]]
+ name = "darling_macro"
+ version = "0.23.0"
+@@ -1332,6 +1378,37 @@ dependencies = [
+  "serde_core",
+ ]
+ 
++[[package]]
++name = "derive_builder"
++version = "0.20.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "507dfb09ea8b7fa618fcf76e953f4f5e192547945816d5358edffe39f6f94947"
++dependencies = [
++ "derive_builder_macro",
++]
++
++[[package]]
++name = "derive_builder_core"
++version = "0.20.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2d5bcf7b024d6835cfb3d473887cd966994907effbe9227e8c8219824d06c4e8"
++dependencies = [
++ "darling 0.20.11",
++ "proc-macro2",
++ "quote",
++ "syn 2.0.117",
++]
++
++[[package]]
++name = "derive_builder_macro"
++version = "0.20.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ab63b0e2bf4d5928aff72e83a7dace85d7bba5fe12dcc3c5a572d78caffd3f3c"
++dependencies = [
++ "derive_builder_core",
++ "syn 2.0.117",
++]
++
+ [[package]]
+ name = "derive_more"
+ version = "2.1.1"
+@@ -1632,7 +1709,7 @@ dependencies = [
+  "serde_json",
+  "sha2",
+  "shell-escape",
+- "strum",
++ "strum 0.28.0",
+  "tempfile",
+  "thiserror 2.0.18",
+  "tokio",
+@@ -1647,6 +1724,7 @@ name = "fabro-api"
+ version = "0.243.0-nightly.1"
+ dependencies = [
+  "chrono",
++ "fabro-automation",
+  "fabro-config",
+  "fabro-model",
+  "fabro-types",
+@@ -1687,6 +1765,22 @@ dependencies = [
+  "toml 0.8.23",
+ ]
+ 
++[[package]]
++name = "fabro-automation"
++version = "0.243.0-nightly.1"
++dependencies = [
++ "chrono",
++ "croner",
++ "hex",
++ "serde",
++ "sha2",
++ "tempfile",
++ "thiserror 2.0.18",
++ "tokio",
++ "toml 0.8.23",
++ "toml_edit",
++]
++
+ [[package]]
+ name = "fabro-build-support"
+ version = "0.243.0-nightly.1"
+@@ -1963,7 +2057,7 @@ dependencies = [
+  "nom",
+  "regex",
+  "serde",
+- "strum",
++ "strum 0.28.0",
+  "thiserror 2.0.18",
+ ]
+ 
+@@ -2056,7 +2150,7 @@ dependencies = [
+  "rand 0.9.4",
+  "serde",
+  "serde_json",
+- "strum",
++ "strum 0.28.0",
+  "thiserror 2.0.18",
+  "tokio",
+  "tokio-stream",
+@@ -2137,7 +2231,7 @@ dependencies = [
+  "schemars 1.2.1",
+  "serde",
+  "serde_json",
+- "strum",
++ "strum 0.28.0",
+  "tempfile",
+  "tokio",
+  "toml 0.8.23",
+@@ -2153,7 +2247,7 @@ dependencies = [
+  "rust-embed",
+  "serde",
+  "serde_json",
+- "strum",
++ "strum 0.28.0",
+  "thiserror 2.0.18",
+  "toml 0.8.23",
+  "tracing",
+@@ -2245,7 +2339,7 @@ dependencies = [
+  "serde",
+  "serde_json",
+  "shlex",
+- "strum",
++ "strum 0.28.0",
+  "tar",
+  "tempfile",
+  "thiserror 2.0.18",
+@@ -2274,6 +2368,7 @@ dependencies = [
+  "fabro-agent",
+  "fabro-api",
+  "fabro-auth",
++ "fabro-automation",
+  "fabro-build-support",
+  "fabro-client",
+  "fabro-config",
+@@ -2322,7 +2417,7 @@ dependencies = [
+  "serde_json",
+  "serde_yaml",
+  "sha2",
+- "strum",
++ "strum 0.28.0",
+  "sysinfo",
+  "tempfile",
+  "thiserror 2.0.18",
+@@ -2355,7 +2450,7 @@ dependencies = [
+  "rustls",
+  "serde",
+  "serde_json",
+- "strum",
++ "strum 0.28.0",
+  "thiserror 2.0.18",
+  "tokio",
+  "tokio-tungstenite 0.26.2",
+@@ -2480,7 +2575,7 @@ dependencies = [
+  "schemars 1.2.1",
+  "serde",
+  "serde_json",
+- "strum",
++ "strum 0.28.0",
+  "tempfile",
+  "tokio",
+  "toml 0.8.23",
+@@ -2514,7 +2609,7 @@ dependencies = [
+  "serde",
+  "serde_json",
+  "sha2",
+- "strum",
++ "strum 0.28.0",
+  "tempfile",
+  "toml 0.8.23",
+  "ulid",
+@@ -6689,13 +6784,34 @@ version = "0.11.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+ 
++[[package]]
++name = "strum"
++version = "0.27.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
++dependencies = [
++ "strum_macros 0.27.2",
++]
++
+ [[package]]
+ name = "strum"
+ version = "0.28.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
+ dependencies = [
+- "strum_macros",
++ "strum_macros 0.28.0",
++]
++
++[[package]]
++name = "strum_macros"
++version = "0.27.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
++dependencies = [
++ "heck 0.5.0",
++ "proc-macro2",
++ "quote",
++ "syn 2.0.117",
+ ]
+ 
+ [[package]]
+diff --git a/docs/public/api-reference/fabro-api.yaml b/docs/public/api-reference/fabro-api.yaml
+index 5a2f9b751..3b68437d3 100644
+--- a/docs/public/api-reference/fabro-api.yaml
++++ b/docs/public/api-reference/fabro-api.yaml
+@@ -15,6 +15,8 @@ tags:
+     description: Browser authentication and demo-mode controls
+   - name: Runs
+     description: Run management operations
++  - name: Automations
++    description: Server-owned runnable automation bindings
+   - name: Sessions
+     description: Ask Fabro sessions bound to runs
+   - name: Human-in-the-Loop
+@@ -3906,6 +3908,372 @@ paths:
+               schema:
+                 $ref: "#/components/schemas/ErrorResponse"
+ 
++  # ── Automations ──────────────────────────────────────────────────────
++
++  /api/v1/automations:
++    get:
++      operationId: listAutomations
++      tags: [Automations]
++      summary: List automations
++      description: Returns all server-owned automation definitions sorted by ID.
++      responses:
++        "200":
++          description: Automation definitions
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/AutomationListResponse"
++    post:
++      operationId: createAutomation
++      tags: [Automations]
++      summary: Create automation
++      description: Creates and persists a server-owned automation definition.
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              $ref: "#/components/schemas/CreateAutomationRequest"
++      responses:
++        "201":
++          description: Automation created
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/Automation"
++        "400":
++          description: Malformed JSON
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "409":
++          description: Automation already exists
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "422":
++          description: Invalid automation definition
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++
++  /api/v1/automations/{id}:
++    get:
++      operationId: getAutomation
++      tags: [Automations]
++      summary: Get automation
++      parameters:
++        - $ref: "#/components/parameters/AutomationId"
++      responses:
++        "200":
++          description: Automation definition
++          headers:
++            ETag:
++              $ref: "#/components/headers/ETag"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/Automation"
++        "400":
++          description: Invalid automation ID syntax
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "404":
++          description: Automation not found
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++    put:
++      operationId: replaceAutomation
++      tags: [Automations]
++      summary: Replace automation
++      parameters:
++        - $ref: "#/components/parameters/AutomationId"
++        - $ref: "#/components/parameters/AutomationRevision"
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              $ref: "#/components/schemas/ReplaceAutomationRequest"
++      responses:
++        "200":
++          description: Automation replaced
++          headers:
++            ETag:
++              $ref: "#/components/headers/ETag"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/Automation"
++        "400":
++          description: Malformed JSON or invalid automation ID syntax
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "404":
++          description: Automation not found
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "409":
++          description: Revision mismatch
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "422":
++          description: Invalid automation definition
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "428":
++          description: Missing If-Match revision
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++    patch:
++      operationId: patchAutomation
++      tags: [Automations]
++      summary: Patch automation
++      description: Applies a shallow patch to an automation definition.
++      parameters:
++        - $ref: "#/components/parameters/AutomationId"
++        - $ref: "#/components/parameters/AutomationRevision"
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              $ref: "#/components/schemas/PatchAutomationRequest"
++      responses:
++        "200":
++          description: Automation patched
++          headers:
++            ETag:
++              $ref: "#/components/headers/ETag"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/Automation"
++        "400":
++          description: Malformed JSON or invalid automation ID syntax
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "404":
++          description: Automation not found
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "409":
++          description: Revision mismatch
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "422":
++          description: Invalid automation definition
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "428":
++          description: Missing If-Match revision
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++    delete:
++      operationId: deleteAutomation
++      tags: [Automations]
++      summary: Delete automation
++      parameters:
++        - $ref: "#/components/parameters/AutomationId"
++        - $ref: "#/components/parameters/AutomationRevision"
++      responses:
++        "204":
++          description: Automation deleted
++        "400":
++          description: Invalid automation ID syntax
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "404":
++          description: Automation not found
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "409":
++          description: Revision mismatch
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "428":
++          description: Missing If-Match revision
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++
++  /api/v1/automations/{id}/runs:
++    get:
++      operationId: listAutomationRuns
++      tags: [Automations]
++      summary: List automation runs
++      description: Returns durable runs linked to an existing automation, newest first.
++      parameters:
++        - $ref: "#/components/parameters/AutomationId"
++        - $ref: "#/components/parameters/PageLimit"
++        - $ref: "#/components/parameters/PageOffset"
++      responses:
++        "200":
++          description: Paginated runs for the automation
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/PaginatedRunList"
++        "400":
++          description: Invalid automation ID syntax
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "404":
++          description: Automation not found
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++    post:
++      operationId: createAutomationRun
++      tags: [Automations]
++      summary: Start automation run
++      description: Creates a submitted run by materializing an automation target through its enabled `api` trigger.
++      parameters:
++        - $ref: "#/components/parameters/AutomationId"
++      responses:
++        "201":
++          description: Run created from automation
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/Run"
++        "400":
++          description: Invalid automation ID syntax
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "404":
++          description: Automation not found
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "409":
++          description: Automation is disabled or has no enabled api trigger
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++        "422":
++          description: Automation target could not be materialized
++          headers:
++            x-request-id:
++              $ref: "#/components/headers/XRequestId"
++          content:
++            application/json:
++              schema:
++                $ref: "#/components/schemas/ErrorResponse"
++
+   # ── Workflows ────────────────────────────────────────────────────────
+ 
+   /api/v1/workflows:
+@@ -4576,6 +4944,25 @@ components:
+         type: string
+       example: 01JNQVR7M0EJ5GKAT2SC4ERS1Z
+ 
++    AutomationId:
++      name: id
++      in: path
++      required: true
++      description: Automation identifier. The canonical ID is the TOML filename stem.
++      schema:
++        type: string
++        pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
++      example: nightly-deps
++
++    AutomationRevision:
++      name: If-Match
++      in: header
++      required: true
++      description: Current automation revision, quoted or unquoted.
++      schema:
++        type: string
++      example: '"d2d2c1f38c4fd03b6f2c14c9b5e4a8ff4d1bf74c1b8f2dbf0bff650f7e8e0f5a"'
++
+     RunSelector:
+       name: selector
+       in: query
+@@ -4824,6 +5211,11 @@ components:
+       schema:
+         type: string
+         format: uuid
++    ETag:
++      description: Current automation revision.
++      schema:
++        type: string
++      example: '"d2d2c1f38c4fd03b6f2c14c9b5e4a8ff4d1bf74c1b8f2dbf0bff650f7e8e0f5a"'
+ 
+   schemas:
+     AuthConfigResponse:
+@@ -5305,6 +5697,202 @@ components:
+             chose the personal access token flow; GitHub App installs rely on
+             OAuth and do not receive a dev token.
+ 
++    # ── Automations ──────────────────────────────────────────────────────
++
++    Automation:
++      description: Server-owned runnable automation binding.
++      type: object
++      additionalProperties: false
++      required:
++        - id
++        - revision
++        - name
++        - description
++        - enabled
++        - target
++        - triggers
++      properties:
++        id:
++          type: string
++          pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
++        revision:
++          type: string
++          description: Lowercase hex SHA-256 of the persisted TOML bytes.
++          pattern: "^[0-9a-f]{64}$"
++        name:
++          type: string
++        description:
++          type: ["string", "null"]
++        enabled:
++          type: boolean
++        target:
++          $ref: "#/components/schemas/AutomationTarget"
++        triggers:
++          type: array
++          items:
++            $ref: "#/components/schemas/AutomationTrigger"
++
++    AutomationTarget:
++      type: object
++      additionalProperties: false
++      required:
++        - repository
++        - ref
++        - workflow
++      properties:
++        repository:
++          type: string
++          description: GitHub owner/repo slug.
++          example: fabro-sh/fabro
++        ref:
++          type: string
++          description: Branch, tag, or SHA selector to checkout.
++          example: main
++        workflow:
++          type: string
++          description: Workflow slug or relative workflow path inside the repository.
++          example: dependency-update
++
++    AutomationTrigger:
++      oneOf:
++        - $ref: "#/components/schemas/AutomationApiTrigger"
++        - $ref: "#/components/schemas/AutomationScheduleTrigger"
++      discriminator:
++        propertyName: type
++        mapping:
++          api: "#/components/schemas/AutomationApiTrigger"
++          schedule: "#/components/schemas/AutomationScheduleTrigger"
++
++    AutomationApiTrigger:
++      type: object
++      additionalProperties: false
++      required:
++        - id
++        - type
++      properties:
++        id:
++          type: string
++          pattern: "^[a-z0-9][a-z0-9_-]{0,62}$"
++          example: api
++        type:
++          type: string
++          enum: [api]
++        enabled:
++          type: boolean
++          default: true
++
++    AutomationScheduleTrigger:
++      type: object
++      additionalProperties: false
++      required:
++        - id
++        - type
++        - expression
++      properties:
++        id:
++          type: string
++          pattern: "^[a-z0-9][a-z0-9_-]{0,62}$"
++          example: nightly
++        type:
++          type: string
++          enum: [schedule]
++        enabled:
++          type: boolean
++          default: true
++        expression:
++          type: string
++          description: Five-field cron expression accepted by croner.
++          example: "0 3 * * *"
++
++    CreateAutomationRequest:
++      type: object
++      additionalProperties: false
++      required:
++        - id
++        - name
++        - target
++        - triggers
++      properties:
++        id:
++          type: string
++          pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
++        name:
++          type: string
++        description:
++          type: ["string", "null"]
++          default: null
++        enabled:
++          type: boolean
++          default: true
++        target:
++          $ref: "#/components/schemas/AutomationTarget"
++        triggers:
++          type: array
++          items:
++            $ref: "#/components/schemas/AutomationTrigger"
++
++    ReplaceAutomationRequest:
++      type: object
++      additionalProperties: false
++      required:
++        - name
++        - enabled
++        - target
++        - triggers
++      properties:
++        name:
++          type: string
++        description:
++          type: ["string", "null"]
++          default: null
++        enabled:
++          type: boolean
++        target:
++          $ref: "#/components/schemas/AutomationTarget"
++        triggers:
++          type: array
++          items:
++            $ref: "#/components/schemas/AutomationTrigger"
++
++    PatchAutomationRequest:
++      type: object
++      additionalProperties: false
++      properties:
++        name:
++          type: string
++        description:
++          type: ["string", "null"]
++        enabled:
++          type: boolean
++        target:
++          $ref: "#/components/schemas/AutomationTarget"
++        triggers:
++          type: array
++          items:
++            $ref: "#/components/schemas/AutomationTrigger"
++
++    AutomationListResponse:
++      type: object
++      additionalProperties: false
++      required:
++        - data
++        - meta
++      properties:
++        data:
++          type: array
++          items:
++            $ref: "#/components/schemas/Automation"
++        meta:
++          type: object
++          additionalProperties: false
++          required:
++            - total
++          properties:
++            total:
++              type: integer
++              format: int64
++              minimum: 0
++
+     # ── Pagination ───────────────────────────────────────────────────────
+ 
+     PaginationMeta:
+@@ -9445,6 +10033,9 @@ components:
+           type: string
+         name:
+           type: ["string", "null"]
++        trigger_id:
++          type: string
++          description: User-visible trigger ID that started the run, when known.
+ 
+     RunOrigin:
+       type: object
+diff --git a/lib/crates/fabro-api/Cargo.toml b/lib/crates/fabro-api/Cargo.toml
+index 8b347f032..ce21c0986 100644
+--- a/lib/crates/fabro-api/Cargo.toml
++++ b/lib/crates/fabro-api/Cargo.toml
+@@ -15,6 +15,7 @@ wildcard_imports = "warn"
+ 
+ [dependencies]
+ chrono = { workspace = true, features = ["serde"] }
++fabro-automation = { path = "../fabro-automation" }
+ fabro-config = { path = "../fabro-config" }
+ fabro-model = { path = "../fabro-model" }
+ fabro-types = { path = "../fabro-types" }
+diff --git a/lib/crates/fabro-api/build.rs b/lib/crates/fabro-api/build.rs
+index 14d13d70e..bbfb9df24 100644
+--- a/lib/crates/fabro-api/build.rs
++++ b/lib/crates/fabro-api/build.rs
+@@ -201,6 +201,34 @@ fn main() {
+             &[],
+         ),
+         ("Run", "fabro_types::Run", &[]),
++        ("Automation", "fabro_automation::Automation", &[]),
++        ("AutomationTarget", "fabro_automation::AutomationTarget", &[]),
++        ("AutomationTrigger", "fabro_automation::AutomationTrigger", &[]),
++        (
++            "AutomationApiTrigger",
++            "fabro_automation::ApiTrigger",
++            &[],
++        ),
++        (
++            "AutomationScheduleTrigger",
++            "fabro_automation::ScheduleTrigger",
++            &[],
++        ),
++        (
++            "CreateAutomationRequest",
++            "fabro_automation::AutomationDraft",
++            &[],
++        ),
++        (
++            "ReplaceAutomationRequest",
++            "fabro_automation::AutomationReplace",
++            &[],
++        ),
++        (
++            "PatchAutomationRequest",
++            "fabro_automation::AutomationPatch",
++            &[],
++        ),
+         ("RunApproval", "fabro_types::RunApproval", &[]),
+         ("RunApprovalState", "fabro_types::RunApprovalState", &[]),
+         ("RunRunnableSource", "fabro_types::RunRunnableSource", &[]),
+diff --git a/lib/crates/fabro-api/src/lib.rs b/lib/crates/fabro-api/src/lib.rs
+index 9b40a152c..b1b6f6250 100644
+--- a/lib/crates/fabro-api/src/lib.rs
++++ b/lib/crates/fabro-api/src/lib.rs
+@@ -14,6 +14,11 @@ mod generated {
+     include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
+ }
+ pub mod types {
++    pub use fabro_automation::{
++        ApiTrigger as AutomationApiTrigger, Automation, AutomationDraft as CreateAutomationRequest,
++        AutomationPatch as PatchAutomationRequest, AutomationReplace as ReplaceAutomationRequest,
++        AutomationTarget, AutomationTrigger, ScheduleTrigger as AutomationScheduleTrigger,
++    };
+     pub use fabro_model::{
+         Model, ModelCosts, ModelFeatures, ModelLimits, ModelRef as BillingModelRef, ModelTestMode,
+         Provider, ReasoningEffort, ReasoningEffortFeature, Speed as BillingSpeed,
+diff --git a/lib/crates/fabro-api/tests/automation_round_trip.rs b/lib/crates/fabro-api/tests/automation_round_trip.rs
+new file mode 100644
+index 000000000..5c17b451f
+--- /dev/null
++++ b/lib/crates/fabro-api/tests/automation_round_trip.rs
+@@ -0,0 +1,135 @@
++use std::any::{TypeId, type_name};
++
++use fabro_api::types::{
++    Automation as ApiAutomation, AutomationApiTrigger as ApiAutomationApiTrigger,
++    AutomationScheduleTrigger as ApiAutomationScheduleTrigger,
++    AutomationTarget as ApiAutomationTarget, AutomationTrigger as ApiAutomationTrigger,
++    CreateAutomationRequest as ApiCreateAutomationRequest,
++    PatchAutomationRequest as ApiPatchAutomationRequest,
++    ReplaceAutomationRequest as ApiReplaceAutomationRequest,
++};
++use fabro_automation::{
++    ApiTrigger, Automation, AutomationDraft, AutomationPatch, AutomationReplace, AutomationTarget,
++    AutomationTrigger, ScheduleTrigger,
++};
++use serde_json::json;
++
++#[test]
++fn automation_api_reuses_domain_types() {
++    assert_same_type::<ApiAutomation, Automation>();
++    assert_same_type::<ApiAutomationTarget, AutomationTarget>();
++    assert_same_type::<ApiAutomationTrigger, AutomationTrigger>();
++    assert_same_type::<ApiAutomationApiTrigger, ApiTrigger>();
++    assert_same_type::<ApiAutomationScheduleTrigger, ScheduleTrigger>();
++    assert_same_type::<ApiCreateAutomationRequest, AutomationDraft>();
++    assert_same_type::<ApiReplaceAutomationRequest, AutomationReplace>();
++    assert_same_type::<ApiPatchAutomationRequest, AutomationPatch>();
++}
++
++#[test]
++fn automation_response_round_trips_json_shape() {
++    let value = json!({
++        "id": "nightly-deps",
++        "revision": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
++        "name": "Nightly dependency update",
++        "description": "Open a PR for dependency updates.",
++        "enabled": true,
++        "target": {
++            "repository": "fabro-sh/fabro",
++            "ref": "main",
++            "workflow": "dependency-update"
++        },
++        "triggers": [
++            { "id": "api", "type": "api", "enabled": false },
++            { "id": "nightly", "type": "schedule", "enabled": true, "expression": "0 3 * * *" }
++        ]
++    });
++
++    let automation: ApiAutomation = serde_json::from_value(value.clone()).unwrap();
++    assert_eq!(serde_json::to_value(&automation).unwrap(), value);
++}
++
++#[test]
++fn create_automation_request_round_trips_json_shape() {
++    let value = json!({
++        "id": "nightly-deps",
++        "name": "Nightly dependency update",
++        "description": "Open a PR for dependency updates.",
++        "enabled": true,
++        "target": {
++            "repository": "fabro-sh/fabro",
++            "ref": "main",
++            "workflow": "dependency-update"
++        },
++        "triggers": [
++            { "id": "api", "type": "api", "enabled": true }
++        ]
++    });
++
++    let request: ApiCreateAutomationRequest = serde_json::from_value(value.clone()).unwrap();
++    assert_eq!(serde_json::to_value(&request).unwrap(), value);
++}
++
++#[test]
++fn replace_automation_request_round_trips_json_shape() {
++    let value = json!({
++        "name": "Nightly dependency update",
++        "description": "Open a PR for dependency updates.",
++        "enabled": false,
++        "target": {
++            "repository": "fabro-sh/fabro",
++            "ref": "main",
++            "workflow": "dependency-update"
++        },
++        "triggers": [
++            { "id": "api", "type": "api", "enabled": true }
++        ]
++    });
++
++    let request: ApiReplaceAutomationRequest = serde_json::from_value(value.clone()).unwrap();
++    assert_eq!(serde_json::to_value(&request).unwrap(), value);
++}
++
++#[test]
++fn patch_automation_request_preserves_null_description() {
++    let value = json!({
++        "description": null,
++        "enabled": true
++    });
++
++    let request: ApiPatchAutomationRequest = serde_json::from_value(value.clone()).unwrap();
++    assert_eq!(serde_json::to_value(&request).unwrap(), value);
++}
++
++#[test]
++fn create_automation_request_defaults_optional_enabled_fields() {
++    let value = json!({
++        "id": "nightly-deps",
++        "name": "Nightly dependency update",
++        "target": {
++            "repository": "fabro-sh/fabro",
++            "ref": "main",
++            "workflow": "dependency-update"
++        },
++        "triggers": [
++            { "id": "api", "type": "api" }
++        ]
++    });
++
++    let request: ApiCreateAutomationRequest = serde_json::from_value(value).unwrap();
++    assert_eq!(request.enabled, None);
++    let AutomationTrigger::Api(trigger) = &request.triggers[0] else {
++        panic!("expected api trigger");
++    };
++    assert!(trigger.enabled);
++}
++
++fn assert_same_type<T: 'static, U: 'static>() {
++    assert_eq!(
++        TypeId::of::<T>(),
++        TypeId::of::<U>(),
++        "{} should be the same type as {}",
++        type_name::<T>(),
++        type_name::<U>()
++    );
++}
+diff --git a/lib/crates/fabro-api/tests/run_projection_round_trip.rs b/lib/crates/fabro-api/tests/run_projection_round_trip.rs
+index 64a00df91..b8e2b17d0 100644
+--- a/lib/crates/fabro-api/tests/run_projection_round_trip.rs
++++ b/lib/crates/fabro-api/tests/run_projection_round_trip.rs
+@@ -130,6 +130,7 @@ fn run_spec_json() -> serde_json::Value {
+         workflow_slug:    None,
+         source_directory: None,
+         labels:           std::collections::HashMap::new(),
++        automation:       None,
+         provenance:       None,
+         manifest_blob:    None,
+         definition_blob:  None,
+diff --git a/lib/crates/fabro-automation/Cargo.toml b/lib/crates/fabro-automation/Cargo.toml
+new file mode 100644
+index 000000000..a1a741d31
+--- /dev/null
++++ b/lib/crates/fabro-automation/Cargo.toml
+@@ -0,0 +1,26 @@
++[package]
++name = "fabro-automation"
++edition.workspace = true
++version.workspace = true
++publish = false
++license.workspace = true
++
++[lib]
++doctest = false
++
++[lints]
++workspace = true
++
++[dependencies]
++chrono = { workspace = true, features = ["serde"] }
++croner = "3"
++hex.workspace = true
++serde.workspace = true
++sha2.workspace = true
++thiserror.workspace = true
++tokio = { workspace = true, features = ["fs", "io-util", "sync"] }
++toml.workspace = true
++toml_edit.workspace = true
++
++[dev-dependencies]
++tempfile = "3"
+diff --git a/lib/crates/fabro-automation/src/error.rs b/lib/crates/fabro-automation/src/error.rs
+new file mode 100644
+index 000000000..7d5686d11
+--- /dev/null
++++ b/lib/crates/fabro-automation/src/error.rs
+@@ -0,0 +1,64 @@
++use std::path::PathBuf;
++
++use thiserror::Error;
++
++#[derive(Debug, Error)]
++pub enum AutomationValidationError {
++    #[error("invalid automation id: {0}")]
++    InvalidAutomationId(String),
++    #[error("invalid automation trigger id: {0}")]
++    InvalidTriggerId(String),
++    #[error("automation name cannot be empty")]
++    EmptyName,
++    #[error("invalid repository slug: {0}")]
++    InvalidRepositorySlug(String),
++    #[error("invalid git ref selector: {0}")]
++    InvalidGitRef(String),
++    #[error("invalid workflow selector: {0}")]
++    InvalidWorkflowSelector(String),
++    #[error("duplicate trigger id: {0}")]
++    DuplicateTriggerId(String),
++    #[error("at most one api trigger is allowed")]
++    TooManyApiTriggers,
++    #[error("invalid schedule expression: {0}")]
++    InvalidScheduleExpression(String),
++    #[error("unknown trigger type: {0}")]
++    UnknownTriggerType(String),
++}
++
++#[derive(Debug, Error)]
++pub enum AutomationStoreError {
++    #[error("automation not found: {0}")]
++    NotFound(String),
++    #[error("automation already exists: {0}")]
++    AlreadyExists(String),
++    #[error("missing revision")]
++    MissingRevision,
++    #[error("revision mismatch")]
++    RevisionMismatch,
++    #[error(transparent)]
++    Validation(#[from] AutomationValidationError),
++    #[error("failed to parse automation file {path}: {source}")]
++    Parse {
++        path:   PathBuf,
++        source: toml::de::Error,
++    },
++    #[error("invalid automation filename: {path}")]
++    InvalidFilename { path: PathBuf },
++    #[error("I/O error at {path}: {source}")]
++    Io {
++        path:   PathBuf,
++        source: std::io::Error,
++    },
++    #[error("failed to serialize automation: {0}")]
++    Serialize(#[from] toml::ser::Error),
++}
++
++impl AutomationStoreError {
++    pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
++        Self::Io {
++            path: path.into(),
++            source,
++        }
++    }
++}
+diff --git a/lib/crates/fabro-automation/src/id.rs b/lib/crates/fabro-automation/src/id.rs
+new file mode 100644
+index 000000000..9c51e9f15
+--- /dev/null
++++ b/lib/crates/fabro-automation/src/id.rs
+@@ -0,0 +1,158 @@
++use std::fmt;
++
++use serde::{Deserialize, Deserializer, Serialize, Serializer};
++
++use crate::error::AutomationValidationError;
++
++#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub struct AutomationId(String);
++
++impl AutomationId {
++    pub fn new(value: impl Into<String>) -> Result<Self, AutomationValidationError> {
++        Self::try_from(value.into())
++    }
++
++    pub fn as_str(&self) -> &str {
++        &self.0
++    }
++}
++
++impl AsRef<str> for AutomationId {
++    fn as_ref(&self) -> &str {
++        self.as_str()
++    }
++}
++
++impl fmt::Display for AutomationId {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(&self.0)
++    }
++}
++
++impl TryFrom<String> for AutomationId {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: String) -> Result<Self, Self::Error> {
++        validate_id(&value, IdKind::Automation)?;
++        Ok(Self(value))
++    }
++}
++
++impl TryFrom<&str> for AutomationId {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: &str) -> Result<Self, Self::Error> {
++        Self::try_from(value.to_string())
++    }
++}
++
++impl Serialize for AutomationId {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: Serializer,
++    {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> Deserialize<'de> for AutomationId {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        let value = String::deserialize(deserializer)?;
++        Self::try_from(value).map_err(serde::de::Error::custom)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub struct AutomationTriggerId(String);
++
++impl AutomationTriggerId {
++    pub fn new(value: impl Into<String>) -> Result<Self, AutomationValidationError> {
++        Self::try_from(value.into())
++    }
++
++    pub fn as_str(&self) -> &str {
++        &self.0
++    }
++}
++
++impl AsRef<str> for AutomationTriggerId {
++    fn as_ref(&self) -> &str {
++        self.as_str()
++    }
++}
++
++impl fmt::Display for AutomationTriggerId {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(&self.0)
++    }
++}
++
++impl TryFrom<String> for AutomationTriggerId {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: String) -> Result<Self, Self::Error> {
++        validate_id(&value, IdKind::Trigger)?;
++        Ok(Self(value))
++    }
++}
++
++impl TryFrom<&str> for AutomationTriggerId {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: &str) -> Result<Self, Self::Error> {
++        Self::try_from(value.to_string())
++    }
++}
++
++impl Serialize for AutomationTriggerId {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: Serializer,
++    {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> Deserialize<'de> for AutomationTriggerId {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        let value = String::deserialize(deserializer)?;
++        Self::try_from(value).map_err(serde::de::Error::custom)
++    }
++}
++
++#[derive(Clone, Copy)]
++enum IdKind {
++    Automation,
++    Trigger,
++}
++
++fn validate_id(value: &str, kind: IdKind) -> Result<(), AutomationValidationError> {
++    let valid_len = (1..=63).contains(&value.len());
++    let first_valid = value
++        .bytes()
++        .next()
++        .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
++    let rest_valid = value.bytes().skip(1).all(|b| {
++        b.is_ascii_lowercase()
++            || b.is_ascii_digit()
++            || b == b'-'
++            || (matches!(kind, IdKind::Trigger) && b == b'_')
++    });
++
++    if valid_len && first_valid && rest_valid {
++        return Ok(());
++    }
++
++    match kind {
++        IdKind::Automation => Err(AutomationValidationError::InvalidAutomationId(
++            value.to_string(),
++        )),
++        IdKind::Trigger => Err(AutomationValidationError::InvalidTriggerId(value.to_string())),
++    }
++}
+diff --git a/lib/crates/fabro-automation/src/lib.rs b/lib/crates/fabro-automation/src/lib.rs
+new file mode 100644
+index 000000000..b3d378adb
+--- /dev/null
++++ b/lib/crates/fabro-automation/src/lib.rs
+@@ -0,0 +1,12 @@
++pub mod error;
++pub mod id;
++pub mod model;
++pub mod store;
++
++pub use error::{AutomationStoreError, AutomationValidationError};
++pub use id::{AutomationId, AutomationTriggerId};
++pub use model::{
++    ApiTrigger, Automation, AutomationDraft, AutomationPatch, AutomationReplace, AutomationRevision,
++    AutomationTarget, AutomationTrigger, GitRefSelector, RepositorySlug, ScheduleTrigger, WorkflowSlug,
++};
++pub use store::AutomationStore;
+diff --git a/lib/crates/fabro-automation/src/model.rs b/lib/crates/fabro-automation/src/model.rs
+new file mode 100644
+index 000000000..1d47b53cb
+--- /dev/null
++++ b/lib/crates/fabro-automation/src/model.rs
+@@ -0,0 +1,747 @@
++use std::collections::HashSet;
++use std::fmt;
++use std::path::{Component, Path};
++use std::str::FromStr as _;
++
++use croner::Cron;
++use serde::{Deserialize, Deserializer, Serialize, Serializer};
++
++use crate::error::AutomationValidationError;
++use crate::id::{AutomationId, AutomationTriggerId};
++
++#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
++#[serde(transparent)]
++pub struct AutomationRevision(String);
++
++impl AutomationRevision {
++    pub fn new(value: impl Into<String>) -> Self {
++        Self(value.into())
++    }
++
++    pub fn as_str(&self) -> &str {
++        &self.0
++    }
++}
++
++impl AsRef<str> for AutomationRevision {
++    fn as_ref(&self) -> &str {
++        self.as_str()
++    }
++}
++
++impl fmt::Display for AutomationRevision {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(self.as_str())
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub struct RepositorySlug(String);
++
++impl RepositorySlug {
++    pub fn new(value: impl Into<String>) -> Result<Self, AutomationValidationError> {
++        let value = value.into();
++        validate_repository_slug(&value)?;
++        Ok(Self(value))
++    }
++
++    pub fn as_str(&self) -> &str {
++        &self.0
++    }
++
++    pub fn owner_repo(&self) -> (&str, &str) {
++        self.0
++            .split_once('/')
++            .expect("repository slug validation guarantees owner/repo")
++    }
++}
++
++impl AsRef<str> for RepositorySlug {
++    fn as_ref(&self) -> &str {
++        self.as_str()
++    }
++}
++
++impl fmt::Display for RepositorySlug {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(self.as_str())
++    }
++}
++
++impl TryFrom<String> for RepositorySlug {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: String) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++impl TryFrom<&str> for RepositorySlug {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: &str) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++impl Serialize for RepositorySlug {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: Serializer,
++    {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> Deserialize<'de> for RepositorySlug {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        let value = String::deserialize(deserializer)?;
++        Self::try_from(value).map_err(serde::de::Error::custom)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub struct GitRefSelector(String);
++
++impl GitRefSelector {
++    pub fn new(value: impl Into<String>) -> Result<Self, AutomationValidationError> {
++        let value = value.into();
++        validate_git_ref(&value)?;
++        Ok(Self(value))
++    }
++
++    pub fn as_str(&self) -> &str {
++        &self.0
++    }
++}
++
++impl AsRef<str> for GitRefSelector {
++    fn as_ref(&self) -> &str {
++        self.as_str()
++    }
++}
++
++impl fmt::Display for GitRefSelector {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(self.as_str())
++    }
++}
++
++impl TryFrom<String> for GitRefSelector {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: String) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++impl TryFrom<&str> for GitRefSelector {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: &str) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++impl Serialize for GitRefSelector {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: Serializer,
++    {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> Deserialize<'de> for GitRefSelector {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        let value = String::deserialize(deserializer)?;
++        Self::try_from(value).map_err(serde::de::Error::custom)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++pub struct WorkflowSlug(String);
++
++impl WorkflowSlug {
++    pub fn new(value: impl Into<String>) -> Result<Self, AutomationValidationError> {
++        let value = value.into();
++        validate_workflow_selector(&value)?;
++        Ok(Self(value))
++    }
++
++    pub fn as_str(&self) -> &str {
++        &self.0
++    }
++}
++
++impl AsRef<str> for WorkflowSlug {
++    fn as_ref(&self) -> &str {
++        self.as_str()
++    }
++}
++
++impl fmt::Display for WorkflowSlug {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(self.as_str())
++    }
++}
++
++impl TryFrom<String> for WorkflowSlug {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: String) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++impl TryFrom<&str> for WorkflowSlug {
++    type Error = AutomationValidationError;
++
++    fn try_from(value: &str) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++impl Serialize for WorkflowSlug {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: Serializer,
++    {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> Deserialize<'de> for WorkflowSlug {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        let value = String::deserialize(deserializer)?;
++        Self::try_from(value).map_err(serde::de::Error::custom)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct Automation {
++    pub id:          AutomationId,
++    pub revision:    AutomationRevision,
++    pub name:        String,
++    #[serde(default)]
++    pub description: Option<String>,
++    pub enabled:     bool,
++    pub target:      AutomationTarget,
++    pub triggers:    Vec<AutomationTrigger>,
++}
++
++impl Automation {
++    pub fn api_trigger(&self) -> Option<&ApiTrigger> {
++        self.triggers.iter().find_map(AutomationTrigger::as_api)
++    }
++
++    pub(crate) fn from_persisted(
++        id: AutomationId,
++        revision: AutomationRevision,
++        persisted: PersistedAutomation,
++    ) -> Result<Self, AutomationValidationError> {
++        let automation = Self {
++            id,
++            revision,
++            name: persisted.name,
++            description: persisted.description,
++            enabled: persisted.enabled,
++            target: persisted.target,
++            triggers: persisted.triggers,
++        };
++        automation.validate()?;
++        Ok(automation)
++    }
++
++    pub(crate) fn to_persisted(&self) -> PersistedAutomation {
++        PersistedAutomation {
++            name:        self.name.clone(),
++            description: self.description.clone(),
++            enabled:     self.enabled,
++            target:      self.target.clone(),
++            triggers:    self.triggers.clone(),
++        }
++    }
++
++    pub fn validate(&self) -> Result<(), AutomationValidationError> {
++        validate_name(&self.name)?;
++        validate_triggers(&self.triggers)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct AutomationTarget {
++    pub repository: RepositorySlug,
++    #[serde(rename = "ref")]
++    pub ref_:       GitRefSelector,
++    pub workflow:   WorkflowSlug,
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(tag = "type", rename_all = "snake_case")]
++pub enum AutomationTrigger {
++    Api(ApiTrigger),
++    Schedule(ScheduleTrigger),
++}
++
++impl AutomationTrigger {
++    pub fn id(&self) -> &AutomationTriggerId {
++        match self {
++            Self::Api(trigger) => &trigger.id,
++            Self::Schedule(trigger) => &trigger.id,
++        }
++    }
++
++    pub fn enabled(&self) -> bool {
++        match self {
++            Self::Api(trigger) => trigger.enabled,
++            Self::Schedule(trigger) => trigger.enabled,
++        }
++    }
++
++    pub fn as_api(&self) -> Option<&ApiTrigger> {
++        match self {
++            Self::Api(trigger) => Some(trigger),
++            Self::Schedule(_) => None,
++        }
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct ApiTrigger {
++    pub id:      AutomationTriggerId,
++    #[serde(default = "default_true")]
++    pub enabled: bool,
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct ScheduleTrigger {
++    pub id:         AutomationTriggerId,
++    #[serde(default = "default_true")]
++    pub enabled:    bool,
++    pub expression: String,
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct AutomationDraft {
++    pub id:          AutomationId,
++    pub name:        String,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub description: Option<String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub enabled:     Option<bool>,
++    pub target:      AutomationTarget,
++    pub triggers:    Vec<AutomationTrigger>,
++}
++
++impl AutomationDraft {
++    pub(crate) fn into_automation(
++        self,
++        revision: AutomationRevision,
++    ) -> Result<Automation, AutomationValidationError> {
++        let automation = Automation {
++            id: self.id,
++            revision,
++            name: self.name,
++            description: self.description,
++            enabled: self.enabled.unwrap_or(true),
++            target: self.target,
++            triggers: self.triggers,
++        };
++        automation.validate()?;
++        Ok(automation)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct AutomationReplace {
++    pub name:        String,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub description: Option<String>,
++    pub enabled:     bool,
++    pub target:      AutomationTarget,
++    pub triggers:    Vec<AutomationTrigger>,
++}
++
++impl AutomationReplace {
++    pub(crate) fn into_automation(
++        self,
++        id: AutomationId,
++        revision: AutomationRevision,
++    ) -> Result<Automation, AutomationValidationError> {
++        let automation = Automation {
++            id,
++            revision,
++            name: self.name,
++            description: self.description,
++            enabled: self.enabled,
++            target: self.target,
++            triggers: self.triggers,
++        };
++        automation.validate()?;
++        Ok(automation)
++    }
++}
++
++#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
++pub struct AutomationPatch {
++    #[serde(default)]
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub name:        Option<String>,
++    #[serde(default, deserialize_with = "deserialize_optional_nullable")]
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub description: Option<Option<String>>,
++    #[serde(default)]
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub enabled:     Option<bool>,
++    #[serde(default)]
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub target:      Option<AutomationTarget>,
++    #[serde(default)]
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub triggers:    Option<Vec<AutomationTrigger>>,
++}
++
++impl AutomationPatch {
++    pub(crate) fn apply_to(
++        self,
++        existing: &Automation,
++        revision: AutomationRevision,
++    ) -> Result<Automation, AutomationValidationError> {
++        let automation = Automation {
++            id: existing.id.clone(),
++            revision,
++            name: self.name.unwrap_or_else(|| existing.name.clone()),
++            description: self.description.unwrap_or_else(|| existing.description.clone()),
++            enabled: self.enabled.unwrap_or(existing.enabled),
++            target: self.target.unwrap_or_else(|| existing.target.clone()),
++            triggers: self.triggers.unwrap_or_else(|| existing.triggers.clone()),
++        };
++        automation.validate()?;
++        Ok(automation)
++    }
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub(crate) struct PersistedAutomation {
++    pub name: String,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub description: Option<String>,
++    #[serde(default = "default_true")]
++    pub enabled: bool,
++    pub target: AutomationTarget,
++    #[serde(default)]
++    pub triggers: Vec<AutomationTrigger>,
++}
++
++fn default_true() -> bool {
++    true
++}
++
++fn deserialize_optional_nullable<'de, D>(
++    deserializer: D,
++) -> Result<Option<Option<String>>, D::Error>
++where
++    D: Deserializer<'de>,
++{
++    Option::<String>::deserialize(deserializer).map(Some)
++}
++
++fn validate_name(name: &str) -> Result<(), AutomationValidationError> {
++    if name.trim().is_empty() {
++        return Err(AutomationValidationError::EmptyName);
++    }
++    Ok(())
++}
++
++fn validate_triggers(triggers: &[AutomationTrigger]) -> Result<(), AutomationValidationError> {
++    let mut ids = HashSet::new();
++    let mut api_count = 0_u8;
++
++    for trigger in triggers {
++        if !ids.insert(trigger.id().as_str()) {
++            return Err(AutomationValidationError::DuplicateTriggerId(
++                trigger.id().to_string(),
++            ));
++        }
++
++        match trigger {
++            AutomationTrigger::Api(_) => {
++                api_count = api_count.saturating_add(1);
++                if api_count > 1 {
++                    return Err(AutomationValidationError::TooManyApiTriggers);
++                }
++            }
++            AutomationTrigger::Schedule(schedule) => {
++                validate_schedule_expression(&schedule.expression)?;
++            }
++        }
++    }
++
++    Ok(())
++}
++
++fn validate_schedule_expression(expression: &str) -> Result<(), AutomationValidationError> {
++    let is_five_field = expression.split_whitespace().count() == 5;
++    if expression.trim().is_empty() || !is_five_field {
++        return Err(AutomationValidationError::InvalidScheduleExpression(
++            expression.to_string(),
++        ));
++    }
++
++    Cron::from_str(expression).map_err(|_| {
++        AutomationValidationError::InvalidScheduleExpression(expression.to_string())
++    })?;
++    Ok(())
++}
++
++fn validate_repository_slug(value: &str) -> Result<(), AutomationValidationError> {
++    let Some((owner, repo)) = value.split_once('/') else {
++        return Err(AutomationValidationError::InvalidRepositorySlug(
++            value.to_string(),
++        ));
++    };
++
++    if repo.contains('/') || !valid_github_segment(owner, 39) || !valid_github_segment(repo, 100) {
++        return Err(AutomationValidationError::InvalidRepositorySlug(
++            value.to_string(),
++        ));
++    }
++
++    Ok(())
++}
++
++fn valid_github_segment(value: &str, max_len: usize) -> bool {
++    !value.is_empty()
++        && value.len() <= max_len
++        && !matches!(value, "." | "..")
++        && value
++            .bytes()
++            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
++}
++
++fn validate_git_ref(value: &str) -> Result<(), AutomationValidationError> {
++    let invalid = value.is_empty()
++        || value.starts_with('-')
++        || value.starts_with('/')
++        || value.ends_with('/')
++        || value.contains("..")
++        || value.contains("//")
++        || value.bytes().any(|b| {
++            b.is_ascii_control()
++                || b.is_ascii_whitespace()
++                || matches!(b, b'\\' | b'~' | b'^' | b':' | b'?' | b'*' | b'[' | b']' | b'{' | b'}')
++        });
++
++    if invalid {
++        return Err(AutomationValidationError::InvalidGitRef(value.to_string()));
++    }
++    Ok(())
++}
++
++fn validate_workflow_selector(value: &str) -> Result<(), AutomationValidationError> {
++    if value.trim().is_empty() || value.bytes().any(|b| b.is_ascii_control()) {
++        return Err(AutomationValidationError::InvalidWorkflowSelector(
++            value.to_string(),
++        ));
++    }
++
++    let path = Path::new(value);
++    if path.is_absolute()
++        || path
++            .components()
++            .any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
++    {
++        return Err(AutomationValidationError::InvalidWorkflowSelector(
++            value.to_string(),
++        ));
++    }
++
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn automation_id() -> AutomationId {
++        AutomationId::try_from("nightly-deps").expect("valid id")
++    }
++
++    fn revision() -> AutomationRevision {
++        AutomationRevision::new("revision")
++    }
++
++    fn parse_toml(input: &str) -> Result<Automation, AutomationValidationError> {
++        let persisted: PersistedAutomation = toml::from_str(input).expect("valid toml syntax");
++        Automation::from_persisted(automation_id(), revision(), persisted)
++    }
++
++    #[test]
++    fn parses_valid_toml() {
++        let automation = parse_toml(
++            r#"
++name = "Nightly dependency update"
++description = "Open a PR for dependency updates."
++enabled = true
++
++[target]
++repository = "fabro-sh/fabro"
++ref = "main"
++workflow = "dependency-update"
++
++[[triggers]]
++id = "api"
++type = "api"
++enabled = false
++
++[[triggers]]
++id = "nightly"
++type = "schedule"
++enabled = true
++expression = "0 3 * * *"
++"#,
++        )
++        .expect("automation should parse");
++
++        assert_eq!(automation.id.as_str(), "nightly-deps");
++        assert_eq!(automation.description.as_deref(), Some("Open a PR for dependency updates."));
++        assert!(matches!(automation.triggers[0], AutomationTrigger::Api(_)));
++        assert!(matches!(automation.triggers[1], AutomationTrigger::Schedule(_)));
++    }
++
++    #[test]
++    fn applies_toml_defaults() {
++        let automation = parse_toml(
++            r#"
++name = "Nightly dependency update"
++
++[target]
++repository = "fabro-sh/fabro"
++ref = "main"
++workflow = "dependency-update"
++
++[[triggers]]
++id = "api"
++type = "api"
++"#,
++        )
++        .expect("automation should parse");
++
++        assert!(automation.enabled);
++        assert_eq!(automation.description, None);
++        let AutomationTrigger::Api(api) = &automation.triggers[0] else {
++            panic!("expected api trigger");
++        };
++        assert!(api.enabled);
++    }
++
++    #[test]
++    fn rejects_invalid_automation_ids() {
++        for id in ["", "-bad", "Bad", "bad_underscore", &"a".repeat(64)] {
++            assert!(AutomationId::try_from(id).is_err(), "{id} should be invalid");
++        }
++    }
++
++    #[test]
++    fn rejects_invalid_trigger_ids() {
++        for id in ["", "-bad", "Bad", "bad.dot", &"a".repeat(64)] {
++            assert!(
++                AutomationTriggerId::try_from(id).is_err(),
++                "{id} should be invalid"
++            );
++        }
++    }
++
++    #[test]
++    fn rejects_duplicate_trigger_ids() {
++        let err = parse_toml(
++            r#"
++name = "Nightly dependency update"
++
++[target]
++repository = "fabro-sh/fabro"
++ref = "main"
++workflow = "dependency-update"
++
++[[triggers]]
++id = "api"
++type = "api"
++
++[[triggers]]
++id = "api"
++type = "schedule"
++expression = "0 3 * * *"
++"#,
++        )
++        .expect_err("duplicate trigger should fail");
++
++        assert!(matches!(err, AutomationValidationError::DuplicateTriggerId(_)));
++    }
++
++    #[test]
++    fn rejects_two_api_triggers() {
++        let err = parse_toml(
++            r#"
++name = "Nightly dependency update"
++
++[target]
++repository = "fabro-sh/fabro"
++ref = "main"
++workflow = "dependency-update"
++
++[[triggers]]
++id = "api"
++type = "api"
++
++[[triggers]]
++id = "other_api"
++type = "api"
++"#,
++        )
++        .expect_err("second api trigger should fail");
++
++        assert!(matches!(err, AutomationValidationError::TooManyApiTriggers));
++    }
++
++    #[test]
++    fn rejects_invalid_repository_slug() {
++        for repository in ["owner", "owner/repo/extra", "../repo", "owner/bad/repo"] {
++            assert!(
++                RepositorySlug::try_from(repository).is_err(),
++                "{repository} should be invalid"
++            );
++        }
++    }
++
++    #[test]
++    fn rejects_invalid_schedule_expression() {
++        let err = parse_toml(
++            r#"
++name = "Nightly dependency update"
++
++[target]
++repository = "fabro-sh/fabro"
++ref = "main"
++workflow = "dependency-update"
++
++[[triggers]]
++id = "nightly"
++type = "schedule"
++expression = "not a cron"
++"#,
++        )
++        .expect_err("invalid schedule should fail");
++
++        assert!(matches!(err, AutomationValidationError::InvalidScheduleExpression(_)));
++    }
++}
+diff --git a/lib/crates/fabro-automation/src/store.rs b/lib/crates/fabro-automation/src/store.rs
+new file mode 100644
+index 000000000..b696d94fa
+--- /dev/null
++++ b/lib/crates/fabro-automation/src/store.rs
+@@ -0,0 +1,438 @@
++use std::collections::BTreeMap;
++use std::path::{Path, PathBuf};
++use std::time::{SystemTime, UNIX_EPOCH};
++
++use sha2::{Digest as _, Sha256};
++use tokio::io::AsyncWriteExt as _;
++use tokio::sync::RwLock;
++
++use crate::error::AutomationStoreError;
++use crate::id::AutomationId;
++use crate::model::{
++    Automation, AutomationDraft, AutomationPatch, AutomationReplace, AutomationRevision,
++    PersistedAutomation,
++};
++
++#[derive(Debug)]
++pub struct AutomationStore {
++    dir:         PathBuf,
++    automations: RwLock<BTreeMap<AutomationId, Automation>>,
++}
++
++impl AutomationStore {
++    pub async fn load(dir: impl Into<PathBuf>) -> Result<Self, AutomationStoreError> {
++        let dir = dir.into();
++        tokio::task::spawn_blocking(move || Self::load_blocking(dir))
++            .await
++            .map_err(|err| {
++                AutomationStoreError::io(
++                    "<automation-store-loader>",
++                    std::io::Error::other(err.to_string()),
++                )
++            })?
++    }
++
++    pub fn load_blocking(dir: impl Into<PathBuf>) -> Result<Self, AutomationStoreError> {
++        let dir = dir.into();
++        let mut automations = BTreeMap::new();
++
++        match std::fs::read_dir(&dir) {
++            Ok(entries) => {
++                for entry in entries {
++                    let entry = entry.map_err(|err| AutomationStoreError::io(&dir, err))?;
++                    let path = entry.path();
++                    let metadata =
++                        entry.metadata().map_err(|err| AutomationStoreError::io(&path, err))?;
++                    if !metadata.is_file() || path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
++                        continue;
++                    }
++
++                    let id = automation_id_from_path(&path)?;
++                    let bytes =
++                        std::fs::read(&path).map_err(|err| AutomationStoreError::io(&path, err))?;
++                    let persisted = parse_persisted(&path, &bytes)?;
++                    let revision = revision_for_bytes(&bytes);
++                    let automation = Automation::from_persisted(id.clone(), revision, persisted)?;
++                    automations.insert(id, automation);
++                }
++            }
++            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
++            Err(err) => return Err(AutomationStoreError::io(&dir, err)),
++        }
++
++        Ok(Self {
++            dir,
++            automations: RwLock::new(automations),
++        })
++    }
++
++    pub async fn list(&self) -> Vec<Automation> {
++        self.automations.read().await.values().cloned().collect()
++    }
++
++    pub async fn get(&self, id: &AutomationId) -> Option<Automation> {
++        self.automations.read().await.get(id).cloned()
++    }
++
++    pub async fn create(
++        &self,
++        draft: AutomationDraft,
++    ) -> Result<Automation, AutomationStoreError> {
++        let mut automations = self.automations.write().await;
++        if automations.contains_key(&draft.id) {
++            return Err(AutomationStoreError::AlreadyExists(draft.id.to_string()));
++        }
++
++        let automation = draft.into_automation(AutomationRevision::new(""))?;
++        let automation = self.persist(automation).await?;
++        automations.insert(automation.id.clone(), automation.clone());
++        Ok(automation)
++    }
++
++    pub async fn replace(
++        &self,
++        id: &AutomationId,
++        expected: &AutomationRevision,
++        draft: AutomationReplace,
++    ) -> Result<Automation, AutomationStoreError> {
++        ensure_revision_present(expected)?;
++        let mut automations = self.automations.write().await;
++        let existing = automations
++            .get(id)
++            .ok_or_else(|| AutomationStoreError::NotFound(id.to_string()))?;
++        ensure_revision_matches(existing, expected)?;
++
++        let automation = draft.into_automation(id.clone(), AutomationRevision::new(""))?;
++        let automation = self.persist(automation).await?;
++        automations.insert(id.clone(), automation.clone());
++        Ok(automation)
++    }
++
++    pub async fn patch(
++        &self,
++        id: &AutomationId,
++        expected: &AutomationRevision,
++        patch: AutomationPatch,
++    ) -> Result<Automation, AutomationStoreError> {
++        ensure_revision_present(expected)?;
++        let mut automations = self.automations.write().await;
++        let existing = automations
++            .get(id)
++            .ok_or_else(|| AutomationStoreError::NotFound(id.to_string()))?;
++        ensure_revision_matches(existing, expected)?;
++
++        let automation = patch.apply_to(existing, AutomationRevision::new(""))?;
++        let automation = self.persist(automation).await?;
++        automations.insert(id.clone(), automation.clone());
++        Ok(automation)
++    }
++
++    pub async fn delete(
++        &self,
++        id: &AutomationId,
++        expected: &AutomationRevision,
++    ) -> Result<(), AutomationStoreError> {
++        ensure_revision_present(expected)?;
++        let mut automations = self.automations.write().await;
++        let existing = automations
++            .get(id)
++            .ok_or_else(|| AutomationStoreError::NotFound(id.to_string()))?;
++        ensure_revision_matches(existing, expected)?;
++
++        let path = self.path_for(id);
++        match tokio::fs::remove_file(&path).await {
++            Ok(()) => {}
++            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
++            Err(err) => return Err(AutomationStoreError::io(&path, err)),
++        }
++        automations.remove(id);
++        Ok(())
++    }
++
++    fn path_for(&self, id: &AutomationId) -> PathBuf {
++        self.dir.join(format!("{id}.toml"))
++    }
++
++    async fn persist(&self, mut automation: Automation) -> Result<Automation, AutomationStoreError> {
++        tokio::fs::create_dir_all(&self.dir)
++            .await
++            .map_err(|err| AutomationStoreError::io(&self.dir, err))?;
++
++        let bytes = canonical_toml_bytes(&automation)?;
++        automation.revision = revision_for_bytes(&bytes);
++        atomic_write(&self.dir, &self.path_for(&automation.id), &bytes).await?;
++        Ok(automation)
++    }
++}
++
++fn automation_id_from_path(path: &Path) -> Result<AutomationId, AutomationStoreError> {
++    let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
++        return Err(AutomationStoreError::InvalidFilename {
++            path: path.to_path_buf(),
++        });
++    };
++    AutomationId::try_from(stem.to_string()).map_err(AutomationStoreError::Validation)
++}
++
++fn parse_persisted(
++    path: &Path,
++    bytes: &[u8],
++) -> Result<PersistedAutomation, AutomationStoreError> {
++    let text = std::str::from_utf8(bytes).map_err(|err| {
++        AutomationStoreError::io(path, std::io::Error::new(std::io::ErrorKind::InvalidData, err))
++    })?;
++    toml::from_str(text).map_err(|source| AutomationStoreError::Parse {
++        path: path.to_path_buf(),
++        source,
++    })
++}
++
++fn canonical_toml_bytes(automation: &Automation) -> Result<Vec<u8>, AutomationStoreError> {
++    let persisted = automation.to_persisted();
++    let mut text = toml::to_string_pretty(&persisted)?;
++    if !text.ends_with('\n') {
++        text.push('\n');
++    }
++    Ok(text.into_bytes())
++}
++
++fn revision_for_bytes(bytes: &[u8]) -> AutomationRevision {
++    let digest = Sha256::digest(bytes);
++    AutomationRevision::new(hex::encode(digest))
++}
++
++fn ensure_revision_present(expected: &AutomationRevision) -> Result<(), AutomationStoreError> {
++    if expected.as_str().is_empty() {
++        return Err(AutomationStoreError::MissingRevision);
++    }
++    Ok(())
++}
++
++fn ensure_revision_matches(
++    automation: &Automation,
++    expected: &AutomationRevision,
++) -> Result<(), AutomationStoreError> {
++    if &automation.revision != expected {
++        return Err(AutomationStoreError::RevisionMismatch);
++    }
++    Ok(())
++}
++
++async fn atomic_write(dir: &Path, final_path: &Path, bytes: &[u8]) -> Result<(), AutomationStoreError> {
++    let mut last_error = None;
++    for attempt in 0..16_u8 {
++        let temp_path = dir.join(temp_file_name(attempt));
++        match tokio::fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(&temp_path)
++            .await
++        {
++            Ok(mut file) => {
++                file.write_all(bytes)
++                    .await
++                    .map_err(|err| AutomationStoreError::io(&temp_path, err))?;
++                file.flush()
++                    .await
++                    .map_err(|err| AutomationStoreError::io(&temp_path, err))?;
++                file.sync_all()
++                    .await
++                    .map_err(|err| AutomationStoreError::io(&temp_path, err))?;
++                drop(file);
++                if let Err(err) = tokio::fs::rename(&temp_path, final_path).await {
++                    let _ = tokio::fs::remove_file(&temp_path).await;
++                    return Err(AutomationStoreError::io(final_path, err));
++                }
++                return Ok(());
++            }
++            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
++                last_error = Some(err);
++            }
++            Err(err) => return Err(AutomationStoreError::io(&temp_path, err)),
++        }
++    }
++
++    Err(AutomationStoreError::io(
++        dir,
++        last_error.unwrap_or_else(|| {
++            std::io::Error::new(
++                std::io::ErrorKind::AlreadyExists,
++                "failed to allocate temporary automation file",
++            )
++        }),
++    ))
++}
++
++fn temp_file_name(attempt: u8) -> String {
++    let nanos = SystemTime::now()
++        .duration_since(UNIX_EPOCH)
++        .map_or(0, |duration| duration.as_nanos());
++    format!(".automation-{nanos}-{attempt}.tmp")
++}
++
++#[cfg(test)]
++mod tests {
++    use crate::model::{ApiTrigger, GitRefSelector, RepositorySlug, WorkflowSlug};
++
++    use super::*;
++
++    fn id(value: &str) -> AutomationId {
++        AutomationId::try_from(value).expect("valid automation id")
++    }
++
++    fn trigger_id(value: &str) -> crate::AutomationTriggerId {
++        crate::AutomationTriggerId::try_from(value).expect("valid trigger id")
++    }
++
++    fn target(workflow: &str) -> crate::AutomationTarget {
++        crate::AutomationTarget {
++            repository: RepositorySlug::try_from("fabro-sh/fabro").expect("valid repo"),
++            ref_:       GitRefSelector::try_from("main").expect("valid ref"),
++            workflow:   WorkflowSlug::try_from(workflow).expect("valid workflow"),
++        }
++    }
++
++    fn draft(id_value: &str) -> AutomationDraft {
++        AutomationDraft {
++            id:          id(id_value),
++            name:        "Nightly dependency update".to_string(),
++            description: Some("Open a PR for dependency updates.".to_string()),
++            enabled:     None,
++            target:      target("dependency-update"),
++            triggers:    vec![crate::AutomationTrigger::Api(ApiTrigger {
++                id:      trigger_id("api"),
++                enabled: true,
++            })],
++        }
++    }
++
++    #[tokio::test]
++    async fn missing_directory_loads_empty_store() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let store = AutomationStore::load(temp.path().join("automations"))
++            .await
++            .expect("store should load");
++
++        assert!(store.list().await.is_empty());
++    }
++
++    #[tokio::test]
++    async fn create_writes_file() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let dir = temp.path().join("automations");
++        let store = AutomationStore::load(&dir).await.expect("store should load");
++
++        let automation = store.create(draft("nightly-deps")).await.expect("create");
++
++        let path = dir.join("nightly-deps.toml");
++        assert!(path.is_file());
++        let text = tokio::fs::read_to_string(path).await.expect("read file");
++        assert!(text.contains("name = \"Nightly dependency update\""));
++        assert_eq!(automation.revision.as_str().len(), 64);
++    }
++
++    #[tokio::test]
++    async fn replace_changes_revision() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let store = AutomationStore::load(temp.path().join("automations"))
++            .await
++            .expect("store should load");
++        let automation = store.create(draft("nightly-deps")).await.expect("create");
++
++        let replacement = AutomationReplace {
++            name:        "Renamed".to_string(),
++            description: automation.description.clone(),
++            enabled:     automation.enabled,
++            target:      automation.target.clone(),
++            triggers:    automation.triggers.clone(),
++        };
++        let replaced = store
++            .replace(&automation.id, &automation.revision, replacement)
++            .await
++            .expect("replace");
++
++        assert_eq!(replaced.name, "Renamed");
++        assert_ne!(replaced.revision, automation.revision);
++    }
++
++    #[tokio::test]
++    async fn patch_keeps_unchanged_fields() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let store = AutomationStore::load(temp.path().join("automations"))
++            .await
++            .expect("store should load");
++        let automation = store.create(draft("nightly-deps")).await.expect("create");
++
++        let patch = AutomationPatch {
++            description: Some(None),
++            ..AutomationPatch::default()
++        };
++        let patched = store
++            .patch(&automation.id, &automation.revision, patch)
++            .await
++            .expect("patch");
++
++        assert_eq!(patched.name, automation.name);
++        assert_eq!(patched.description, None);
++        assert_eq!(patched.target, automation.target);
++    }
++
++    #[tokio::test]
++    async fn stale_revision_fails() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let store = AutomationStore::load(temp.path().join("automations"))
++            .await
++            .expect("store should load");
++        let automation = store.create(draft("nightly-deps")).await.expect("create");
++        let stale = AutomationRevision::new("stale");
++
++        let err = store
++            .replace(
++                &automation.id,
++                &stale,
++                AutomationReplace {
++                    name:        automation.name.clone(),
++                    description: automation.description.clone(),
++                    enabled:     automation.enabled,
++                    target:      automation.target.clone(),
++                    triggers:    automation.triggers.clone(),
++                },
++            )
++            .await
++            .expect_err("stale revision should fail");
++
++        assert!(matches!(err, AutomationStoreError::RevisionMismatch));
++    }
++
++    #[tokio::test]
++    async fn delete_removes_file() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let dir = temp.path().join("automations");
++        let store = AutomationStore::load(&dir).await.expect("store should load");
++        let automation = store.create(draft("nightly-deps")).await.expect("create");
++
++        store
++            .delete(&automation.id, &automation.revision)
++            .await
++            .expect("delete");
++
++        assert!(!dir.join("nightly-deps.toml").exists());
++        assert!(store.get(&automation.id).await.is_none());
++    }
++
++    #[tokio::test]
++    async fn startup_fails_on_malformed_toml() {
++        let temp = tempfile::tempdir().expect("tempdir");
++        let dir = temp.path().join("automations");
++        tokio::fs::create_dir_all(&dir).await.expect("create dir");
++        tokio::fs::write(dir.join("bad.toml"), "name =")
++            .await
++            .expect("write malformed file");
++
++        let err = AutomationStore::load(&dir)
++            .await
++            .expect_err("malformed toml should fail");
++
++        assert!(matches!(err, AutomationStoreError::Parse { .. }));
++    }
++}
+diff --git a/lib/crates/fabro-server/Cargo.toml b/lib/crates/fabro-server/Cargo.toml
+index f83c73981..3dbe0a861 100644
+--- a/lib/crates/fabro-server/Cargo.toml
++++ b/lib/crates/fabro-server/Cargo.toml
+@@ -21,6 +21,7 @@ required-features = ["test-support"]
+ workspace = true
+ 
+ [dependencies]
++fabro-automation = { path = "../fabro-automation" }
+ fabro-auth = { path = "../fabro-auth" }
+ fabro-install = { path = "../fabro-install" }
+ fabro-spa = { path = "../fabro-spa" }
+diff --git a/lib/crates/fabro-server/src/run_files.rs b/lib/crates/fabro-server/src/run_files.rs
+index e8416bfc1..c663c97b2 100644
+--- a/lib/crates/fabro-server/src/run_files.rs
++++ b/lib/crates/fabro-server/src/run_files.rs
+@@ -2374,6 +2374,7 @@ index 1111111..2222222 160000
+                 workflow_slug:    None,
+                 source_directory: None,
+                 labels:           HashMap::default(),
++                automation:       None,
+                 provenance:       None,
+                 manifest_blob:    None,
+                 definition_blob:  None,
+diff --git a/lib/crates/fabro-server/src/run_manifest.rs b/lib/crates/fabro-server/src/run_manifest.rs
+index 0aefe8f78..14328d5bb 100644
+--- a/lib/crates/fabro-server/src/run_manifest.rs
++++ b/lib/crates/fabro-server/src/run_manifest.rs
+@@ -216,6 +216,7 @@ pub(crate) fn create_run_input(
+         git: prepared.git,
+         fork_source_ref: None,
+         parent_id: prepared.parent_id,
++        automation: None,
+         provenance: None,
+         configured_providers,
+         web_url,
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index bd2638729..569b9bb17 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -45,6 +45,7 @@ pub use fabro_api::types::{
+     SystemRunCounts, TimelineEntryResponse, VncPreviewResponse, WriteBlobResponse,
+ };
+ use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
++use fabro_automation::AutomationStore;
+ #[cfg(test)]
+ use fabro_config::RunSettingsBuilder;
+ use fabro_config::daemon::ServerDaemon;
+@@ -933,6 +934,7 @@ pub struct AppState {
+     runs: Mutex<HashMap<RunId, ManagedRun>>,
+     aggregate_billing: Mutex<BillingAccumulator>,
+     store: Arc<Database>,
++    automation_store: Arc<AutomationStore>,
+     session_runtimes: SessionRuntimeManager,
+     artifact_store: ArtifactStore,
+     worker_tokens: WorkerTokenKeys,
+@@ -1263,6 +1265,10 @@ impl AppState {
+         &self.store
+     }
+ 
++    pub(crate) fn automation_store(&self) -> Arc<AutomationStore> {
++        Arc::clone(&self.automation_store)
++    }
++
+     pub(crate) fn session_runtimes(&self) -> &SessionRuntimeManager {
+         &self.session_runtimes
+     }
+@@ -2154,10 +2160,19 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
+     };
+     let worker_tokens = worker_token_keys_from_server_secrets(&server_secrets)?;
+     let github_api_base_url = github_api_base_url.unwrap_or_else(fabro_github::github_api_base_url);
++    let automation_dir = active_config_path
++        .parent()
++        .unwrap_or_else(|| std::path::Path::new("."))
++        .join("automations");
++    let automation_store = Arc::new(
++        AutomationStore::load_blocking(automation_dir.clone())
++            .with_context(|| format!("load automation store {}", automation_dir.display()))?,
++    );
+     Ok(Arc::new(AppState {
+         runs: Mutex::new(HashMap::new()),
+         aggregate_billing: Mutex::new(BillingAccumulator::default()),
+         store,
++        automation_store,
+         session_runtimes: SessionRuntimeManager::new(),
+         artifact_store,
+         worker_tokens,
+diff --git a/lib/crates/fabro-server/src/server/handler/automations.rs b/lib/crates/fabro-server/src/server/handler/automations.rs
+new file mode 100644
+index 000000000..8a9f9dc69
+--- /dev/null
++++ b/lib/crates/fabro-server/src/server/handler/automations.rs
+@@ -0,0 +1,222 @@
++use std::sync::Arc;
++
++use axum::body::Bytes;
++use axum::extract::{Path, State};
++use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
++use axum::response::{IntoResponse, Response};
++use axum::routing::get;
++use axum::{Json, Router};
++use fabro_automation::{
++    AutomationDraft, AutomationId, AutomationPatch, AutomationReplace, AutomationRevision,
++    AutomationStoreError,
++};
++
++use super::super::AppState;
++use crate::error::ApiError;
++use crate::principal_middleware::RequiredUser;
++
++pub(super) fn routes() -> Router<Arc<AppState>> {
++    Router::new()
++        .route("/automations", get(list_automations).post(create_automation))
++        .route(
++            "/automations/{id}",
++            get(get_automation)
++                .put(replace_automation)
++                .patch(patch_automation)
++                .delete(delete_automation),
++        )
++}
++
++async fn list_automations(_auth: RequiredUser, State(state): State<Arc<AppState>>) -> Response {
++    let mut automations = state.automation_store().list().await;
++    automations.sort_by(|left, right| left.id.cmp(&right.id));
++    let total = automations.len();
++
++    (
++        StatusCode::OK,
++        Json(serde_json::json!({
++            "data": automations,
++            "meta": { "total": total }
++        })),
++    )
++        .into_response()
++}
++
++async fn create_automation(
++    _auth: RequiredUser,
++    State(state): State<Arc<AppState>>,
++    body: Bytes,
++) -> Response {
++    let draft = match parse_domain_json::<AutomationDraft>(&body) {
++        Ok(draft) => draft,
++        Err(err) => return err.into_response(),
++    };
++
++    match state.automation_store().create(draft).await {
++        Ok(automation) => (StatusCode::CREATED, Json(automation)).into_response(),
++        Err(err) => automation_store_error(err).into_response(),
++    }
++}
++
++async fn get_automation(
++    _auth: RequiredUser,
++    State(state): State<Arc<AppState>>,
++    Path(id): Path<String>,
++) -> Response {
++    let id = match parse_automation_id(id) {
++        Ok(id) => id,
++        Err(err) => return err.into_response(),
++    };
++
++    match state.automation_store().get(&id).await {
++        Some(automation) => automation_response(StatusCode::OK, automation),
++        None => ApiError::not_found("Automation not found.").into_response(),
++    }
++}
++
++async fn replace_automation(
++    _auth: RequiredUser,
++    State(state): State<Arc<AppState>>,
++    Path(id): Path<String>,
++    headers: HeaderMap,
++    body: Bytes,
++) -> Response {
++    let id = match parse_automation_id(id) {
++        Ok(id) => id,
++        Err(err) => return err.into_response(),
++    };
++    let expected = match parse_if_match(&headers) {
++        Ok(revision) => revision,
++        Err(err) => return err.into_response(),
++    };
++    let draft = match parse_domain_json::<AutomationReplace>(&body) {
++        Ok(draft) => draft,
++        Err(err) => return err.into_response(),
++    };
++
++    match state.automation_store().replace(&id, &expected, draft).await {
++        Ok(automation) => automation_response(StatusCode::OK, automation),
++        Err(err) => automation_store_error(err).into_response(),
++    }
++}
++
++async fn patch_automation(
++    _auth: RequiredUser,
++    State(state): State<Arc<AppState>>,
++    Path(id): Path<String>,
++    headers: HeaderMap,
++    body: Bytes,
++) -> Response {
++    let id = match parse_automation_id(id) {
++        Ok(id) => id,
++        Err(err) => return err.into_response(),
++    };
++    let expected = match parse_if_match(&headers) {
++        Ok(revision) => revision,
++        Err(err) => return err.into_response(),
++    };
++    let patch = match parse_domain_json::<AutomationPatch>(&body) {
++        Ok(patch) => patch,
++        Err(err) => return err.into_response(),
++    };
++
++    match state.automation_store().patch(&id, &expected, patch).await {
++        Ok(automation) => automation_response(StatusCode::OK, automation),
++        Err(err) => automation_store_error(err).into_response(),
++    }
++}
++
++async fn delete_automation(
++    _auth: RequiredUser,
++    State(state): State<Arc<AppState>>,
++    Path(id): Path<String>,
++    headers: HeaderMap,
++) -> Response {
++    let id = match parse_automation_id(id) {
++        Ok(id) => id,
++        Err(err) => return err.into_response(),
++    };
++    let expected = match parse_if_match(&headers) {
++        Ok(revision) => revision,
++        Err(err) => return err.into_response(),
++    };
++
++    match state.automation_store().delete(&id, &expected).await {
++        Ok(()) => StatusCode::NO_CONTENT.into_response(),
++        Err(err) => automation_store_error(err).into_response(),
++    }
++}
++
++fn automation_response(status: StatusCode, automation: fabro_automation::Automation) -> Response {
++    let etag = format!("\"{}\"", automation.revision.as_str());
++    let etag = HeaderValue::from_str(&etag).expect("automation revisions are valid header values");
++    (status, [(header::ETAG, etag)], Json(automation)).into_response()
++}
++
++fn parse_automation_id(id: String) -> Result<AutomationId, ApiError> {
++    AutomationId::try_from(id).map_err(|err| ApiError::bad_request(err.to_string()))
++}
++
++fn parse_if_match(headers: &HeaderMap) -> Result<AutomationRevision, ApiError> {
++    let Some(value) = headers.get(header::IF_MATCH) else {
++        return Err(ApiError::new(
++            StatusCode::PRECONDITION_REQUIRED,
++            "Missing If-Match revision.",
++        ));
++    };
++    let value = value
++        .to_str()
++        .map_err(|_| ApiError::bad_request("Invalid If-Match revision."))?
++        .trim();
++    let unquoted = value
++        .strip_prefix('"')
++        .and_then(|inner| inner.strip_suffix('"'))
++        .unwrap_or(value)
++        .trim();
++    if unquoted.is_empty() {
++        return Err(ApiError::new(
++            StatusCode::PRECONDITION_REQUIRED,
++            "Missing If-Match revision.",
++        ));
++    }
++    Ok(AutomationRevision::new(unquoted))
++}
++
++fn parse_domain_json<T>(body: &[u8]) -> Result<T, ApiError>
++where
++    T: serde::de::DeserializeOwned,
++{
++    let value: serde_json::Value =
++        serde_json::from_slice(body).map_err(|err| ApiError::bad_request(err.to_string()))?;
++    serde_json::from_value(value).map_err(|err| {
++        ApiError::new(
++            StatusCode::UNPROCESSABLE_ENTITY,
++            format!("Invalid automation definition: {err}"),
++        )
++    })
++}
++
++fn automation_store_error(err: AutomationStoreError) -> ApiError {
++    match err {
++        AutomationStoreError::NotFound(_) => ApiError::not_found("Automation not found."),
++        AutomationStoreError::AlreadyExists(_) => {
++            ApiError::new(StatusCode::CONFLICT, "Automation already exists.")
++        }
++        AutomationStoreError::MissingRevision => ApiError::new(
++            StatusCode::PRECONDITION_REQUIRED,
++            "Missing If-Match revision.",
++        ),
++        AutomationStoreError::RevisionMismatch => {
++            ApiError::new(StatusCode::CONFLICT, "Automation revision mismatch.")
++        }
++        AutomationStoreError::Validation(err) => {
++            ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, err.to_string())
++        }
++        AutomationStoreError::Parse { .. }
++        | AutomationStoreError::InvalidFilename { .. }
++        | AutomationStoreError::Io { .. }
++        | AutomationStoreError::Serialize(_) => {
++            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Automation store error.")
++        }
++    }
++}
+diff --git a/lib/crates/fabro-server/src/server/handler/events.rs b/lib/crates/fabro-server/src/server/handler/events.rs
+index 8e7806522..8450f92b5 100644
+--- a/lib/crates/fabro-server/src/server/handler/events.rs
++++ b/lib/crates/fabro-server/src/server/handler/events.rs
+@@ -573,6 +573,7 @@ mod stage_events_tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-server/src/server/handler/mod.rs b/lib/crates/fabro-server/src/server/handler/mod.rs
+index 2f07ff0bf..577935151 100644
+--- a/lib/crates/fabro-server/src/server/handler/mod.rs
++++ b/lib/crates/fabro-server/src/server/handler/mod.rs
+@@ -6,6 +6,7 @@ use axum::routing::{get, post};
+ use super::{ApiError, AppState, IntoResponse, Response, StatusCode, demo};
+ 
+ mod artifacts;
++mod automations;
+ mod billing;
+ mod completions;
+ pub(in crate::server) mod events;
+@@ -148,6 +149,7 @@ pub(super) fn real_routes() -> Router<Arc<AppState>> {
+         .route("/insights/execute", post(not_implemented))
+         .route("/insights/history", get(not_implemented))
+         .merge(runs::routes())
++        .merge(automations::routes())
+         .merge(events::routes())
+         .merge(billing::routes())
+         .merge(pull_requests::routes())
+diff --git a/lib/crates/fabro-server/src/server/handler/pair.rs b/lib/crates/fabro-server/src/server/handler/pair.rs
+index e43f4e6f8..833f3f3e5 100644
+--- a/lib/crates/fabro-server/src/server/handler/pair.rs
++++ b/lib/crates/fabro-server/src/server/handler/pair.rs
+@@ -1027,6 +1027,7 @@ mod tests {
+             manifest_blob: None,
+             git: None,
+             fork_source_ref: None,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+diff --git a/lib/crates/fabro-server/src/server/handler/sessions.rs b/lib/crates/fabro-server/src/server/handler/sessions.rs
+index f87184289..01722b1c5 100644
+--- a/lib/crates/fabro-server/src/server/handler/sessions.rs
++++ b/lib/crates/fabro-server/src/server/handler/sessions.rs
+@@ -1697,6 +1697,7 @@ mod tests {
+             workflow_slug: None,
+             source_directory: None,
+             labels: HashMap::default(),
++            automation: None,
+             provenance: None,
+             manifest_blob: None,
+             definition_blob: None,
+diff --git a/lib/crates/fabro-server/src/server/tests.rs b/lib/crates/fabro-server/src/server/tests.rs
+index 34a991f0f..243c19dbc 100644
+--- a/lib/crates/fabro-server/src/server/tests.rs
++++ b/lib/crates/fabro-server/src/server/tests.rs
+@@ -127,6 +127,18 @@ methods = ["dev-token"]
+     )
+ }
+ 
++#[tokio::test]
++async fn automations_store_starts_empty_when_directory_is_absent() {
++    let temp = tempfile::tempdir().expect("tempdir");
++    let active_config_path = temp.path().join("settings.toml");
++
++    let state = TestAppStateBuilder::new()
++        .active_config_path(active_config_path)
++        .build();
++
++    assert!(state.automation_store().list().await.is_empty());
++}
++
+ async fn body_json(body: Body) -> serde_json::Value {
+     let bytes = to_bytes(body, usize::MAX).await.unwrap();
+     serde_json::from_slice(&bytes).unwrap()
+@@ -3149,6 +3161,7 @@ async fn append_default_run_created(run_store: &fabro_store::RunDatabase, run_id
+         manifest_blob: None,
+         git: None,
+         fork_source_ref: None,
++        automation: None,
+         retried_from: None,
+         parent_id: None,
+         web_url: None,
+@@ -3194,6 +3207,7 @@ async fn create_slack_notification_run(
+         manifest_blob: None,
+         git: None,
+         fork_source_ref: None,
++        automation: None,
+         retried_from: None,
+         parent_id: None,
+         web_url: None,
+@@ -4199,6 +4213,7 @@ async fn list_run_stages_distinguishes_visits() {
+             manifest_blob: None,
+             git: None,
+             fork_source_ref: None,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+@@ -5183,6 +5198,7 @@ async fn create_completed_run_ready_for_pull_request(
+         source_directory: Some("/tmp/project".to_string()),
+         git: git.clone(),
+         labels: HashMap::new(),
++        automation: None,
+         provenance: None,
+         manifest_blob: None,
+         definition_blob: None,
+@@ -5206,6 +5222,7 @@ async fn create_completed_run_ready_for_pull_request(
+             manifest_blob: None,
+             git,
+             fork_source_ref: None,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+@@ -10837,6 +10854,7 @@ async fn create_preserved_local_sandbox_run(state: &Arc<AppState>, run_id: RunId
+             manifest_blob: None,
+             git: None,
+             fork_source_ref: None,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+@@ -11586,6 +11604,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
+             manifest_blob: None,
+             git: None,
+             fork_source_ref: None,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+diff --git a/lib/crates/fabro-server/tests/it/api/automations.rs b/lib/crates/fabro-server/tests/it/api/automations.rs
+new file mode 100644
+index 000000000..69352a729
+--- /dev/null
++++ b/lib/crates/fabro-server/tests/it/api/automations.rs
+@@ -0,0 +1,270 @@
++use axum::body::Body;
++use axum::http::{Request, StatusCode, header};
++use tower::ServiceExt;
++
++use crate::helpers::{api, checked_response, response_json};
++
++fn automation_request() -> serde_json::Value {
++    serde_json::json!({
++        "id": "nightly-deps",
++        "name": "Nightly dependency update",
++        "description": "Open a PR for dependency updates.",
++        "target": {
++            "repository": "fabro-sh/fabro",
++            "ref": "main",
++            "workflow": "dependency-update"
++        },
++        "triggers": [
++            { "id": "api", "type": "api", "enabled": true },
++            { "id": "nightly", "type": "schedule", "enabled": true, "expression": "0 3 * * *" }
++        ]
++    })
++}
++
++fn replace_request(name: &str) -> serde_json::Value {
++    serde_json::json!({
++        "name": name,
++        "description": "Open a PR for dependency updates.",
++        "enabled": true,
++        "target": {
++            "repository": "fabro-sh/fabro",
++            "ref": "main",
++            "workflow": "dependency-update"
++        },
++        "triggers": [
++            { "id": "api", "type": "api", "enabled": true }
++        ]
++    })
++}
++
++fn test_app() -> (axum::Router, tempfile::TempDir) {
++    let temp = tempfile::tempdir().expect("tempdir");
++    let active_config_path = temp.path().join("settings.toml");
++    let state = fabro_server::test_support::TestAppStateBuilder::new()
++        .active_config_path(active_config_path)
++        .build();
++    (fabro_server::test_support::build_test_router(state), temp)
++}
++
++async fn json_request(
++    app: &axum::Router,
++    method: &str,
++    path: &str,
++    body: serde_json::Value,
++    if_match: Option<&str>,
++    expected: StatusCode,
++) -> serde_json::Value {
++    let mut builder = Request::builder()
++        .method(method)
++        .uri(api(path))
++        .header(header::CONTENT_TYPE, "application/json");
++    if let Some(revision) = if_match {
++        builder = builder.header(header::IF_MATCH, revision);
++    }
++    let request = builder
++        .body(Body::from(body.to_string()))
++        .expect("request should build");
++    response_json(
++        app.clone().oneshot(request).await.unwrap(),
++        expected,
++        format!("{method} /api/v1{path}"),
++    )
++    .await
++}
++
++async fn empty_request(
++    app: &axum::Router,
++    method: &str,
++    path: &str,
++    if_match: Option<&str>,
++    expected: StatusCode,
++) -> axum::response::Response {
++    let mut builder = Request::builder().method(method).uri(api(path));
++    if let Some(revision) = if_match {
++        builder = builder.header(header::IF_MATCH, revision);
++    }
++    let request = builder.body(Body::empty()).expect("request should build");
++    checked_response(
++        app.clone().oneshot(request).await.unwrap(),
++        expected,
++        format!("{method} /api/v1{path}"),
++    )
++    .await
++}
++
++#[tokio::test]
++async fn automations_crud_lifecycle_persists_files_and_etags() {
++    let (app, temp) = test_app();
++
++    let list = empty_request(&app, "GET", "/automations", None, StatusCode::OK).await;
++    let list = crate::helpers::body_json(list.into_body()).await;
++    assert_eq!(list, serde_json::json!({ "data": [], "meta": { "total": 0 } }));
++
++    let created = json_request(
++        &app,
++        "POST",
++        "/automations",
++        automation_request(),
++        None,
++        StatusCode::CREATED,
++    )
++    .await;
++    assert_eq!(created["id"], "nightly-deps");
++    assert_eq!(created["enabled"], true);
++    assert_eq!(created["triggers"][0]["type"], "api");
++    assert!(temp.path().join("automations/nightly-deps.toml").is_file());
++
++    let duplicate = json_request(
++        &app,
++        "POST",
++        "/automations",
++        automation_request(),
++        None,
++        StatusCode::CONFLICT,
++    )
++    .await;
++    assert_eq!(duplicate["errors"][0]["status"], "409");
++
++    let get_response = empty_request(&app, "GET", "/automations/nightly-deps", None, StatusCode::OK).await;
++    let etag = get_response
++        .headers()
++        .get(header::ETAG)
++        .expect("ETag header")
++        .to_str()
++        .expect("ETag should be valid")
++        .to_string();
++    let fetched = crate::helpers::body_json(get_response.into_body()).await;
++    assert_eq!(fetched["revision"], created["revision"]);
++
++    let replaced = json_request(
++        &app,
++        "PUT",
++        "/automations/nightly-deps",
++        replace_request("Renamed automation"),
++        Some(&etag),
++        StatusCode::OK,
++    )
++    .await;
++    assert_eq!(replaced["name"], "Renamed automation");
++    assert_ne!(replaced["revision"], created["revision"]);
++
++    let stale = json_request(
++        &app,
++        "PUT",
++        "/automations/nightly-deps",
++        replace_request("Stale update"),
++        Some(&etag),
++        StatusCode::CONFLICT,
++    )
++    .await;
++    assert_eq!(stale["errors"][0]["status"], "409");
++
++    let missing_if_match = json_request(
++        &app,
++        "PATCH",
++        "/automations/nightly-deps",
++        serde_json::json!({ "enabled": false }),
++        None,
++        StatusCode::PRECONDITION_REQUIRED,
++    )
++    .await;
++    assert_eq!(missing_if_match["errors"][0]["status"], "428");
++
++    let current_etag = format!("\"{}\"", replaced["revision"].as_str().unwrap());
++    let patched = json_request(
++        &app,
++        "PATCH",
++        "/automations/nightly-deps",
++        serde_json::json!({ "description": null }),
++        Some(&current_etag),
++        StatusCode::OK,
++    )
++    .await;
++    assert_eq!(patched["description"], serde_json::Value::Null);
++    assert_eq!(patched["name"], "Renamed automation");
++
++    let delete_etag = format!("\"{}\"", patched["revision"].as_str().unwrap());
++    empty_request(
++        &app,
++        "DELETE",
++        "/automations/nightly-deps",
++        Some(&delete_etag),
++        StatusCode::NO_CONTENT,
++    )
++    .await;
++    assert!(!temp.path().join("automations/nightly-deps.toml").exists());
++
++    empty_request(&app, "GET", "/automations/nightly-deps", None, StatusCode::NOT_FOUND).await;
++}
++
++#[tokio::test]
++async fn automations_validation_errors_return_422() {
++    let (app, _temp) = test_app();
++
++    let cases = [
++        (
++            "invalid trigger id",
++            serde_json::json!({
++                "id": "nightly-deps",
++                "name": "Nightly dependency update",
++                "target": { "repository": "fabro-sh/fabro", "ref": "main", "workflow": "dependency-update" },
++                "triggers": [{ "id": "Bad", "type": "api", "enabled": true }]
++            }),
++        ),
++        (
++            "duplicate trigger ids",
++            serde_json::json!({
++                "id": "nightly-deps",
++                "name": "Nightly dependency update",
++                "target": { "repository": "fabro-sh/fabro", "ref": "main", "workflow": "dependency-update" },
++                "triggers": [
++                    { "id": "api", "type": "api", "enabled": true },
++                    { "id": "api", "type": "schedule", "enabled": true, "expression": "0 3 * * *" }
++                ]
++            }),
++        ),
++        (
++            "two api triggers",
++            serde_json::json!({
++                "id": "nightly-deps",
++                "name": "Nightly dependency update",
++                "target": { "repository": "fabro-sh/fabro", "ref": "main", "workflow": "dependency-update" },
++                "triggers": [
++                    { "id": "api", "type": "api", "enabled": true },
++                    { "id": "api2", "type": "api", "enabled": true }
++                ]
++            }),
++        ),
++        (
++            "invalid schedule expression",
++            serde_json::json!({
++                "id": "nightly-deps",
++                "name": "Nightly dependency update",
++                "target": { "repository": "fabro-sh/fabro", "ref": "main", "workflow": "dependency-update" },
++                "triggers": [{ "id": "nightly", "type": "schedule", "enabled": true, "expression": "not a cron" }]
++            }),
++        ),
++        (
++            "unknown trigger type",
++            serde_json::json!({
++                "id": "nightly-deps",
++                "name": "Nightly dependency update",
++                "target": { "repository": "fabro-sh/fabro", "ref": "main", "workflow": "dependency-update" },
++                "triggers": [{ "id": "api", "type": "event", "enabled": true }]
++            }),
++        ),
++    ];
++
++    for (name, body) in cases {
++        let response = json_request(
++            &app,
++            "POST",
++            "/automations",
++            body,
++            None,
++            StatusCode::UNPROCESSABLE_ENTITY,
++        )
++        .await;
++        assert_eq!(response["errors"][0]["status"], "422", "{name}");
++    }
++}
+diff --git a/lib/crates/fabro-server/tests/it/api/mod.rs b/lib/crates/fabro-server/tests/it/api/mod.rs
+index 353b4ec95..a0207ccc7 100644
+--- a/lib/crates/fabro-server/tests/it/api/mod.rs
++++ b/lib/crates/fabro-server/tests/it/api/mod.rs
+@@ -1,4 +1,5 @@
+ mod auth_sessions;
++mod automations;
+ mod cli_auth_token;
+ mod docs;
+ mod events;
+diff --git a/lib/crates/fabro-server/tests/it/api/run_files.rs b/lib/crates/fabro-server/tests/it/api/run_files.rs
+index e820b00f9..10d163026 100644
+--- a/lib/crates/fabro-server/tests/it/api/run_files.rs
++++ b/lib/crates/fabro-server/tests/it/api/run_files.rs
+@@ -72,6 +72,7 @@ async fn append_completed_run_with_final_patch(
+         manifest_blob:    None,
+         git:              None,
+         fork_source_ref:  None,
++        automation:       None,
+         retried_from:     None,
+         parent_id:        None,
+         web_url:          None,
+diff --git a/lib/crates/fabro-store/src/run_state.rs b/lib/crates/fabro-store/src/run_state.rs
+index a2e38e843..59ea66c3e 100644
+--- a/lib/crates/fabro-store/src/run_state.rs
++++ b/lib/crates/fabro-store/src/run_state.rs
+@@ -781,6 +781,7 @@ fn projection_from_created(event: &EventEnvelope) -> Result<RunProjection> {
+         workflow_slug: props.workflow_slug.clone(),
+         source_directory: props.source_directory.clone(),
+         labels,
++        automation: props.automation.clone(),
+         provenance: props.provenance.clone(),
+         manifest_blob: props.manifest_blob,
+         definition_blob: None,
+@@ -937,7 +938,7 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> Run {
+             edge_count: i64::try_from(state.spec.graph.edges.len())
+                 .expect("graph edge count should fit in i64"),
+         },
+-        automation: None,
++        automation: state.spec.automation.clone(),
+         repository: Some(RepositoryRef::from_origin_and_source(
+             repo_origin_url,
+             source_directory.as_deref(),
+@@ -1248,7 +1249,7 @@ mod tests {
+         StagePromptProps, StageRetryingProps, StageStartedProps,
+     };
+     use fabro_types::{
+-        AgentBackend, BilledModelUsage, BilledTokenCounts, BlockedReason, Checkpoint,
++        AgentBackend, AutomationRef, BilledModelUsage, BilledTokenCounts, BlockedReason, Checkpoint,
+         CheckpointRecord, CommandTermination, EventBody, FailureCategory, FailureDetail,
+         FailureReason, Graph, McpServerStatus, Outcome, PendingReason, PermissionLevel,
+         PullRequestLink, QuestionType, ReasoningEffort, RunApprovalState, RunBlobId,
+@@ -1337,6 +1338,7 @@ mod tests {
+             workflow_slug:    None,
+             source_directory: None,
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -1394,6 +1396,38 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn run_created_automation_projects_into_summary() {
++        let event = test_raw_event(
++            1,
++            "run.created",
++            &json!({
++                "settings": WorkflowSettings::default(),
++                "graph": Graph::new("test"),
++                "labels": {},
++                "automation": {
++                    "id": "nightly-deps",
++                    "name": "Nightly dependency update",
++                    "trigger_id": "api"
++                },
++                "run_dir": "/tmp/run"
++            }),
++            None,
++        );
++
++        let projection = RunProjection::apply_events(&[event]).unwrap();
++        let expected = Some(AutomationRef {
++            id:         "nightly-deps".to_string(),
++            name:       Some("Nightly dependency update".to_string()),
++            trigger_id: Some("api".to_string()),
++        });
++        assert_eq!(projection.spec.automation, expected);
++        assert_eq!(
++            build_summary(&projection, &fixtures::RUN_1).automation,
++            expected
++        );
++    }
++
+     fn test_raw_event(
+         seq: u32,
+         event: &str,
+@@ -2606,6 +2640,7 @@ mod tests {
+             source_directory: Some("/tmp/repo".to_string()),
+             git:              None,
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -2631,6 +2666,7 @@ mod tests {
+             source_directory: Some("/tmp/repo".to_string()),
+             git:              None,
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+diff --git a/lib/crates/fabro-store/src/slate/mod.rs b/lib/crates/fabro-store/src/slate/mod.rs
+index 784868ace..d4ccd2d6b 100644
+--- a/lib/crates/fabro-store/src/slate/mod.rs
++++ b/lib/crates/fabro-store/src/slate/mod.rs
+@@ -541,6 +541,7 @@ mod tests {
+             workflow_slug: Some("night-sky".to_string()),
+             source_directory: Some(format!("/tmp/{label}")),
+             labels: std::collections::HashMap::from([("team".to_string(), "infra".to_string())]),
++            automation: None,
+             provenance: None,
+             manifest_blob: None,
+             definition_blob: None,
+diff --git a/lib/crates/fabro-store/tests/serializable_projection.rs b/lib/crates/fabro-store/tests/serializable_projection.rs
+index 2707ca353..265e72ad0 100644
+--- a/lib/crates/fabro-store/tests/serializable_projection.rs
++++ b/lib/crates/fabro-store/tests/serializable_projection.rs
+@@ -21,6 +21,7 @@ fn sample_run_spec() -> RunSpec {
+         workflow_slug:    Some("demo".to_string()),
+         source_directory: Some("/tmp/project".to_string()),
+         labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
++        automation:       None,
+         provenance:       None,
+         manifest_blob:    None,
+         definition_blob:  None,
+diff --git a/lib/crates/fabro-types/src/run.rs b/lib/crates/fabro-types/src/run.rs
+index 269db43ee..2df593ad7 100644
+--- a/lib/crates/fabro-types/src/run.rs
++++ b/lib/crates/fabro-types/src/run.rs
+@@ -2,6 +2,7 @@ use std::collections::HashMap;
+ 
+ use serde::{Deserialize, Serialize};
+ 
++use crate::AutomationRef;
+ use crate::WorkflowSettings;
+ use crate::graph::Graph;
+ use crate::principal::Principal;
+@@ -91,6 +92,8 @@ pub struct RunSpec {
+     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+     pub labels:           HashMap<String, String>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub automation:       Option<AutomationRef>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub provenance:       Option<RunProvenance>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub manifest_blob:    Option<RunBlobId>,
+diff --git a/lib/crates/fabro-types/src/run_event/run.rs b/lib/crates/fabro-types/src/run_event/run.rs
+index fa189171f..2230d810a 100644
+--- a/lib/crates/fabro-types/src/run_event/run.rs
++++ b/lib/crates/fabro-types/src/run_event/run.rs
+@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
+ use super::{BilledTokenCounts, ExecOutputTail, RunNoticeLevel};
+ use crate::status::{BlockedReason, PendingReason, SuccessReason};
+ use crate::{
+-    DiffSummary, ForkSourceRef, GitContext, Graph, PairId, PairTarget, RunBlobId, RunControlAction,
+-    RunFailure, RunId, RunProvenance, RunTiming, WorkflowSettings,
++    AutomationRef, DiffSummary, ForkSourceRef, GitContext, Graph, PairId, PairTarget, RunBlobId,
++    RunControlAction, RunFailure, RunId, RunProvenance, RunTiming, WorkflowSettings,
+ };
+ 
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+@@ -21,6 +21,8 @@ pub struct RunCreatedProps {
+     pub workflow_config:  Option<String>,
+     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+     pub labels:           BTreeMap<String, String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub automation:       Option<AutomationRef>,
+     pub run_dir:          String,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub source_directory: Option<String>,
+diff --git a/lib/crates/fabro-types/src/run_projection.rs b/lib/crates/fabro-types/src/run_projection.rs
+index 3bba6d43e..7974d1ae7 100644
+--- a/lib/crates/fabro-types/src/run_projection.rs
++++ b/lib/crates/fabro-types/src/run_projection.rs
+@@ -698,6 +698,7 @@ mod title_tests {
+             workflow_slug: None,
+             source_directory: None,
+             labels: HashMap::new(),
++            automation: None,
+             provenance: None,
+             manifest_blob: None,
+             definition_blob: None,
+@@ -767,6 +768,7 @@ mod iter_stages_tests {
+                 workflow_slug:    None,
+                 source_directory: None,
+                 labels:           HashMap::default(),
++                automation:       None,
+                 provenance:       None,
+                 manifest_blob:    None,
+                 definition_blob:  None,
+diff --git a/lib/crates/fabro-types/src/run_summary.rs b/lib/crates/fabro-types/src/run_summary.rs
+index fb5e7f576..a81f77099 100644
+--- a/lib/crates/fabro-types/src/run_summary.rs
++++ b/lib/crates/fabro-types/src/run_summary.rs
+@@ -104,9 +104,11 @@ pub struct WorkflowRef {
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct AutomationRef {
+-    pub id:   String,
++    pub id:         String,
+     #[serde(default)]
+-    pub name: Option<String>,
++    pub name:       Option<String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub trigger_id: Option<String>,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+diff --git a/lib/crates/fabro-types/tests/run_event_serde.rs b/lib/crates/fabro-types/tests/run_event_serde.rs
+index 8f2df1972..9a1cd7e48 100644
+--- a/lib/crates/fabro-types/tests/run_event_serde.rs
++++ b/lib/crates/fabro-types/tests/run_event_serde.rs
+@@ -23,6 +23,7 @@ fn run_created_props_round_trip_templated_settings() {
+         workflow_source:  Some("digraph Ship { start -> exit }".to_string()),
+         workflow_config:  Some("[run]\ngoal = \"Ship {{ env.TASK }}\"".to_string()),
+         labels:           BTreeMap::from([("team".to_string(), "platform".to_string())]),
++        automation:       None,
+         run_dir:          "/tmp/run".to_string(),
+         source_directory: Some("/Users/client/project".to_string()),
+         workflow_slug:    Some("demo".to_string()),
+@@ -85,6 +86,7 @@ fn run_created_props_omits_web_url_when_absent() {
+         workflow_source:  None,
+         workflow_config:  None,
+         labels:           BTreeMap::new(),
++        automation:       None,
+         run_dir:          "/tmp/run".to_string(),
+         source_directory: None,
+         workflow_slug:    None,
+diff --git a/lib/crates/fabro-types/tests/run_spec_methods.rs b/lib/crates/fabro-types/tests/run_spec_methods.rs
+index f5e8cf25f..9608c133c 100644
+--- a/lib/crates/fabro-types/tests/run_spec_methods.rs
++++ b/lib/crates/fabro-types/tests/run_spec_methods.rs
+@@ -26,6 +26,7 @@ fn sample_run_spec() -> RunSpec {
+         workflow_slug: Some("demo".to_string()),
+         source_directory: Some("/Users/client/project".to_string()),
+         labels: HashMap::from([("team".to_string(), "platform".to_string())]),
++        automation: None,
+         provenance: None,
+         manifest_blob: None,
+         definition_blob: None,
+diff --git a/lib/crates/fabro-types/tests/run_spec_serde.rs b/lib/crates/fabro-types/tests/run_spec_serde.rs
+index f6278ff34..8e71ec4d4 100644
+--- a/lib/crates/fabro-types/tests/run_spec_serde.rs
++++ b/lib/crates/fabro-types/tests/run_spec_serde.rs
+@@ -22,6 +22,7 @@ fn run_spec_round_trips_templated_settings() {
+         workflow_slug:    Some("demo".to_string()),
+         source_directory: Some("/Users/client/project".to_string()),
+         labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
++        automation:       None,
+         provenance:       None,
+         manifest_blob:    None,
+         definition_blob:  None,
+diff --git a/lib/crates/fabro-workflow/src/billing_rollup.rs b/lib/crates/fabro-workflow/src/billing_rollup.rs
+index 0e909ce08..e7bcbf643 100644
+--- a/lib/crates/fabro-workflow/src/billing_rollup.rs
++++ b/lib/crates/fabro-workflow/src/billing_rollup.rs
+@@ -372,6 +372,7 @@ mod tests {
+             workflow_slug: None,
+             source_directory: None,
+             labels: HashMap::new(),
++            automation: None,
+             provenance: None,
+             manifest_blob: None,
+             definition_blob: None,
+diff --git a/lib/crates/fabro-workflow/src/event/convert.rs b/lib/crates/fabro-workflow/src/event/convert.rs
+index 2e2014dc1..4d4947af6 100644
+--- a/lib/crates/fabro-workflow/src/event/convert.rs
++++ b/lib/crates/fabro-workflow/src/event/convert.rs
+@@ -39,6 +39,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
+             manifest_blob,
+             git,
+             fork_source_ref,
++            automation,
+             retried_from,
+             parent_id,
+             web_url,
+@@ -59,6 +60,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
+             manifest_blob:    *manifest_blob,
+             git:              git.clone(),
+             fork_source_ref:  fork_source_ref.clone(),
++            automation:       automation.clone(),
+             retried_from:     *retried_from,
+             parent_id:        *parent_id,
+             web_url:          web_url.clone(),
+@@ -2439,6 +2441,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/event/events.rs b/lib/crates/fabro-workflow/src/event/events.rs
+index a38b184bb..0af7b7838 100644
+--- a/lib/crates/fabro-workflow/src/event/events.rs
++++ b/lib/crates/fabro-workflow/src/event/events.rs
+@@ -1,7 +1,7 @@
+ use std::collections::BTreeMap;
+ 
+ use ::fabro_types::{
+-    BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
++    AutomationRef, BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
+     ForkSourceRef, GitContext, PairId, PairMessageId, PairSystemMessageKind, PairTarget,
+     ParallelBranchId, PendingReason, PermissionLevel, Principal, PullRequestLink, RunBlobId,
+     RunFailure, RunId, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason, RunProvenance,
+@@ -48,6 +48,8 @@ pub enum Event {
+         #[serde(default, skip_serializing_if = "Option::is_none")]
+         fork_source_ref:  Option<ForkSourceRef>,
+         #[serde(default, skip_serializing_if = "Option::is_none")]
++        automation:       Option<AutomationRef>,
++        #[serde(default, skip_serializing_if = "Option::is_none")]
+         retried_from:     Option<RunId>,
+         #[serde(default, skip_serializing_if = "Option::is_none")]
+         parent_id:        Option<RunId>,
+diff --git a/lib/crates/fabro-workflow/src/event/sink.rs b/lib/crates/fabro-workflow/src/event/sink.rs
+index 967f0570a..a84163171 100644
+--- a/lib/crates/fabro-workflow/src/event/sink.rs
++++ b/lib/crates/fabro-workflow/src/event/sink.rs
+@@ -247,6 +247,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/git.rs b/lib/crates/fabro-workflow/src/git.rs
+index f48683dd0..4509e7e95 100644
+--- a/lib/crates/fabro-workflow/src/git.rs
++++ b/lib/crates/fabro-workflow/src/git.rs
+@@ -472,6 +472,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/handler/agent.rs b/lib/crates/fabro-workflow/src/handler/agent.rs
+index 3290ca85a..3e124bca2 100644
+--- a/lib/crates/fabro-workflow/src/handler/agent.rs
++++ b/lib/crates/fabro-workflow/src/handler/agent.rs
+@@ -482,6 +482,7 @@ mod tests {
+                 manifest_blob:    None,
+                 git:              None,
+                 fork_source_ref:  None,
++                automation:       None,
+                 retried_from:     None,
+                 parent_id:        None,
+                 web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/handler/command.rs b/lib/crates/fabro-workflow/src/handler/command.rs
+index 63922632a..a94392efa 100644
+--- a/lib/crates/fabro-workflow/src/handler/command.rs
++++ b/lib/crates/fabro-workflow/src/handler/command.rs
+@@ -253,6 +253,7 @@ mod tests {
+                     workflow_slug:    None,
+                     source_directory: None,
+                     labels:           std::collections::HashMap::default(),
++                    automation:       None,
+                     provenance:       None,
+                     manifest_blob:    None,
+                     definition_blob:  None,
+@@ -357,6 +358,7 @@ mod tests {
+                 manifest_blob:    None,
+                 git:              None,
+                 fork_source_ref:  None,
++                automation:       None,
+                 retried_from:     None,
+                 parent_id:        None,
+                 web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/handler/parallel.rs b/lib/crates/fabro-workflow/src/handler/parallel.rs
+index 7c85042cc..da96e4d5e 100644
+--- a/lib/crates/fabro-workflow/src/handler/parallel.rs
++++ b/lib/crates/fabro-workflow/src/handler/parallel.rs
+@@ -731,6 +731,7 @@ mod tests {
+                 manifest_blob:    None,
+                 git:              None,
+                 fork_source_ref:  None,
++                automation:       None,
+                 retried_from:     None,
+                 parent_id:        None,
+                 web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/handler/prompt.rs b/lib/crates/fabro-workflow/src/handler/prompt.rs
+index 27b9fa524..dcb7d2089 100644
+--- a/lib/crates/fabro-workflow/src/handler/prompt.rs
++++ b/lib/crates/fabro-workflow/src/handler/prompt.rs
+@@ -286,6 +286,7 @@ mod tests {
+                 manifest_blob:    None,
+                 git:              None,
+                 fork_source_ref:  None,
++                automation:       None,
+                 retried_from:     None,
+                 parent_id:        None,
+                 web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/lifecycle/git.rs b/lib/crates/fabro-workflow/src/lifecycle/git.rs
+index bc34009d9..357d0e152 100644
+--- a/lib/crates/fabro-workflow/src/lifecycle/git.rs
++++ b/lib/crates/fabro-workflow/src/lifecycle/git.rs
+@@ -730,6 +730,7 @@ mod tests {
+             manifest_blob: None,
+             git: None,
+             fork_source_ref: None,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+diff --git a/lib/crates/fabro-workflow/src/operations/archive.rs b/lib/crates/fabro-workflow/src/operations/archive.rs
+index bb3693398..10de7cb65 100644
+--- a/lib/crates/fabro-workflow/src/operations/archive.rs
++++ b/lib/crates/fabro-workflow/src/operations/archive.rs
+@@ -229,6 +229,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/operations/create.rs b/lib/crates/fabro-workflow/src/operations/create.rs
+index 0460a1874..b10aee385 100644
+--- a/lib/crates/fabro-workflow/src/operations/create.rs
++++ b/lib/crates/fabro-workflow/src/operations/create.rs
+@@ -13,7 +13,7 @@ use fabro_graphviz::graph::{AttrValue, Graph};
+ use fabro_model::{Catalog, ProviderId};
+ use fabro_store::Database;
+ use fabro_types::{
+-    ForkSourceRef, GitContext, ManifestPath, RunId, RunProvenance, WorkflowSettings,
++    AutomationRef, ForkSourceRef, GitContext, ManifestPath, RunId, RunProvenance, WorkflowSettings,
+ };
+ use fabro_util::json::normalize_json_value;
+ use tokio::task::spawn_blocking;
+@@ -44,6 +44,7 @@ pub struct CreateRunInput {
+     pub git: Option<GitContext>,
+     pub fork_source_ref: Option<ForkSourceRef>,
+     pub parent_id: Option<RunId>,
++    pub automation: Option<AutomationRef>,
+     pub provenance: Option<RunProvenance>,
+     pub configured_providers: Vec<ProviderId>,
+     /// Public URL where this run can be viewed in the web UI, when the server
+@@ -70,6 +71,7 @@ struct PersistCreateOptions {
+     source_directory:     Option<String>,
+     git:                  Option<GitContext>,
+     fork_source_ref:      Option<ForkSourceRef>,
++    automation:           Option<AutomationRef>,
+     provenance:           Option<RunProvenance>,
+     configured_providers: Vec<ProviderId>,
+     catalog:              Arc<Catalog>,
+@@ -105,6 +107,7 @@ pub async fn create(
+         git,
+         fork_source_ref,
+         parent_id,
++        automation,
+         provenance,
+         configured_providers,
+         web_url,
+@@ -146,6 +149,7 @@ pub async fn create(
+                 source_directory,
+                 git,
+                 fork_source_ref,
++                automation,
+                 provenance,
+                 configured_providers,
+                 catalog,
+@@ -245,6 +249,7 @@ async fn persist_created_run(
+             manifest_blob,
+             git: record.git.clone(),
+             fork_source_ref: record.fork_source_ref.clone(),
++            automation: record.automation.clone(),
+             retried_from: None,
+             parent_id,
+             web_url,
+@@ -358,6 +363,7 @@ fn persist_validated(
+         source_directory,
+         git,
+         fork_source_ref,
++        automation,
+         provenance,
+         configured_providers,
+         catalog,
+@@ -386,6 +392,7 @@ fn persist_validated(
+         definition_blob: None,
+         git,
+         fork_source_ref,
++        automation,
+     };
+ 
+     pipeline::persist(validated, PersistOptions { run_dir, run_spec })
+@@ -1099,6 +1106,7 @@ mod tests {
+                 git: None,
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+@@ -1166,6 +1174,7 @@ mod tests {
+                 }),
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+@@ -1277,6 +1286,7 @@ mod tests {
+                 git: None,
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+@@ -1322,6 +1332,7 @@ mod tests {
+                 }),
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+@@ -1389,6 +1400,7 @@ mod tests {
+                 git: None,
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+@@ -1435,6 +1447,7 @@ mod tests {
+                 git: None,
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: Some(fabro_types::RunProvenance {
+                     server:  Some(fabro_types::RunServerProvenance {
+                         version: "0.9.0".to_string(),
+diff --git a/lib/crates/fabro-workflow/src/operations/fork.rs b/lib/crates/fabro-workflow/src/operations/fork.rs
+index 513975d71..4fba0fef2 100644
+--- a/lib/crates/fabro-workflow/src/operations/fork.rs
++++ b/lib/crates/fabro-workflow/src/operations/fork.rs
+@@ -166,6 +166,7 @@ async fn persist_forked_run(
+         manifest_blob:    spec.manifest_blob,
+         git:              spec.git.clone(),
+         fork_source_ref:  spec.fork_source_ref.clone(),
++        automation:       spec.automation.clone(),
+         retried_from:     None,
+         parent_id:        None,
+         web_url:          None,
+@@ -391,6 +392,7 @@ mod tests {
+                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+             }),
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/operations/retry.rs b/lib/crates/fabro-workflow/src/operations/retry.rs
+index 8527d2728..39e7eb134 100644
+--- a/lib/crates/fabro-workflow/src/operations/retry.rs
++++ b/lib/crates/fabro-workflow/src/operations/retry.rs
+@@ -55,6 +55,7 @@ pub async fn retry_run(
+         definition_blob,
+         git,
+         fork_source_ref,
++        automation,
+     } = source.spec;
+ 
+     let settings = serde_json::to_value(&settings).map_err(|err| Error::engine(err.to_string()))?;
+@@ -81,6 +82,7 @@ pub async fn retry_run(
+         manifest_blob,
+         git,
+         fork_source_ref,
++        automation,
+         retried_from: Some(source_run_id),
+         parent_id,
+         web_url: input.web_url.clone(),
+@@ -196,6 +198,7 @@ mod tests {
+             manifest_blob,
+             git: Some(git_context()),
+             fork_source_ref,
++            automation: None,
+             retried_from: None,
+             parent_id: None,
+             web_url: None,
+diff --git a/lib/crates/fabro-workflow/src/operations/start.rs b/lib/crates/fabro-workflow/src/operations/start.rs
+index 66f1a5fc4..188661e64 100644
+--- a/lib/crates/fabro-workflow/src/operations/start.rs
++++ b/lib/crates/fabro-workflow/src/operations/start.rs
+@@ -1334,6 +1334,7 @@ reasoning = false
+                 git: None,
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+@@ -1527,6 +1528,7 @@ reasoning = false
+                 git: None,
+                 fork_source_ref: None,
+                 parent_id: None,
++                automation: None,
+                 provenance: None,
+                 configured_providers: Vec::new(),
+                 web_url: None,
+diff --git a/lib/crates/fabro-workflow/src/operations/timeline.rs b/lib/crates/fabro-workflow/src/operations/timeline.rs
+index 2170dc28a..54d9d5154 100644
+--- a/lib/crates/fabro-workflow/src/operations/timeline.rs
++++ b/lib/crates/fabro-workflow/src/operations/timeline.rs
+@@ -247,6 +247,7 @@ mod tests {
+                 workflow_slug:    None,
+                 source_directory: None,
+                 labels:           HashMap::new(),
++                automation:       None,
+                 provenance:       None,
+                 manifest_blob:    None,
+                 definition_blob:  None,
+diff --git a/lib/crates/fabro-workflow/src/pipeline/execute/tests.rs b/lib/crates/fabro-workflow/src/pipeline/execute/tests.rs
+index cef35cc39..59d0ccd93 100644
+--- a/lib/crates/fabro-workflow/src/pipeline/execute/tests.rs
++++ b/lib/crates/fabro-workflow/src/pipeline/execute/tests.rs
+@@ -164,6 +164,7 @@ fn persisted_workflow(graph: Graph, source: String, run_dir: &Path, run_id: RunI
+                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+             }),
+             labels: HashMap::new(),
++            automation: None,
+             provenance: None,
+             manifest_blob: None,
+             definition_blob: None,
+@@ -211,6 +212,7 @@ async fn seed_created_and_starting(
+         manifest_blob:    None,
+         git:              run_options.pre_run_git.clone(),
+         fork_source_ref:  run_options.fork_source_ref.clone(),
++        automation:       None,
+         retried_from:     None,
+         parent_id:        None,
+         web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/pipeline/finalize.rs b/lib/crates/fabro-workflow/src/pipeline/finalize.rs
+index 53692daab..fa80f6f9d 100644
+--- a/lib/crates/fabro-workflow/src/pipeline/finalize.rs
++++ b/lib/crates/fabro-workflow/src/pipeline/finalize.rs
+@@ -742,6 +742,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+@@ -854,6 +855,7 @@ mod tests {
+                 workflow_slug:    None,
+                 source_directory: None,
+                 labels:           HashMap::new(),
++                automation:       None,
+                 provenance:       None,
+                 manifest_blob:    None,
+                 definition_blob:  None,
+diff --git a/lib/crates/fabro-workflow/src/pipeline/initialize.rs b/lib/crates/fabro-workflow/src/pipeline/initialize.rs
+index c620c0151..029e988b7 100644
+--- a/lib/crates/fabro-workflow/src/pipeline/initialize.rs
++++ b/lib/crates/fabro-workflow/src/pipeline/initialize.rs
+@@ -863,6 +863,7 @@ mod tests {
+                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+                 }),
+                 labels: HashMap::new(),
++                automation: None,
+                 provenance: None,
+                 manifest_blob: None,
+                 definition_blob: None,
+diff --git a/lib/crates/fabro-workflow/src/pipeline/persist.rs b/lib/crates/fabro-workflow/src/pipeline/persist.rs
+index ee6150696..6643bfdd4 100644
+--- a/lib/crates/fabro-workflow/src/pipeline/persist.rs
++++ b/lib/crates/fabro-workflow/src/pipeline/persist.rs
+@@ -147,6 +147,7 @@ mod tests {
+                 ("env".to_string(), "test".to_string()),
+                 ("team".to_string(), "workflow".to_string()),
+             ]),
++            automation: None,
+             provenance: None,
+             manifest_blob: None,
+             definition_blob: None,
+@@ -173,6 +174,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              record.git.clone(),
+             fork_source_ref:  record.fork_source_ref.clone(),
++            automation:       record.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/pipeline/pull_request.rs b/lib/crates/fabro-workflow/src/pipeline/pull_request.rs
+index 92f4a0bc3..5b242d71f 100644
+--- a/lib/crates/fabro-workflow/src/pipeline/pull_request.rs
++++ b/lib/crates/fabro-workflow/src/pipeline/pull_request.rs
+@@ -822,6 +822,7 @@ mod tests {
+                 workflow_slug:    None,
+                 source_directory: None,
+                 labels:           HashMap::new(),
++                automation:       None,
+                 provenance:       None,
+                 manifest_blob:    None,
+                 definition_blob:  None,
+@@ -1146,6 +1147,7 @@ mod tests {
+                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+             }),
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -1167,6 +1169,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              run_spec.git.clone(),
+             fork_source_ref:  None,
++            automation:       run_spec.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+@@ -1215,6 +1218,7 @@ mod tests {
+                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+             }),
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -1236,6 +1240,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              run_spec.git.clone(),
+             fork_source_ref:  None,
++            automation:       run_spec.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+@@ -1569,6 +1574,7 @@ mod tests {
+             source_directory: Some(tmp.path().display().to_string()),
+             git:              None,
+             labels:           std::collections::HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -1590,6 +1596,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       run_spec.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+@@ -1696,6 +1703,7 @@ mod tests {
+             source_directory: Some("/tmp/project".to_string()),
+             git:              None,
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -1717,6 +1725,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       run_spec.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+@@ -1865,6 +1874,7 @@ mod tests {
+             source_directory: None,
+             git:              None,
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -1886,6 +1896,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       run_spec.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/run_lookup.rs b/lib/crates/fabro-workflow/src/run_lookup.rs
+index 5d8cdeb3b..ae139714c 100644
+--- a/lib/crates/fabro-workflow/src/run_lookup.rs
++++ b/lib/crates/fabro-workflow/src/run_lookup.rs
+@@ -490,6 +490,7 @@ mod tests {
+                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+             }),
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -522,6 +523,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              run_spec.git.clone(),
+             fork_source_ref:  run_spec.fork_source_ref.clone(),
++            automation:       run_spec.automation.clone(),
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/run_metadata.rs b/lib/crates/fabro-workflow/src/run_metadata.rs
+index 9d679d0b4..02750a107 100644
+--- a/lib/crates/fabro-workflow/src/run_metadata.rs
++++ b/lib/crates/fabro-workflow/src/run_metadata.rs
+@@ -638,6 +638,7 @@ mod tests {
+                     push_outcome: PreRunPushOutcome::NotAttempted,
+                 }),
+                 labels:           HashMap::new(),
++                automation:       None,
+                 provenance:       None,
+                 manifest_blob:    None,
+                 definition_blob:  None,
+diff --git a/lib/crates/fabro-workflow/src/runtime_store.rs b/lib/crates/fabro-workflow/src/runtime_store.rs
+index 0f590c70f..4fd33aef4 100644
+--- a/lib/crates/fabro-workflow/src/runtime_store.rs
++++ b/lib/crates/fabro-workflow/src/runtime_store.rs
+@@ -147,6 +147,7 @@ mod tests {
+             source_directory: Some("/tmp/test".to_string()),
+             git:              None,
+             labels:           HashMap::new(),
++            automation:       None,
+             provenance:       None,
+             manifest_blob:    None,
+             definition_blob:  None,
+@@ -172,6 +173,7 @@ mod tests {
+             manifest_blob:    None,
+             git:              None,
+             fork_source_ref:  None,
++            automation:       None,
+             retried_from:     None,
+             parent_id:        None,
+             web_url:          None,
+diff --git a/lib/crates/fabro-workflow/src/test_support.rs b/lib/crates/fabro-workflow/src/test_support.rs
+index 7db2e1ddd..3d039e425 100644
+--- a/lib/crates/fabro-workflow/src/test_support.rs
++++ b/lib/crates/fabro-workflow/src/test_support.rs
+@@ -128,6 +128,7 @@ async fn initialized(
+         manifest_blob:    None,
+         git:              run_options.pre_run_git.clone(),
+         fork_source_ref:  run_options.fork_source_ref.clone(),
++        automation:       None,
+         retried_from:     None,
+         parent_id:        None,
+         web_url:          None,

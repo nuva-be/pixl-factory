@@ -1,0 +1,6 @@
+{
+  "outcome": "failed",
+  "notes": null,
+  "failure_reason": "LLM error: Context length exceeded for openai: Your input exceeds the context window of this model. Please adjust your input and try again.",
+  "timestamp": "2026-05-24T22:00:06.325028Z"
+}
