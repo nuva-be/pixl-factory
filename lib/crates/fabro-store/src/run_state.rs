@@ -72,10 +72,8 @@ impl RunProjectionReducer for RunProjection {
             EventBody::RunSubmitted(props) => {
                 self.spec.definition_blob = props.definition_blob;
             }
-            EventBody::RunStartRequested(props) => {
-                if props.resume {
-                    self.try_apply_status(RunStatus::Submitted, ts)?;
-                }
+            EventBody::RunStartRequested(props) if props.resume => {
+                self.try_apply_status(RunStatus::Submitted, ts)?;
             }
             EventBody::RunPending(props) => {
                 self.try_apply_status(
