@@ -2379,6 +2379,7 @@ index 1111111..2222222 160000
                 definition_blob:  None,
                 git:              None,
                 fork_source_ref:  None,
+                automation:       None,
             },
             chrono::Utc::now(),
         );

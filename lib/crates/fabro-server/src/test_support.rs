@@ -13,6 +13,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::{Router, middleware};
 use chrono::Duration as ChronoDuration;
+use fabro_api::types::RunManifest;
 use fabro_config::{RunLayer, RunSettingsBuilder, ServerSettingsBuilder, envfile};
 use fabro_interview::Interviewer;
 use fabro_model::catalog::{LlmCatalogSettings, ProviderCatalogSettings};
@@ -27,6 +28,7 @@ use tokio_util::sync::CancellationToken;
 use ulid::Ulid;
 
 use crate::auth;
+use crate::automation_materializer::{AutomationRunMaterializer, StaticAutomationRunMaterializer};
 use crate::ip_allowlist::IpAllowlistConfig;
 use crate::jwt_auth::{AuthMode, ConfiguredAuth};
 #[cfg(test)]
@@ -64,6 +66,7 @@ pub struct TestAppStateBuilder {
     vault_path:                Option<PathBuf>,
     server_env_path:           Option<PathBuf>,
     active_config_path:        Option<PathBuf>,
+    automation_materializer:   Option<Arc<dyn AutomationRunMaterializer>>,
     server_secret_env:         HashMap<String, String>,
     env_lookup:                EnvLookup,
     llm_catalog_settings:      LlmCatalogSettings,
@@ -80,6 +83,7 @@ impl Default for TestAppStateBuilder {
             vault_path:                None,
             server_env_path:           None,
             active_config_path:        None,
+            automation_materializer:   None,
             server_secret_env:         HashMap::new(),
             env_lookup:                default_env_lookup(),
             llm_catalog_settings:      LlmCatalogSettings::default(),
@@ -170,6 +174,16 @@ impl TestAppStateBuilder {
         self
     }
 
+    pub fn automation_materializer_manifest(mut self, manifest: RunManifest) -> Self {
+        let submitted_manifest_bytes =
+            serde_json::to_vec(&manifest).expect("test manifest should serialize");
+        self.automation_materializer = Some(StaticAutomationRunMaterializer::ok(
+            manifest,
+            submitted_manifest_bytes,
+        ));
+        self
+    }
+
     pub fn build(self) -> Arc<AppState> {
         let (store, artifact_store) = self.store_bundle.unwrap_or_else(test_store_bundle);
         let vault_path = self.vault_path.unwrap_or_else(test_secret_store_path);
@@ -177,7 +191,9 @@ impl TestAppStateBuilder {
             .server_env_path
             .unwrap_or_else(|| vault_path.with_file_name("server.env"));
         let active_config_path = self.active_config_path.unwrap_or_else(|| {
-            std::env::temp_dir().join(format!("fabro-test-settings-{}.toml", Ulid::new()))
+            std::env::temp_dir()
+                .join(format!("fabro-test-settings-{}", Ulid::new()))
+                .join("settings.toml")
         });
         build_app_state(AppStateConfig {
             resolved_settings: resolved_runtime_settings_for_tests(
@@ -197,6 +213,7 @@ impl TestAppStateBuilder {
             http_client: Some(
                 fabro_http::test_http_client().expect("test HTTP client should build"),
             ),
+            automation_materializer: self.automation_materializer,
             shutdown: CancellationToken::new(),
         })
         .expect("test app state should build")

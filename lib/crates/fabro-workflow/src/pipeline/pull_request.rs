@@ -827,6 +827,7 @@ mod tests {
                 definition_blob:  None,
                 git:              None,
                 fork_source_ref:  None,
+                automation:       None,
             },
             Utc::now(),
         )
@@ -1150,6 +1151,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1167,6 +1169,7 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  None,
+            automation:       None,
             retried_from:     None,
             parent_id:        None,
             web_url:          None,
@@ -1219,6 +1222,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1236,6 +1240,7 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  None,
+            automation:       None,
             retried_from:     None,
             parent_id:        None,
             web_url:          None,
@@ -1573,6 +1578,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1590,6 +1596,7 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            automation:       None,
             retried_from:     None,
             parent_id:        None,
             web_url:          None,
@@ -1700,6 +1707,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1717,6 +1725,7 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            automation:       None,
             retried_from:     None,
             parent_id:        None,
             web_url:          None,
@@ -1869,6 +1878,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
         append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -1886,6 +1896,7 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            automation:       None,
             retried_from:     None,
             parent_id:        None,
             web_url:          None,

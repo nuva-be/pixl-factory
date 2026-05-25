@@ -40,6 +40,7 @@ fn sample_run_spec() -> RunSpec {
             },
         }),
         fork_source_ref: None,
+        automation: None,
     }
 }
 

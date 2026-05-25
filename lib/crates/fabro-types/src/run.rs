@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::WorkflowSettings;
 use crate::graph::Graph;
 use crate::principal::Principal;
 use crate::run_blob_id::RunBlobId;
 use crate::run_id::RunId;
+use crate::{AutomationRef, WorkflowSettings};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunServerProvenance {
@@ -100,6 +100,8 @@ pub struct RunSpec {
     pub git:              Option<GitContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_source_ref:  Option<ForkSourceRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation:       Option<AutomationRef>,
 }
 
 impl RunSpec {

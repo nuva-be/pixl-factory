@@ -494,6 +494,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         }
     }
 
@@ -522,6 +523,7 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  run_spec.fork_source_ref.clone(),
+            automation:       run_spec.automation.clone(),
             retried_from:     None,
             parent_id:        None,
             web_url:          None,

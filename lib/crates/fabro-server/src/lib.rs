@@ -9,6 +9,7 @@
 )]
 
 pub mod auth;
+mod automation_materializer;
 mod canonical_host;
 mod canonical_origin;
 pub mod csp;

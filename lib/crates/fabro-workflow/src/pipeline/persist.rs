@@ -151,6 +151,7 @@ mod tests {
             manifest_blob: None,
             definition_blob: None,
             fork_source_ref: None,
+            automation: None,
         }
     }
 
@@ -173,6 +174,7 @@ mod tests {
             manifest_blob:    None,
             git:              record.git.clone(),
             fork_source_ref:  record.fork_source_ref.clone(),
+            automation:       record.automation.clone(),
             retried_from:     None,
             parent_id:        None,
             web_url:          None,

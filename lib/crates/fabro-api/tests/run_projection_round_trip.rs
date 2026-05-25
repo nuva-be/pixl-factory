@@ -134,6 +134,7 @@ fn run_spec_json() -> serde_json::Value {
         manifest_blob:    None,
         definition_blob:  None,
         git:              None,
+        automation:       None,
         fork_source_ref:  None,
     })
     .unwrap()

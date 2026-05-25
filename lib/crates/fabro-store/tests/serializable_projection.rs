@@ -32,6 +32,7 @@ fn sample_run_spec() -> RunSpec {
             push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
         }),
         fork_source_ref:  None,
+        automation:       None,
     }
 }
 

@@ -642,6 +642,7 @@ mod tests {
                 manifest_blob:    None,
                 definition_blob:  None,
                 fork_source_ref:  None,
+                automation:       None,
             },
             chrono::Utc::now(),
         );

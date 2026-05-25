@@ -201,6 +201,29 @@ fn main() {
             &[],
         ),
         ("Run", "fabro_types::Run", &[]),
+        ("Automation", "fabro_automation::Automation", &[]),
+        ("AutomationTarget", "fabro_automation::AutomationTarget", &[
+        ]),
+        (
+            "AutomationTrigger",
+            "fabro_automation::AutomationTrigger",
+            &[],
+        ),
+        (
+            "CreateAutomationRequest",
+            "fabro_automation::AutomationDraft",
+            &[],
+        ),
+        (
+            "ReplaceAutomationRequest",
+            "fabro_automation::AutomationReplace",
+            &[],
+        ),
+        (
+            "PatchAutomationRequest",
+            "fabro_automation::AutomationPatch",
+            &[],
+        ),
         ("RunApproval", "fabro_types::RunApproval", &[]),
         ("RunApprovalState", "fabro_types::RunApprovalState", &[]),
         ("RunRunnableSource", "fabro_types::RunRunnableSource", &[]),

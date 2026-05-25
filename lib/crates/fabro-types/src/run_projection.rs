@@ -703,6 +703,7 @@ mod title_tests {
             definition_blob: None,
             git: None,
             fork_source_ref: None,
+            automation: None,
         };
         RunProjection::new(String::new(), spec, Utc::now())
     }
@@ -772,6 +773,7 @@ mod iter_stages_tests {
                 definition_blob:  None,
                 git:              None,
                 fork_source_ref:  None,
+                automation:       None,
             },
             Utc::now(),
         )

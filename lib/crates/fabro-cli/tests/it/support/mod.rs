@@ -52,6 +52,7 @@ pub(crate) fn run_projection_json(run_id: &str, status: &serde_json::Value) -> s
         manifest_blob: None,
         definition_blob: None,
         git: None,
+        automation: None,
         fork_source_ref: None,
     };
 

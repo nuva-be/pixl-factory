@@ -500,6 +500,7 @@ mod tests {
             provenance:       None,
             manifest_blob:    None,
             definition_blob:  None,
+            automation:       None,
             fork_source_ref:  None,
         }
     }

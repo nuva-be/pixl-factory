@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path as StdPath, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +45,7 @@ pub use fabro_api::types::{
     SystemRunCounts, TimelineEntryResponse, VncPreviewResponse, WriteBlobResponse,
 };
 use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
+use fabro_automation::AutomationStore;
 #[cfg(test)]
 use fabro_config::RunSettingsBuilder;
 use fabro_config::daemon::ServerDaemon;
@@ -130,6 +131,7 @@ use tracing::{Instrument, debug, error, info, warn};
 use ulid::Ulid;
 
 use crate::auth::{self, GithubEndpoints, auth_translation_middleware, demo_routing_middleware};
+use crate::automation_materializer::{AutomationRunMaterializer, GitAutomationRunMaterializer};
 use crate::canonical_origin::resolve_canonical_origin;
 use crate::error::ApiError;
 use crate::github_webhooks::{
@@ -933,6 +935,8 @@ pub struct AppState {
     runs: Mutex<HashMap<RunId, ManagedRun>>,
     aggregate_billing: Mutex<BillingAccumulator>,
     store: Arc<Database>,
+    automation_store: Arc<AutomationStore>,
+    automation_materializer: Arc<dyn AutomationRunMaterializer>,
     session_runtimes: SessionRuntimeManager,
     artifact_store: ArtifactStore,
     worker_tokens: WorkerTokenKeys,
@@ -1059,6 +1063,7 @@ pub(crate) struct AppStateConfig {
     pub(crate) github_api_base_url:       Option<String>,
     pub(crate) active_config_path:        PathBuf,
     pub(crate) http_client:               Option<fabro_http::HttpClient>,
+    pub(crate) automation_materializer:   Option<Arc<dyn AutomationRunMaterializer>>,
     pub(crate) shutdown:                  CancellationToken,
 }
 
@@ -1263,6 +1268,14 @@ impl AppState {
         &self.store
     }
 
+    pub(crate) fn automation_store(&self) -> Arc<AutomationStore> {
+        Arc::clone(&self.automation_store)
+    }
+
+    pub(crate) fn automation_materializer(&self) -> Arc<dyn AutomationRunMaterializer> {
+        Arc::clone(&self.automation_materializer)
+    }
+
     pub(crate) fn session_runtimes(&self) -> &SessionRuntimeManager {
         &self.session_runtimes
     }
@@ -1405,6 +1418,53 @@ impl AppState {
             .expect("server settings lock poisoned") = server_settings;
         *self.catalog.write().expect("catalog lock poisoned") = catalog;
         Ok(())
+    }
+}
+
+fn resolve_github_credentials_for_startup(
+    settings: &GithubIntegrationSettings,
+    server_secrets: &ServerSecrets,
+    vault: &Vault,
+) -> Result<Option<fabro_github::GitHubCredentials>, String> {
+    match settings.strategy {
+        GithubIntegrationStrategy::App => {
+            let Some(app_id) = settings.app_id.as_ref().map(InterpString::as_source) else {
+                return Ok(None);
+            };
+            let raw = server_secrets.get(EnvVars::GITHUB_APP_PRIVATE_KEY);
+            let Some(raw) = raw else {
+                return Ok(None);
+            };
+            let private_key_pem = decode_secret_pem(EnvVars::GITHUB_APP_PRIVATE_KEY, &raw)?;
+            Ok(Some(fabro_github::GitHubCredentials::App(
+                fabro_github::GitHubAppCredentials {
+                    app_id,
+                    private_key_pem,
+                    slug: settings.slug.as_ref().map(InterpString::as_source),
+                },
+            )))
+        }
+        GithubIntegrationStrategy::Token => {
+            let token = process_env_var(EnvVars::GITHUB_TOKEN)
+                .or_else(|| process_env_var(EnvVars::GH_TOKEN))
+                .or_else(|| vault.get(EnvVars::GITHUB_TOKEN).map(str::to_string))
+                .or_else(|| vault.get(EnvVars::GH_TOKEN).map(str::to_string))
+                .as_deref()
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .map(str::to_string);
+            match token {
+                Some(token) => {
+                    fabro_github::validate_static_github_token(&token)
+                        .map_err(|err| err.to_string())?;
+                    Ok(Some(fabro_github::GitHubCredentials::Pat(token)))
+                }
+                None => Err(
+                    "GITHUB_TOKEN not configured — run fabro install or set GITHUB_TOKEN"
+                        .to_string(),
+                ),
+            }
+        }
     }
 }
 
@@ -2071,6 +2131,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         github_api_base_url,
         active_config_path,
         http_client,
+        automation_materializer,
         shutdown,
     } = config;
 
@@ -2097,9 +2158,26 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
             );
         }
     }
-    let vault = Vault::load(vault_path.clone())
+    let current_server_settings = Arc::new(resolved_settings.server_settings);
+    let loaded_vault = Vault::load(vault_path.clone())
         .with_context(|| format!("load vault {}", vault_path.display()))?;
-    let vault = Arc::new(AsyncRwLock::new(vault));
+    let startup_github_credentials = if automation_materializer.is_none() {
+        resolve_github_credentials_for_startup(
+            &current_server_settings.server.integrations.github,
+            &server_secrets,
+            &loaded_vault,
+        )
+        .unwrap_or_else(|err| {
+            warn!(
+                error = %err,
+                "GitHub credentials unavailable for automation materializer; public clones may still work"
+            );
+            None
+        })
+    } else {
+        None
+    };
+    let vault = Arc::new(AsyncRwLock::new(loaded_vault));
     let llm_source: Arc<dyn CredentialSource> = Arc::new(VaultCredentialSource::with_env_lookup(
         Arc::clone(&vault),
         {
@@ -2108,7 +2186,6 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         },
     ));
     let (global_event_tx, _) = broadcast::channel(4096);
-    let current_server_settings = Arc::new(resolved_settings.server_settings);
     let current_manifest_run_defaults = Arc::new(resolved_settings.manifest_run_defaults);
     let current_manifest_environment_defaults =
         Arc::new(resolved_settings.manifest_environment_defaults);
@@ -2116,6 +2193,14 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     let current_catalog = Arc::new(
         Catalog::from_builtin_with_overrides(&resolved_settings.llm_catalog_settings)
             .context("building LLM model catalog")?,
+    );
+    let automation_dir = active_config_path
+        .parent()
+        .unwrap_or_else(|| StdPath::new("."))
+        .join("automations");
+    let automation_store = Arc::new(
+        AutomationStore::load_blocking(&automation_dir)
+            .with_context(|| format!("load automation store {}", automation_dir.display()))?,
     );
     let slack_service = {
         let default_channel = current_server_settings
@@ -2154,10 +2239,19 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     };
     let worker_tokens = worker_token_keys_from_server_secrets(&server_secrets)?;
     let github_api_base_url = github_api_base_url.unwrap_or_else(fabro_github::github_api_base_url);
+    let automation_materializer = automation_materializer.unwrap_or_else(|| {
+        Arc::new(GitAutomationRunMaterializer::new(
+            startup_github_credentials,
+            github_api_base_url.clone(),
+            http_client.clone(),
+        ))
+    });
     Ok(Arc::new(AppState {
         runs: Mutex::new(HashMap::new()),
         aggregate_billing: Mutex::new(BillingAccumulator::default()),
         store,
+        automation_store,
+        automation_materializer,
         session_runtimes: SessionRuntimeManager::new(),
         artifact_store,
         worker_tokens,

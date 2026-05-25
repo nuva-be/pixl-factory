@@ -39,6 +39,7 @@ fn run_spec_round_trips_templated_settings() {
             source_run_id:  fixtures::RUN_2,
             checkpoint_sha: "def456".to_string(),
         }),
+        automation:       None,
     };
 
     let json = serde_json::to_value(&record).expect("record should serialize");

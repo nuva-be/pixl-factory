@@ -784,6 +784,7 @@ fn projection_from_created(event: &EventEnvelope) -> Result<RunProjection> {
         definition_blob: None,
         git: props.git.clone(),
         fork_source_ref: props.fork_source_ref.clone(),
+        automation: props.automation.clone(),
     };
 
     let mut projection = RunProjection::new(title, spec, stored.ts);
@@ -935,7 +936,7 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> Run {
             edge_count: i64::try_from(state.spec.graph.edges.len())
                 .expect("graph edge count should fit in i64"),
         },
-        automation: None,
+        automation: state.spec.automation.clone(),
         repository: Some(RepositoryRef::from_origin_and_source(
             repo_origin_url,
             source_directory.as_deref(),
@@ -1246,11 +1247,11 @@ mod tests {
         StagePromptProps, StageRetryingProps, StageStartedProps,
     };
     use fabro_types::{
-        AgentBackend, BilledModelUsage, BilledTokenCounts, BlockedReason, Checkpoint,
-        CheckpointRecord, CommandTermination, EventBody, FailureCategory, FailureDetail,
-        FailureReason, Graph, McpServerStatus, Outcome, PendingReason, PermissionLevel,
-        PullRequestLink, QuestionType, ReasoningEffort, RunApprovalState, RunBlobId,
-        RunControlAction, RunDiff, RunEvent, RunSize, RunSpec, RunStatus, Speed,
+        AgentBackend, AutomationRef, BilledModelUsage, BilledTokenCounts, BlockedReason,
+        Checkpoint, CheckpointRecord, CommandTermination, EventBody, FailureCategory,
+        FailureDetail, FailureReason, Graph, McpServerStatus, Outcome, PendingReason,
+        PermissionLevel, PullRequestLink, QuestionType, ReasoningEffort, RunApprovalState,
+        RunBlobId, RunControlAction, RunDiff, RunEvent, RunSize, RunSpec, RunStatus, Speed,
         StageContextWindowBreakdownItem, StageContextWindowCategory, StageContextWindowCountMethod,
         StageContextWindowProjection, StageContextWindowStaleness, StageContextWindowWarning,
         StageModelUsage, StageOutcome, StageState, SubAgentStatus, SuccessReason, WorkflowSettings,
@@ -1340,6 +1341,7 @@ mod tests {
             definition_blob:  None,
             git:              None,
             fork_source_ref:  None,
+            automation:       None,
         }
     }
 
@@ -1389,6 +1391,38 @@ mod tests {
         assert_eq!(
             build_summary(&projection, &fixtures::RUN_1).retried_from,
             None
+        );
+    }
+
+    #[test]
+    fn run_created_projects_automation_into_summary() {
+        let event = test_raw_event(
+            1,
+            "run.created",
+            &json!({
+                "settings": WorkflowSettings::default(),
+                "graph": Graph::new("test"),
+                "labels": {},
+                "run_dir": "/tmp/run",
+                "automation": {
+                    "id": "nightly-deps",
+                    "name": "Nightly dependency update",
+                    "trigger_id": "api"
+                }
+            }),
+            None,
+        );
+
+        let projection = RunProjection::apply_events(&[event]).unwrap();
+        let expected = Some(AutomationRef {
+            id:         "nightly-deps".to_string(),
+            name:       Some("Nightly dependency update".to_string()),
+            trigger_id: Some("api".to_string()),
+        });
+        assert_eq!(projection.spec.automation, expected);
+        assert_eq!(
+            build_summary(&projection, &fixtures::RUN_1).automation,
+            expected
         );
     }
 
@@ -2608,6 +2642,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
 
         let summary_json = serde_json::to_value(build_summary(&state, &fixtures::RUN_1)).unwrap();
@@ -2633,6 +2668,7 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
+            automation:       None,
         };
 
         let summary = build_summary(&state, &fixtures::RUN_1);

@@ -1702,6 +1702,7 @@ mod tests {
             definition_blob: None,
             git: None,
             fork_source_ref: None,
+            automation: None,
         };
         let mut projection = fabro_types::RunProjection::new(String::new(), spec, now);
         for (index, node_id) in ["start", "plan", "code", "test", "review", "deploy"]

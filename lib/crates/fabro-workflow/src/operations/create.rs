@@ -13,7 +13,7 @@ use fabro_graphviz::graph::{AttrValue, Graph};
 use fabro_model::{Catalog, ProviderId};
 use fabro_store::Database;
 use fabro_types::{
-    ForkSourceRef, GitContext, ManifestPath, RunId, RunProvenance, WorkflowSettings,
+    AutomationRef, ForkSourceRef, GitContext, ManifestPath, RunId, RunProvenance, WorkflowSettings,
 };
 use fabro_util::json::normalize_json_value;
 use tokio::task::spawn_blocking;
@@ -43,6 +43,7 @@ pub struct CreateRunInput {
     pub title: Option<String>,
     pub git: Option<GitContext>,
     pub fork_source_ref: Option<ForkSourceRef>,
+    pub automation: Option<AutomationRef>,
     pub parent_id: Option<RunId>,
     pub provenance: Option<RunProvenance>,
     pub configured_providers: Vec<ProviderId>,
@@ -70,6 +71,7 @@ struct PersistCreateOptions {
     source_directory:     Option<String>,
     git:                  Option<GitContext>,
     fork_source_ref:      Option<ForkSourceRef>,
+    automation:           Option<AutomationRef>,
     provenance:           Option<RunProvenance>,
     configured_providers: Vec<ProviderId>,
     catalog:              Arc<Catalog>,
@@ -104,6 +106,7 @@ pub async fn create(
         title,
         git,
         fork_source_ref,
+        automation,
         parent_id,
         provenance,
         configured_providers,
@@ -146,6 +149,7 @@ pub async fn create(
                 source_directory,
                 git,
                 fork_source_ref,
+                automation,
                 provenance,
                 configured_providers,
                 catalog,
@@ -162,6 +166,7 @@ pub async fn create(
         .workflow_toml_path
         .as_deref()
         .and_then(|path| std::fs::read_to_string(path).ok());
+    let automation = persisted.run_spec().automation.clone();
     persist_created_run(
         store,
         &persisted,
@@ -171,6 +176,7 @@ pub async fn create(
         accepted_definition.as_ref(),
         title,
         parent_id,
+        automation,
         web_url,
     )
     .await?;
@@ -192,6 +198,7 @@ async fn persist_created_run(
     accepted_definition: Option<&RunDefinition>,
     explicit_title: Option<String>,
     parent_id: Option<RunId>,
+    automation: Option<AutomationRef>,
     web_url: Option<String>,
 ) -> Result<(), Error> {
     let record = persisted.run_spec();
@@ -245,6 +252,7 @@ async fn persist_created_run(
             manifest_blob,
             git: record.git.clone(),
             fork_source_ref: record.fork_source_ref.clone(),
+            automation,
             retried_from: None,
             parent_id,
             web_url,
@@ -358,6 +366,7 @@ fn persist_validated(
         source_directory,
         git,
         fork_source_ref,
+        automation,
         provenance,
         configured_providers,
         catalog,
@@ -386,6 +395,7 @@ fn persist_validated(
         definition_blob: None,
         git,
         fork_source_ref,
+        automation,
     };
 
     pipeline::persist(validated, PersistOptions { run_dir, run_spec })
@@ -1098,6 +1108,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                automation: None,
                 parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
@@ -1165,6 +1176,7 @@ mod tests {
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
+                automation: None,
                 parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
@@ -1276,6 +1288,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                automation: None,
                 parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
@@ -1321,6 +1334,7 @@ mod tests {
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
+                automation: None,
                 parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
@@ -1388,6 +1402,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                automation: None,
                 parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
@@ -1434,6 +1449,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                automation: None,
                 parent_id: None,
                 provenance: Some(fabro_types::RunProvenance {
                     server:  Some(fabro_types::RunServerProvenance {

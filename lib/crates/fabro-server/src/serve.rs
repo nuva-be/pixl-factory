@@ -805,6 +805,7 @@ where
         github_api_base_url: None,
         active_config_path,
         http_client: None,
+        automation_materializer: None,
         shutdown: shutdown.clone(),
     })?;
     let reconciled = reconcile_incomplete_runs_on_startup(&state).await?;

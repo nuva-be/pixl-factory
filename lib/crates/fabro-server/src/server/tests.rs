@@ -1842,6 +1842,7 @@ methods = ["dev-token"]
         github_api_base_url: None,
         active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        automation_materializer: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
     }) else {
         panic!("build_app_state should require SESSION_SECRET")
@@ -1850,6 +1851,17 @@ methods = ["dev-token"]
     assert!(err.to_string().contains(
         "Fabro server refuses to start: auth is configured but SESSION_SECRET is not set."
     ));
+}
+
+#[tokio::test]
+async fn automation_store_empty_without_directory() {
+    let dir = tempfile::tempdir().expect("tempdir should be created");
+    let state = TestAppStateBuilder::new()
+        .active_config_path(dir.path().join("settings.toml"))
+        .build();
+
+    assert!(!dir.path().join("automations").exists());
+    assert!(state.automation_store().list().await.is_empty());
 }
 
 #[test]
@@ -1966,6 +1978,7 @@ fn build_test_app_state_with_vault_path(vault_path: &Path) -> anyhow::Result<Arc
         github_api_base_url: None,
         active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        automation_materializer: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
     })
 }
@@ -3150,6 +3163,7 @@ async fn append_default_run_created(run_store: &fabro_store::RunDatabase, run_id
         manifest_blob: None,
         git: None,
         fork_source_ref: None,
+        automation: None,
         retried_from: None,
         parent_id: None,
         web_url: None,
@@ -3195,6 +3209,7 @@ async fn create_slack_notification_run(
         manifest_blob: None,
         git: None,
         fork_source_ref: None,
+        automation: None,
         retried_from: None,
         parent_id: None,
         web_url: None,
@@ -4200,6 +4215,7 @@ async fn list_run_stages_distinguishes_visits() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            automation: None,
             retried_from: None,
             parent_id: None,
             web_url: None,
@@ -5056,6 +5072,7 @@ fn create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
         github_api_base_url,
         active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        automation_materializer: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
     };
     let state = build_app_state(config).expect("test app state should build");
@@ -5188,6 +5205,7 @@ async fn create_completed_run_ready_for_pull_request(
         manifest_blob: None,
         definition_blob: None,
         fork_source_ref: None,
+        automation: None,
     };
 
     create_durable_run_with_events(state, run_id, &[
@@ -5207,6 +5225,7 @@ async fn create_completed_run_ready_for_pull_request(
             manifest_blob: None,
             git,
             fork_source_ref: None,
+            automation: None,
             retried_from: None,
             parent_id: None,
             web_url: None,
@@ -10914,6 +10933,7 @@ async fn create_preserved_local_sandbox_run(state: &Arc<AppState>, run_id: RunId
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            automation: None,
             retried_from: None,
             parent_id: None,
             web_url: None,
@@ -11663,6 +11683,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            automation: None,
             retried_from: None,
             parent_id: None,
             web_url: None,
