@@ -7,6 +7,7 @@ import type { ToggleableColumn } from "./toggleable-column";
 // sub-tab. Users can still reveal them via the column picker.
 export const DEFAULT_HIDDEN_RUN_LIST_COLUMNS: readonly ToggleableColumn[] = [
   "updated",
+  "elapsed",
   "changes",
 ];
 
@@ -70,6 +71,7 @@ const SORT_KEYS = [
   "title",
   "workflow",
   "changes",
+  "size",
 ] as const satisfies readonly ListRunsSortEnum[];
 
 export function parseSort(raw: string | null): ListRunsSortEnum {
