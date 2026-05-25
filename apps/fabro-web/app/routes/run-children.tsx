@@ -28,7 +28,7 @@ import { ApiError } from "../lib/api-client";
 import { formatRelativeTime } from "../lib/format";
 import { useRun, useRunsPage } from "../lib/queries";
 
-export const handle = { wide: true };
+export const handle = { wide: true, hideSteerBar: true };
 
 export default function RunChildren() {
   const { id } = useParams();

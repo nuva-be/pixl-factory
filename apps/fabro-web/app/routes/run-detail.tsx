@@ -445,6 +445,9 @@ export default function RunDetail({ params }: { params: { id: string } }) {
   const fullHeight = matches.some(
     (m) => (m.handle as { fullHeight?: boolean } | undefined)?.fullHeight,
   );
+  const hideSteerBar = matches.some(
+    (m) => (m.handle as { hideSteerBar?: boolean } | undefined)?.hideSteerBar,
+  );
 
   useRunEvents(params.id);
   useRunToasts(params.id);
@@ -818,26 +821,30 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         className={
           fullHeight
             ? "pt-3 flex min-h-0 flex-1 flex-col"
-            : "pt-3 pb-[var(--fabro-interview-dock-clearance)]"
+            : hideSteerBar && !hasPendingQuestions
+              ? "pt-3"
+              : "pt-3 pb-[var(--fabro-interview-dock-clearance)]"
         }
       >
         <Outlet />
       </div>
 
-      <div
-        className={`fixed bottom-0 left-0 z-30 border-t border-line bg-page ${
-          isResizing
-            ? ""
-            : "transition-[right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-        }`}
-        style={{ right: sidebarWidth }}
-      >
-        {hasPendingQuestions ? (
-          <InterviewDock runId={params.id} questions={pendingQuestions} />
-        ) : (
-          <SteerBar ref={steerBarRef} runId={params.id} />
-        )}
-      </div>
+      {(!hideSteerBar || hasPendingQuestions) && (
+        <div
+          className={`fixed bottom-0 left-0 z-30 border-t border-line bg-page ${
+            isResizing
+              ? ""
+              : "transition-[right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          }`}
+          style={{ right: sidebarWidth }}
+        >
+          {hasPendingQuestions ? (
+            <InterviewDock runId={params.id} questions={pendingQuestions} />
+          ) : (
+            <SteerBar ref={steerBarRef} runId={params.id} />
+          )}
+        </div>
+      )}
 
       {askAvailable && (
         // Docked below the top nav (h-16) and above the steer bar (z-30); the
