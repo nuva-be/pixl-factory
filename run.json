@@ -505,7 +505,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-25T21:44:17.416690Z",
-  "last_event_at": "2026-05-25T23:18:43.692300Z",
+  "last_event_at": "2026-05-25T23:27:12.419045Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -1262,9 +1262,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 2616,
       "checkpoint": {
-        "timestamp": "2026-05-25T23:27:08.259211Z",
+        "timestamp": "2026-05-25T23:27:12.418925Z",
         "current_node": "verify",
         "completed_nodes": [
           "start",
@@ -1278,41 +1278,57 @@
         ],
         "node_retries": {},
         "context_values": {
-          "response.simplify_gpt": "Reviewed the branch changes vs. the merge-base and ran the requested parallel review-agent pass. The agent results weren’t exposed by the tool output, so I also did a direct cleanup review.\n\nFixed one small reuse/quality issue:\n\n- `lib/crates/fabro-sandbox/src/managed_labels.rs`\n  - Replaced the duplicated `\"true\"` literal with the existing `MANAGED_LABEL_VALUE` constant.\n  - Added a test assertion that exercises `is_managed()`, which also avoids dead-code warnings in the no-provider-feature test build.\n\nValidation passed:\n\n```bash\ncargo +nightly-2026-04-14 fmt --check --all\ncargo test -p fabro-types sandbox_inventory\ncargo test -p fabro-api sandbox_inventory_round_trip\ncargo test -p fabro-sandbox provider::tests --lib\ncargo test -p fabro-server sandboxes --lib\ncargo +nightly-2026-04-14 clippy -q -p fabro-sandbox --all-targets -- -D warnings\n```\n\nWorking tree has one intentional cleanup modification:\n\n```text\nM lib/crates/fabro-sandbox/src/managed_labels.rs\n```",
-          "failure_class": "",
-          "thread.toolchain.current_node": "preflight_compile",
-          "graph.rankdir": "LR",
-          "command.output": "blob://sha256/35ec600284ba23bf54e08b21f56c5857b2c19dac34e52cf43a58b4b9198ec7ec",
-          "last_response": "Reviewed the branch changes vs. the merge-base and ran the requested parallel review-agent pass. The agent results weren’t exposed by the tool output, so I also did a direct cleanup review.\n\nFixed o",
-          "internal.node_visit_count": 1,
-          "thread.preflight_lint.current_node": "implement",
-          "internal.retry_count.verify": 0,
-          "graph.goal": "# Provider-Backed Sandbox API Implementation Plan\n\n> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.\n\n**Goal:** Expose provider-backed sandbox inventory APIs that list and retrieve Fabro-managed sandboxes directly from sandbox providers, outside the context of runs.\n\n**Architecture:** Split sandbox responsibilities into a provider-level `SandboxProvider` trait and an instantiated `Sandbox` handle. `SandboxProvider` owns provider inventory and lifecycle escape hatches (`list`, `get`, `create`, `delete`); `Sandbox` keeps in-sandbox capabilities such as file IO, exec, terminal, preview URLs, and git operations. The API fans out across configured providers and never uses run projection state as the source of truth for sandbox list/get.\n\n**Tech Stack:** Rust, Axum, OpenAPI/progenitor, generated TypeScript Axios client, Bollard for Docker, Daytona Rust SDK, existing Fabro managed labels.\n\n---\n\n## Decisions\n\n- Use greenfield naming: `SandboxProvider` is the trait, `SandboxProviderKind` is the enum discriminator (`local`, `docker`, `daytona`).\n- `GET /api/v1/sandboxes/{id}` treats `{id}` as a provider-native id and searches all configured providers.\n- Return `409 Conflict` when more than one provider returns a sandbox for the same id.\n- List and get return only Fabro-managed sandboxes; provider implementations must filter or verify `sh.fabro.managed=true`.\n- `SandboxProvider::delete` exists for cleanup of provider resources that cannot be instantiated as `Sandbox`; it is not exposed through public API in this plan.\n- `local` has no provider-managed inventory and should return an empty list plus `None` for get.\n\n## API And Types\n\n**Files:**\n- Modify: `docs/public/api-reference/fabro-api.yaml`\n- Create: `lib/crates/fabro-types/src/sandbox_inventory.rs`\n- Modify: `lib/crates/fabro-types/src/lib.rs`\n- Test: `lib/crates/fabro-api/tests/sandbox_inventory_round_trip.rs`\n\n- [ ] **Add OpenAPI paths**\n\n  Add:\n\n  ```yaml\n  /api/v1/sandboxes:\n    get:\n      operationId: listSandboxes\n      tags: [Sandboxes]\n      summary: List Sandboxes\n      description: Lists Fabro-managed sandboxes directly from configured sandbox providers.\n      responses:\n        \"200\":\n          description: Provider-backed sandbox inventory\n          content:\n            application/json:\n              schema:\n                $ref: \"#/components/schemas/SandboxListResponse\"\n\n  /api/v1/sandboxes/{id}:\n    get:\n      operationId: retrieveSandbox\n      tags: [Sandboxes]\n      summary: Retrieve Sandbox\n      description: Retrieves a Fabro-managed sandbox by provider-native id by searching all configured sandbox providers.\n      parameters:\n        - in: path\n          name: id\n          required: true\n          schema:\n            type: string\n      responses:\n        \"200\":\n          description: Sandbox found\n          content:\n            application/json:\n              schema:\n                $ref: \"#/components/schemas/SandboxInfo\"\n        \"404\":\n          description: No provider found a Fabro-managed sandbox with this id\n        \"409\":\n          description: More than one provider matched this sandbox id\n        \"502\":\n          description: Provider lookup failed before a definitive result could be determined\n  ```\n\n- [ ] **Add API schemas**\n\n  Add schemas for:\n\n  ```yaml\n  SandboxProviderKind:\n    type: string\n    enum: [local, docker, daytona]\n\n  SandboxInfo:\n    required: [provider, id, state, resources, network, labels, timestamps]\n    properties:\n      provider:\n        $ref: \"#/components/schemas/SandboxProviderKind\"\n      id:\n        type: string\n      display_name:\n        type: string\n        nullable: true\n      state:\n        $ref: \"#/components/schemas/SandboxState\"\n      native_state:\n        type: string\n        nullable: true\n      image:\n        type: string\n        nullable: true\n      snapshot:\n        type: string\n        nullable: true\n      region:\n        type: string\n        nullable: true\n      web_url:\n        type: string\n        nullable: true\n      working_directory:\n        type: string\n        nullable: true\n      resources:\n        $ref: \"#/components/schemas/SandboxResources\"\n      network:\n        $ref: \"#/components/schemas/SandboxNetwork\"\n      labels:\n        type: object\n        additionalProperties:\n          type: string\n      timestamps:\n        $ref: \"#/components/schemas/SandboxTimestamps\"\n\n  SandboxProviderLookupError:\n    required: [provider, message]\n    properties:\n      provider:\n        $ref: \"#/components/schemas/SandboxProviderKind\"\n      message:\n        type: string\n\n  SandboxListMeta:\n    required: [provider_errors]\n    properties:\n      provider_errors:\n        type: array\n        items:\n          $ref: \"#/components/schemas/SandboxProviderLookupError\"\n\n  SandboxListResponse:\n    required: [data, meta]\n    properties:\n      data:\n        type: array\n        items:\n          $ref: \"#/components/schemas/SandboxInfo\"\n      meta:\n        $ref: \"#/components/schemas/SandboxListMeta\"\n  ```\n\n- [ ] **Add canonical Rust DTOs**\n\n  Create `lib/crates/fabro-types/src/sandbox_inventory.rs` with Rust structs mirroring the OpenAPI schemas. Reuse existing `SandboxState`, `SandboxResources`, `SandboxNetwork`, and `SandboxTimestamps`.\n\n- [ ] **Wire generated API replacement tests**\n\n  Add `with_replacement` mappings in `lib/crates/fabro-api/build.rs` for the new canonical DTOs and prove JSON parity in `lib/crates/fabro-api/tests/sandbox_inventory_round_trip.rs`.\n\n## Provider Runtime Layer\n\n**Files:**\n- Create: `lib/crates/fabro-sandbox/src/provider.rs`\n- Create: `lib/crates/fabro-sandbox/src/provider/docker.rs`\n- Create: `lib/crates/fabro-sandbox/src/provider/daytona.rs`\n- Modify: `lib/crates/fabro-sandbox/src/lib.rs`\n- Test: `lib/crates/fabro-sandbox/src/provider.rs`\n\n- [ ] **Define `SandboxProvider` and registry**\n\n  Add:\n\n  ```rust\n  #[async_trait::async_trait]\n  pub trait SandboxProvider: Send + Sync {\n      fn kind(&self) -> SandboxProviderKind;\n\n      async fn list(&self, filter: SandboxListFilter) -> crate::Result<Vec<SandboxInfo>>;\n      async fn get(&self, id: &str) -> crate::Result<Option<SandboxInfo>>;\n      async fn create(&self, spec: SandboxCreateSpec) -> crate::Result<SandboxInfo>;\n      async fn delete(&self, id: &str) -> crate::Result<()>;\n  }\n  ```\n\n  Add `SandboxProviderRegistry` with:\n\n  ```rust\n  pub async fn list_managed(&self) -> SandboxListResponse;\n  pub async fn get_managed_by_native_id(&self, id: &str) -> Result<SandboxInfo, SandboxLookupError>;\n  ```\n\n- [ ] **Define registry lookup semantics**\n\n  Implement:\n\n  - list: call every configured provider, concatenate successful results, and put failed providers in `meta.provider_errors`.\n  - get: call every configured provider. Return the single match, return not-found if all providers succeed with no match, return conflict if two or more providers match, and return provider-unavailable if no provider matches and at least one provider failed.\n\n- [ ] **Keep `Sandbox` instance behavior unchanged**\n\n  Do not move file IO, exec, terminal, preview, or git methods onto `SandboxProvider`. Those remain on the instantiated `Sandbox` trait.\n\n## Provider Implementations\n\n**Files:**\n- Modify: `lib/crates/fabro-sandbox/src/docker.rs`\n- Modify: `lib/crates/fabro-sandbox/src/daytona/mod.rs`\n- Modify: `lib/crates/fabro-sandbox/src/details.rs`\n- Test: `lib/crates/fabro-sandbox/src/details.rs`\n\n- [ ] **Docker provider inventory**\n\n  Implement Docker inventory without constructing a `DockerSandbox` instance:\n\n  - `list`: use Bollard to list containers filtered by `label=sh.fabro.managed=true`.\n  - `get`: inspect by provider-native id or name; return `None` when missing or unmanaged.\n  - `delete`: inspect first and verify managed labels before removing.\n  - `create`: create a managed Docker sandbox and return `SandboxInfo`.\n\n- [ ] **Daytona provider inventory**\n\n  Implement Daytona inventory through the SDK:\n\n  - `list`: call SDK list with label filter `{ \"sh.fabro.managed\": \"true\" }`.\n  - `get`: call SDK get and return `None` if the sandbox does not carry the managed label.\n  - `delete`: fetch first and verify managed label before deleting.\n  - `create`: create a managed Daytona sandbox and return `SandboxInfo`.\n\n- [ ] **Share detail mapping**\n\n  Refactor existing Docker/Daytona detail mapping so run-scoped `SandboxDetails` and provider-backed `SandboxInfo` use the same normalization for state, resources, network, labels, timestamps, image/snapshot, region, and provider URL.\n\n## Server API\n\n**Files:**\n- Create: `lib/crates/fabro-server/src/server/handler/sandboxes.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/mod.rs`\n- Modify: `lib/crates/fabro-server/src/server.rs`\n- Test: `lib/crates/fabro-server/src/server/handler/sandboxes.rs`\n\n- [ ] **Register routes**\n\n  Add a new top-level handler module:\n\n  ```rust\n  Router::new()\n      .route(\"/sandboxes\", get(list_sandboxes))\n      .route(\"/sandboxes/{id}\", get(retrieve_sandbox))\n  ```\n\n  Merge it into the `/api/v1` router beside existing run, model, system, and human-in-the-loop routes.\n\n- [ ] **Use provider registry from app state**\n\n  Add the provider registry to server state initialization. The registry should include enabled providers only, built from server/environment settings and secrets.\n\n- [ ] **Use run-management authorization**\n\n  Require the same broad run-management authorization used by run listing, because the sandbox inventory crosses individual run boundaries and may expose provider resource metadata.\n\n- [ ] **Map registry errors to HTTP**\n\n  Map:\n\n  - single match: `200`\n  - no matches and no provider failures: `404`\n  - duplicate provider matches: `409`\n  - no match plus at least one provider failure: `502`\n\n## Verification\n\n**Files:**\n- Test: `lib/crates/fabro-types/tests/sandbox_inventory_serde.rs`\n- Test: `lib/crates/fabro-api/tests/sandbox_inventory_round_trip.rs`\n- Test: `lib/crates/fabro-sandbox/src/provider.rs`\n- Test: `lib/crates/fabro-server/src/server/handler/sandboxes.rs`\n\n- [ ] **Type and API tests**\n\n  Run:\n\n  ```bash\n  cargo test -p fabro-types sandbox_inventory\n  cargo test -p fabro-api sandbox_inventory_round_trip\n  ```\n\n- [ ] **Provider registry tests**\n\n  Cover these cases with fake providers:\n\n  - list returns aggregate data from two successful providers.\n  - list includes provider error metadata when one provider fails.\n  - get returns one matching sandbox.\n  - get returns not-found when all providers succeed with no match.\n  - get returns conflict when two providers match the same native id.\n  - get returns provider-unavailable when no provider matches and one provider fails.\n\n- [ ] **Server route tests**\n\n  Cover:\n\n  - `GET /api/v1/sandboxes` returns provider-backed data without reading run projections.\n  - `GET /api/v1/sandboxes/{id}` searches all configured providers.\n  - duplicate ids return `409`.\n  - provider lookup uncertainty returns `502`.\n\n- [ ] **Workspace checks**\n\n  Run:\n\n  ```bash\n  cargo +nightly-2026-04-14 fmt --check --all\n  cargo nextest run -p fabro-sandbox -p fabro-server -p fabro-api -p fabro-types\n  cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings\n  ```\n\n## Assumptions\n\n- This plan uses greenfield naming and allows `SandboxProvider` to mean the provider control-plane trait.\n- The enum discriminator is `SandboxProviderKind`, not `SandboxProvider`.\n- Public API v1 exposes only list and get; create and delete are trait capabilities for provider internals and cleanup.\n- Provider-native id search across all providers is intentional; duplicate matches are reported as ambiguity rather than guessed.\n- Provider-backed inventory intentionally does not depend on run records, run projections, or preserved-run handoff state.\n",
-          "failure_signature": "",
-          "thread.implement.current_node": "simplify_opus",
-          "response.simplify_opus": "All checks pass. Here's the summary of fixes applied based on the three review agents:\n\n## Summary\n\nAll three review agents agreed on the same top issues. I applied 10 focused fixes:\n\n### Code reuse / quality\n1. **Renamed enum `SandboxProvider` → `SandboxProviderKind` across the workspace** (Reuse #4, Quality #1, #6a). The dual `pub use … SandboxProvider as SandboxProviderKind` aliased the same type under two names, producing **duplicate `SandboxProvider`/`SandboxProviderKind` schemas in OpenAPI and duplicate TypeScript SDK models**. Renamed the enum (~15 Rust files in 8 crates), deleted the duplicate OpenAPI schema, regenerated the TS client, and removed the `RuntimeSandboxProvider`/`SandboxProviderTrait` collision workarounds. The trait now cleanly owns `SandboxProvider`, the enum owns `SandboxProviderKind`.\n2. **Replaced `render_error` with `fabro_util::error::collect_chain(...).join(\": \")`** (Reuse #1, Quality #5b) — matches the convention used in fabro-workflow, fabro-server, etc.\n3. **Added `managed_labels::is_managed()` and `MANAGED_LABEL_VALUE` constant** (Reuse #2, Quality #5a) — replaced repeated `labels.get(MANAGED_LABEL).map(String::as_str) == Some(\"true\")` in both providers, plus removed the magic `\"true\"` literal in label-filter format strings.\n4. **Moved `FakeSandboxProvider` to `fabro_sandbox::test_support`** (Reuse #3, Quality #3a) — the two near-identical `FakeProvider`s in `provider.rs` tests and the server's `sandboxes.rs` tests are now a single shared helper behind the existing `test-support` feature (fabro-server already had the dual-listing dev-dep).\n5. **Removed `_default_config` field from `DockerSandboxProvider`** (Quality #4b) — was stored but never read; deleted the manifest plumbing in `build_sandbox_provider_registry`.\n6. **Dropped the empty `SandboxListFilter` unit struct** (Quality #6b) — was a placeholder parameter every caller passed and every impl ignored; YAGNI.\n\n### Efficiency\n7. **Parallelized providers in `SandboxProviderRegistry`** (Efficiency #1) — `list_managed` and `get_managed_by_native_id` now use `futures::future::join_all` instead of serial `for … await`. Docker + Daytona runs concurrently.\n8. **Parallelized Docker inspects and reused the client** (Efficiency #2) — `DockerSandboxProvider::list` previously built a new Docker client *per container* via `Self::inspect`, serially. Now it builds one client per request, runs all `inspect_container` calls in parallel via `try_join_all`, and `get`/`delete` share an `inspect_container` helper that takes `&Docker`.\n9. **Dropped redundant client-side managed-label re-check in list paths** (Efficiency #2, #3) — daemon-side label filter is the source of truth in `list`. The managed re-check is still enforced in `get` and `delete` since those bypass the filter.\n\n### Robustness\n10. **Stopped panicking on vault contention at startup** (Quality #4c) — replaced `vault.try_read().expect(\"...\")` with reading `DAYTONA_API_KEY` from the `Vault` value *before* wrapping it in `Arc<AsyncRwLock<_>>`, then passing the `Option<String>` into `build_sandbox_provider_registry`.\n\n### Verification\n- `cargo +nightly-2026-04-14 fmt --check --all` ✅\n- `cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings` ✅\n- `cargo nextest run --workspace` ✅ (6441 tests passed, 181 skipped)\n- `cd lib/packages/fabro-api-client && bun run typecheck` ✅\n\n### Findings I deliberately did not act on\n- **`SandboxCreateSpec` public surface without external callers** (Quality #4a). The plan explicitly required `create` and `delete` on the trait, so I kept them and didn't gut the public surface beyond what the plan asks. The duplicate `_default_config` was the only piece I removed because it was independently dead.\n- **Pre-existing stale `sandbox-provider.ts` and `run-sandbox-settings.ts` in the generated TS client.** These are orphaned files from before this PR (not in the FILES manifest, not exported from `index.ts`); my changes don't worsen them. Cleaning them up is out of scope.",
-          "last_stage": "simplify_gpt",
-          "current_node": "verify",
-          "internal.thread_id": "simplify_gpt",
-          "thread.start.current_node": "toolchain",
-          "internal.fidelity": "compact",
-          "outcome": "succeeded",
-          "internal.retry_count.toolchain": 0,
-          "response.implement": "Implemented the provider-backed sandbox inventory API end-to-end.\n\nSummary:\n- Added OpenAPI `Sandboxes` endpoints:\n  - `GET /api/v1/sandboxes`\n  - `GET /api/v1/sandboxes/{id}`\n- Added canonical Rust DTOs for sandbox inventory in `fabro-types`.\n- Wired progenitor replacements and JSON parity tests in `fabro-api`.\n- Added provider runtime layer:\n  - `SandboxProvider` trait\n  - `SandboxProviderRegistry`\n  - list/get semantics with partial list errors and get `404`/`409`/`502` behavior\n  - local no-inventory provider\n- Added Docker and Daytona provider inventory implementations using managed label filtering/verification.\n- Refactored shared sandbox detail normalization for run-scoped details and provider-backed inventory.\n- Added server routes with run-management authorization and provider registry state.\n- Regenerated the TypeScript Axios client for the new endpoints/models.\n- Added/updated tests for DTO serde, API replacement parity, provider registry behavior, and server route behavior, including the missing `404` route assertion.\n- Cleaned a test-only conditional import warning in `fabro-sandbox`.\n\nVerification passed:\n- `cargo test -p fabro-types sandbox_inventory`\n- `cargo test -p fabro-api sandbox_inventory_round_trip`\n- `cargo test -p fabro-sandbox provider`\n- `cargo test -p fabro-server sandboxes`\n- `cargo +nightly-2026-04-14 fmt --check --all`\n- `cargo nextest run -p fabro-sandbox -p fabro-server -p fabro-api -p fabro-types`\n- `cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings`\n- `cd lib/packages/fabro-api-client && bun run typecheck`\n\nNo git commit was created.",
-          "internal.retry_count.implement": 0,
-          "internal.retry_count.simplify_opus": 0,
-          "thread.simplify_opus.current_node": "simplify_gpt",
-          "internal.retry_count.preflight_compile": 0,
-          "thread.simplify_gpt.current_node": "verify",
-          "internal.retry_count.start": 0,
           "internal.work_dir": "/home/daytona/workspace/fabro",
+          "internal.node_visit_count": 1,
+          "thread.toolchain.current_node": "preflight_compile",
+          "failure_signature": "",
+          "thread.start.current_node": "toolchain",
+          "internal.retry_count.start": 0,
+          "last_stage": "simplify_gpt",
+          "graph.model_stylesheet": "\n            * { model: claude-opus-4-7; }\n        ",
+          "current_node": "verify",
+          "outcome": "succeeded",
+          "last_response": "Reviewed the branch changes vs. the merge-base and ran the requested parallel review-agent pass. The agent results weren’t exposed by the tool output, so I also did a direct cleanup review.\n\nFixed o",
+          "response.simplify_gpt": "Reviewed the branch changes vs. the merge-base and ran the requested parallel review-agent pass. The agent results weren’t exposed by the tool output, so I also did a direct cleanup review.\n\nFixed one small reuse/quality issue:\n\n- `lib/crates/fabro-sandbox/src/managed_labels.rs`\n  - Replaced the duplicated `\"true\"` literal with the existing `MANAGED_LABEL_VALUE` constant.\n  - Added a test assertion that exercises `is_managed()`, which also avoids dead-code warnings in the no-provider-feature test build.\n\nValidation passed:\n\n```bash\ncargo +nightly-2026-04-14 fmt --check --all\ncargo test -p fabro-types sandbox_inventory\ncargo test -p fabro-api sandbox_inventory_round_trip\ncargo test -p fabro-sandbox provider::tests --lib\ncargo test -p fabro-server sandboxes --lib\ncargo +nightly-2026-04-14 clippy -q -p fabro-sandbox --all-targets -- -D warnings\n```\n\nWorking tree has one intentional cleanup modification:\n\n```text\nM lib/crates/fabro-sandbox/src/managed_labels.rs\n```",
+          "internal.retry_count.simplify_opus": 0,
           "thread.preflight_compile.current_node": "preflight_lint",
-          "internal.retry_count.simplify_gpt": 0,
+          "internal.fidelity": "compact",
+          "response.simplify_opus": "All checks pass. Here's the summary of fixes applied based on the three review agents:\n\n## Summary\n\nAll three review agents agreed on the same top issues. I applied 10 focused fixes:\n\n### Code reuse / quality\n1. **Renamed enum `SandboxProvider` → `SandboxProviderKind` across the workspace** (Reuse #4, Quality #1, #6a). The dual `pub use … SandboxProvider as SandboxProviderKind` aliased the same type under two names, producing **duplicate `SandboxProvider`/`SandboxProviderKind` schemas in OpenAPI and duplicate TypeScript SDK models**. Renamed the enum (~15 Rust files in 8 crates), deleted the duplicate OpenAPI schema, regenerated the TS client, and removed the `RuntimeSandboxProvider`/`SandboxProviderTrait` collision workarounds. The trait now cleanly owns `SandboxProvider`, the enum owns `SandboxProviderKind`.\n2. **Replaced `render_error` with `fabro_util::error::collect_chain(...).join(\": \")`** (Reuse #1, Quality #5b) — matches the convention used in fabro-workflow, fabro-server, etc.\n3. **Added `managed_labels::is_managed()` and `MANAGED_LABEL_VALUE` constant** (Reuse #2, Quality #5a) — replaced repeated `labels.get(MANAGED_LABEL).map(String::as_str) == Some(\"true\")` in both providers, plus removed the magic `\"true\"` literal in label-filter format strings.\n4. **Moved `FakeSandboxProvider` to `fabro_sandbox::test_support`** (Reuse #3, Quality #3a) — the two near-identical `FakeProvider`s in `provider.rs` tests and the server's `sandboxes.rs` tests are now a single shared helper behind the existing `test-support` feature (fabro-server already had the dual-listing dev-dep).\n5. **Removed `_default_config` field from `DockerSandboxProvider`** (Quality #4b) — was stored but never read; deleted the manifest plumbing in `build_sandbox_provider_registry`.\n6. **Dropped the empty `SandboxListFilter` unit struct** (Quality #6b) — was a placeholder parameter every caller passed and every impl ignored; YAGNI.\n\n### Efficiency\n7. **Parallelized providers in `SandboxProviderRegistry`** (Efficiency #1) — `list_managed` and `get_managed_by_native_id` now use `futures::future::join_all` instead of serial `for … await`. Docker + Daytona runs concurrently.\n8. **Parallelized Docker inspects and reused the client** (Efficiency #2) — `DockerSandboxProvider::list` previously built a new Docker client *per container* via `Self::inspect`, serially. Now it builds one client per request, runs all `inspect_container` calls in parallel via `try_join_all`, and `get`/`delete` share an `inspect_container` helper that takes `&Docker`.\n9. **Dropped redundant client-side managed-label re-check in list paths** (Efficiency #2, #3) — daemon-side label filter is the source of truth in `list`. The managed re-check is still enforced in `get` and `delete` since those bypass the filter.\n\n### Robustness\n10. **Stopped panicking on vault contention at startup** (Quality #4c) — replaced `vault.try_read().expect(\"...\")` with reading `DAYTONA_API_KEY` from the `Vault` value *before* wrapping it in `Arc<AsyncRwLock<_>>`, then passing the `Option<String>` into `build_sandbox_provider_registry`.\n\n### Verification\n- `cargo +nightly-2026-04-14 fmt --check --all` ✅\n- `cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings` ✅\n- `cargo nextest run --workspace` ✅ (6441 tests passed, 181 skipped)\n- `cd lib/packages/fabro-api-client && bun run typecheck` ✅\n\n### Findings I deliberately did not act on\n- **`SandboxCreateSpec` public surface without external callers** (Quality #4a). The plan explicitly required `create` and `delete` on the trait, so I kept them and didn't gut the public surface beyond what the plan asks. The duplicate `_default_config` was the only piece I removed because it was independently dead.\n- **Pre-existing stale `sandbox-provider.ts` and `run-sandbox-settings.ts` in the generated TS client.** These are orphaned files from before this PR (not in the FILES manifest, not exported from `index.ts`); my changes don't worsen them. Cleaning them up is out of scope.",
+          "internal.thread_id": "simplify_gpt",
+          "thread.simplify_gpt.current_node": "verify",
+          "graph.rankdir": "LR",
+          "internal.retry_count.preflight_compile": 0,
+          "response.implement": "Implemented the provider-backed sandbox inventory API end-to-end.\n\nSummary:\n- Added OpenAPI `Sandboxes` endpoints:\n  - `GET /api/v1/sandboxes`\n  - `GET /api/v1/sandboxes/{id}`\n- Added canonical Rust DTOs for sandbox inventory in `fabro-types`.\n- Wired progenitor replacements and JSON parity tests in `fabro-api`.\n- Added provider runtime layer:\n  - `SandboxProvider` trait\n  - `SandboxProviderRegistry`\n  - list/get semantics with partial list errors and get `404`/`409`/`502` behavior\n  - local no-inventory provider\n- Added Docker and Daytona provider inventory implementations using managed label filtering/verification.\n- Refactored shared sandbox detail normalization for run-scoped details and provider-backed inventory.\n- Added server routes with run-management authorization and provider registry state.\n- Regenerated the TypeScript Axios client for the new endpoints/models.\n- Added/updated tests for DTO serde, API replacement parity, provider registry behavior, and server route behavior, including the missing `404` route assertion.\n- Cleaned a test-only conditional import warning in `fabro-sandbox`.\n\nVerification passed:\n- `cargo test -p fabro-types sandbox_inventory`\n- `cargo test -p fabro-api sandbox_inventory_round_trip`\n- `cargo test -p fabro-sandbox provider`\n- `cargo test -p fabro-server sandboxes`\n- `cargo +nightly-2026-04-14 fmt --check --all`\n- `cargo nextest run -p fabro-sandbox -p fabro-server -p fabro-api -p fabro-types`\n- `cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings`\n- `cd lib/packages/fabro-api-client && bun run typecheck`\n\nNo git commit was created.",
+          "thread.implement.current_node": "simplify_opus",
+          "graph.goal": "# Provider-Backed Sandbox API Implementation Plan\n\n> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.\n\n**Goal:** Expose provider-backed sandbox inventory APIs that list and retrieve Fabro-managed sandboxes directly from sandbox providers, outside the context of runs.\n\n**Architecture:** Split sandbox responsibilities into a provider-level `SandboxProvider` trait and an instantiated `Sandbox` handle. `SandboxProvider` owns provider inventory and lifecycle escape hatches (`list`, `get`, `create`, `delete`); `Sandbox` keeps in-sandbox capabilities such as file IO, exec, terminal, preview URLs, and git operations. The API fans out across configured providers and never uses run projection state as the source of truth for sandbox list/get.\n\n**Tech Stack:** Rust, Axum, OpenAPI/progenitor, generated TypeScript Axios client, Bollard for Docker, Daytona Rust SDK, existing Fabro managed labels.\n\n---\n\n## Decisions\n\n- Use greenfield naming: `SandboxProvider` is the trait, `SandboxProviderKind` is the enum discriminator (`local`, `docker`, `daytona`).\n- `GET /api/v1/sandboxes/{id}` treats `{id}` as a provider-native id and searches all configured providers.\n- Return `409 Conflict` when more than one provider returns a sandbox for the same id.\n- List and get return only Fabro-managed sandboxes; provider implementations must filter or verify `sh.fabro.managed=true`.\n- `SandboxProvider::delete` exists for cleanup of provider resources that cannot be instantiated as `Sandbox`; it is not exposed through public API in this plan.\n- `local` has no provider-managed inventory and should return an empty list plus `None` for get.\n\n## API And Types\n\n**Files:**\n- Modify: `docs/public/api-reference/fabro-api.yaml`\n- Create: `lib/crates/fabro-types/src/sandbox_inventory.rs`\n- Modify: `lib/crates/fabro-types/src/lib.rs`\n- Test: `lib/crates/fabro-api/tests/sandbox_inventory_round_trip.rs`\n\n- [ ] **Add OpenAPI paths**\n\n  Add:\n\n  ```yaml\n  /api/v1/sandboxes:\n    get:\n      operationId: listSandboxes\n      tags: [Sandboxes]\n      summary: List Sandboxes\n      description: Lists Fabro-managed sandboxes directly from configured sandbox providers.\n      responses:\n        \"200\":\n          description: Provider-backed sandbox inventory\n          content:\n            application/json:\n              schema:\n                $ref: \"#/components/schemas/SandboxListResponse\"\n\n  /api/v1/sandboxes/{id}:\n    get:\n      operationId: retrieveSandbox\n      tags: [Sandboxes]\n      summary: Retrieve Sandbox\n      description: Retrieves a Fabro-managed sandbox by provider-native id by searching all configured sandbox providers.\n      parameters:\n        - in: path\n          name: id\n          required: true\n          schema:\n            type: string\n      responses:\n        \"200\":\n          description: Sandbox found\n          content:\n            application/json:\n              schema:\n                $ref: \"#/components/schemas/SandboxInfo\"\n        \"404\":\n          description: No provider found a Fabro-managed sandbox with this id\n        \"409\":\n          description: More than one provider matched this sandbox id\n        \"502\":\n          description: Provider lookup failed before a definitive result could be determined\n  ```\n\n- [ ] **Add API schemas**\n\n  Add schemas for:\n\n  ```yaml\n  SandboxProviderKind:\n    type: string\n    enum: [local, docker, daytona]\n\n  SandboxInfo:\n    required: [provider, id, state, resources, network, labels, timestamps]\n    properties:\n      provider:\n        $ref: \"#/components/schemas/SandboxProviderKind\"\n      id:\n        type: string\n      display_name:\n        type: string\n        nullable: true\n      state:\n        $ref: \"#/components/schemas/SandboxState\"\n      native_state:\n        type: string\n        nullable: true\n      image:\n        type: string\n        nullable: true\n      snapshot:\n        type: string\n        nullable: true\n      region:\n        type: string\n        nullable: true\n      web_url:\n        type: string\n        nullable: true\n      working_directory:\n        type: string\n        nullable: true\n      resources:\n        $ref: \"#/components/schemas/SandboxResources\"\n      network:\n        $ref: \"#/components/schemas/SandboxNetwork\"\n      labels:\n        type: object\n        additionalProperties:\n          type: string\n      timestamps:\n        $ref: \"#/components/schemas/SandboxTimestamps\"\n\n  SandboxProviderLookupError:\n    required: [provider, message]\n    properties:\n      provider:\n        $ref: \"#/components/schemas/SandboxProviderKind\"\n      message:\n        type: string\n\n  SandboxListMeta:\n    required: [provider_errors]\n    properties:\n      provider_errors:\n        type: array\n        items:\n          $ref: \"#/components/schemas/SandboxProviderLookupError\"\n\n  SandboxListResponse:\n    required: [data, meta]\n    properties:\n      data:\n        type: array\n        items:\n          $ref: \"#/components/schemas/SandboxInfo\"\n      meta:\n        $ref: \"#/components/schemas/SandboxListMeta\"\n  ```\n\n- [ ] **Add canonical Rust DTOs**\n\n  Create `lib/crates/fabro-types/src/sandbox_inventory.rs` with Rust structs mirroring the OpenAPI schemas. Reuse existing `SandboxState`, `SandboxResources`, `SandboxNetwork`, and `SandboxTimestamps`.\n\n- [ ] **Wire generated API replacement tests**\n\n  Add `with_replacement` mappings in `lib/crates/fabro-api/build.rs` for the new canonical DTOs and prove JSON parity in `lib/crates/fabro-api/tests/sandbox_inventory_round_trip.rs`.\n\n## Provider Runtime Layer\n\n**Files:**\n- Create: `lib/crates/fabro-sandbox/src/provider.rs`\n- Create: `lib/crates/fabro-sandbox/src/provider/docker.rs`\n- Create: `lib/crates/fabro-sandbox/src/provider/daytona.rs`\n- Modify: `lib/crates/fabro-sandbox/src/lib.rs`\n- Test: `lib/crates/fabro-sandbox/src/provider.rs`\n\n- [ ] **Define `SandboxProvider` and registry**\n\n  Add:\n\n  ```rust\n  #[async_trait::async_trait]\n  pub trait SandboxProvider: Send + Sync {\n      fn kind(&self) -> SandboxProviderKind;\n\n      async fn list(&self, filter: SandboxListFilter) -> crate::Result<Vec<SandboxInfo>>;\n      async fn get(&self, id: &str) -> crate::Result<Option<SandboxInfo>>;\n      async fn create(&self, spec: SandboxCreateSpec) -> crate::Result<SandboxInfo>;\n      async fn delete(&self, id: &str) -> crate::Result<()>;\n  }\n  ```\n\n  Add `SandboxProviderRegistry` with:\n\n  ```rust\n  pub async fn list_managed(&self) -> SandboxListResponse;\n  pub async fn get_managed_by_native_id(&self, id: &str) -> Result<SandboxInfo, SandboxLookupError>;\n  ```\n\n- [ ] **Define registry lookup semantics**\n\n  Implement:\n\n  - list: call every configured provider, concatenate successful results, and put failed providers in `meta.provider_errors`.\n  - get: call every configured provider. Return the single match, return not-found if all providers succeed with no match, return conflict if two or more providers match, and return provider-unavailable if no provider matches and at least one provider failed.\n\n- [ ] **Keep `Sandbox` instance behavior unchanged**\n\n  Do not move file IO, exec, terminal, preview, or git methods onto `SandboxProvider`. Those remain on the instantiated `Sandbox` trait.\n\n## Provider Implementations\n\n**Files:**\n- Modify: `lib/crates/fabro-sandbox/src/docker.rs`\n- Modify: `lib/crates/fabro-sandbox/src/daytona/mod.rs`\n- Modify: `lib/crates/fabro-sandbox/src/details.rs`\n- Test: `lib/crates/fabro-sandbox/src/details.rs`\n\n- [ ] **Docker provider inventory**\n\n  Implement Docker inventory without constructing a `DockerSandbox` instance:\n\n  - `list`: use Bollard to list containers filtered by `label=sh.fabro.managed=true`.\n  - `get`: inspect by provider-native id or name; return `None` when missing or unmanaged.\n  - `delete`: inspect first and verify managed labels before removing.\n  - `create`: create a managed Docker sandbox and return `SandboxInfo`.\n\n- [ ] **Daytona provider inventory**\n\n  Implement Daytona inventory through the SDK:\n\n  - `list`: call SDK list with label filter `{ \"sh.fabro.managed\": \"true\" }`.\n  - `get`: call SDK get and return `None` if the sandbox does not carry the managed label.\n  - `delete`: fetch first and verify managed label before deleting.\n  - `create`: create a managed Daytona sandbox and return `SandboxInfo`.\n\n- [ ] **Share detail mapping**\n\n  Refactor existing Docker/Daytona detail mapping so run-scoped `SandboxDetails` and provider-backed `SandboxInfo` use the same normalization for state, resources, network, labels, timestamps, image/snapshot, region, and provider URL.\n\n## Server API\n\n**Files:**\n- Create: `lib/crates/fabro-server/src/server/handler/sandboxes.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/mod.rs`\n- Modify: `lib/crates/fabro-server/src/server.rs`\n- Test: `lib/crates/fabro-server/src/server/handler/sandboxes.rs`\n\n- [ ] **Register routes**\n\n  Add a new top-level handler module:\n\n  ```rust\n  Router::new()\n      .route(\"/sandboxes\", get(list_sandboxes))\n      .route(\"/sandboxes/{id}\", get(retrieve_sandbox))\n  ```\n\n  Merge it into the `/api/v1` router beside existing run, model, system, and human-in-the-loop routes.\n\n- [ ] **Use provider registry from app state**\n\n  Add the provider registry to server state initialization. The registry should include enabled providers only, built from server/environment settings and secrets.\n\n- [ ] **Use run-management authorization**\n\n  Require the same broad run-management authorization used by run listing, because the sandbox inventory crosses individual run boundaries and may expose provider resource metadata.\n\n- [ ] **Map registry errors to HTTP**\n\n  Map:\n\n  - single match: `200`\n  - no matches and no provider failures: `404`\n  - duplicate provider matches: `409`\n  - no match plus at least one provider failure: `502`\n\n## Verification\n\n**Files:**\n- Test: `lib/crates/fabro-types/tests/sandbox_inventory_serde.rs`\n- Test: `lib/crates/fabro-api/tests/sandbox_inventory_round_trip.rs`\n- Test: `lib/crates/fabro-sandbox/src/provider.rs`\n- Test: `lib/crates/fabro-server/src/server/handler/sandboxes.rs`\n\n- [ ] **Type and API tests**\n\n  Run:\n\n  ```bash\n  cargo test -p fabro-types sandbox_inventory\n  cargo test -p fabro-api sandbox_inventory_round_trip\n  ```\n\n- [ ] **Provider registry tests**\n\n  Cover these cases with fake providers:\n\n  - list returns aggregate data from two successful providers.\n  - list includes provider error metadata when one provider fails.\n  - get returns one matching sandbox.\n  - get returns not-found when all providers succeed with no match.\n  - get returns conflict when two providers match the same native id.\n  - get returns provider-unavailable when no provider matches and one provider fails.\n\n- [ ] **Server route tests**\n\n  Cover:\n\n  - `GET /api/v1/sandboxes` returns provider-backed data without reading run projections.\n  - `GET /api/v1/sandboxes/{id}` searches all configured providers.\n  - duplicate ids return `409`.\n  - provider lookup uncertainty returns `502`.\n\n- [ ] **Workspace checks**\n\n  Run:\n\n  ```bash\n  cargo +nightly-2026-04-14 fmt --check --all\n  cargo nextest run -p fabro-sandbox -p fabro-server -p fabro-api -p fabro-types\n  cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings\n  ```\n\n## Assumptions\n\n- This plan uses greenfield naming and allows `SandboxProvider` to mean the provider control-plane trait.\n- The enum discriminator is `SandboxProviderKind`, not `SandboxProvider`.\n- Public API v1 exposes only list and get; create and delete are trait capabilities for provider internals and cleanup.\n- Provider-native id search across all providers is intentional; duplicate matches are reported as ambiguity rather than guessed.\n- Provider-backed inventory intentionally does not depend on run records, run projections, or preserved-run handoff state.\n",
+          "thread.preflight_lint.current_node": "implement",
           "internal.retry_count.preflight_lint": 0,
+          "internal.retry_count.simplify_gpt": 0,
+          "command.output": "blob://sha256/35ec600284ba23bf54e08b21f56c5857b2c19dac34e52cf43a58b4b9198ec7ec",
           "internal.run_id": "01KSGHGMCFM8W2FHXNMJ7MVY65",
-          "graph.model_stylesheet": "\n            * { model: claude-opus-4-7; }\n        "
+          "internal.retry_count.toolchain": 0,
+          "internal.retry_count.implement": 0,
+          "failure_class": "",
+          "internal.retry_count.verify": 0,
+          "thread.simplify_opus.current_node": "simplify_gpt"
         },
         "node_outcomes": {
+          "preflight_lint": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+            },
+            "notes": "Script completed: cargo +nightly-2026-04-14 clippy -q --workspace --all-targets -- -D warnings 2>&1",
+            "usage": null
+          },
+          "preflight_compile": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+            },
+            "notes": "Script completed: cargo check -q --workspace 2>&1",
+            "usage": null
+          },
           "simplify_gpt": {
             "status": "succeeded",
             "context_updates": {
@@ -1392,40 +1408,12 @@
               "/home/daytona/workspace/fabro/lib/crates/fabro-types/src/sandbox_provider.rs"
             ]
           },
-          "preflight_lint": {
-            "status": "succeeded",
-            "context_updates": {
-              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
-            },
-            "notes": "Script completed: cargo +nightly-2026-04-14 clippy -q --workspace --all-targets -- -D warnings 2>&1",
-            "usage": null
-          },
           "toolchain": {
             "status": "succeeded",
             "context_updates": {
               "command.output": "blob://sha256/fc14b2ba2d770e5cd3169df7a29525c962adfc4cfa3097b9098c63ebd61a748c"
             },
             "notes": "Script completed: command -v cargo >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && sudo ln -sf $HOME/.cargo/bin/* /usr/local/bin/; }; cargo --version 2>&1",
-            "usage": null
-          },
-          "preflight_compile": {
-            "status": "succeeded",
-            "context_updates": {
-              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
-            },
-            "notes": "Script completed: cargo check -q --workspace 2>&1",
-            "usage": null
-          },
-          "start": {
-            "status": "succeeded",
-            "usage": null
-          },
-          "verify": {
-            "status": "succeeded",
-            "context_updates": {
-              "command.output": "blob://sha256/35ec600284ba23bf54e08b21f56c5857b2c19dac34e52cf43a58b4b9198ec7ec"
-            },
-            "notes": "Script completed: git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\"disabled\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1",
             "usage": null
           },
           "implement": {
@@ -1460,24 +1448,158 @@
             "files_touched": [
               "/home/daytona/workspace/fabro/lib/crates/fabro-server/src/server/handler/sandboxes.rs"
             ]
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "verify": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/35ec600284ba23bf54e08b21f56c5857b2c19dac34e52cf43a58b4b9198ec7ec"
+            },
+            "notes": "Script completed: git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\"disabled\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1",
+            "usage": null
           }
         },
         "next_node_id": "exit",
+        "git_commit_sha": "ec97ba860c00aa4f9b0f08ef472a9c6078a646f8",
         "node_visits": {
-          "verify": 1,
           "implement": 1,
-          "simplify_opus": 1,
+          "preflight_lint": 1,
+          "verify": 1,
           "start": 1,
-          "toolchain": 1,
           "preflight_compile": 1,
+          "toolchain": 1,
           "simplify_gpt": 1,
-          "preflight_lint": 1
+          "simplify_opus": 1
         }
       },
-      "diff": {}
+      "diff": {
+        "patch": "diff --git a/apps/fabro-web/app/routes/settings-monitoring.test.tsx b/apps/fabro-web/app/routes/settings-monitoring.test.tsx\nindex 10227b98a..070276f8d 100644\n--- a/apps/fabro-web/app/routes/settings-monitoring.test.tsx\n+++ b/apps/fabro-web/app/routes/settings-monitoring.test.tsx\n@@ -106,7 +106,7 @@ function sampleServerSettings(maxConcurrentRuns = 8): ServerSettings {\n describe(\"SettingsMonitoring route\", () => {\n   beforeEach(() => {\n     teardownReactTestEnv = setupReactTestEnv();\n-    systemInfo = { runs: { active: 3, total: 12 } };\n+    systemInfo = { runs: { active: 3, scheduler_slots_used: 1, total: 12 } };\n     serverSettings = sampleServerSettings();\n   });\n \n@@ -133,7 +133,8 @@ describe(\"SettingsMonitoring route\", () => {\n     expect(text).toContain(\"5s\");\n     expect(text).toContain(\"3 GiB\");\n     expect(text).toContain(\"8 GiB\");\n-    expect(text).toContain(\"3 / 8 active\");\n+    expect(text).toContain(\"1 / 8 slots used\");\n+    expect(text).not.toContain(\"3 / 8 active\");\n   });\n \n   test(\"shows CPU warmup state while usage is null\", () => {\ndiff --git a/apps/fabro-web/app/routes/settings-monitoring.tsx b/apps/fabro-web/app/routes/settings-monitoring.tsx\nindex b058e6d27..cde3d733c 100644\n--- a/apps/fabro-web/app/routes/settings-monitoring.tsx\n+++ b/apps/fabro-web/app/routes/settings-monitoring.tsx\n@@ -59,17 +59,14 @@ function RunsPanel() {\n     return <PanelSkeleton />;\n   }\n \n-  const active = info.runs?.active ?? 0;\n+  const slotsUsed = info.runs?.scheduler_slots_used ?? 0;\n   const max = settings.server.scheduler.max_concurrent_runs;\n-  const percent = max > 0 ? (active / max) * 100 : null;\n+  const percent = max > 0 ? (slotsUsed / max) * 100 : null;\n \n   return (\n     <Panel title=\"Runs\">\n-      <Row\n-        title=\"Active\"\n-        help=\"Runs currently pending, runnable, or executing against the scheduler ceiling.\"\n-      >\n-        <UsageMeter percent={percent} label={`${active} / ${max} active`} />\n+      <Row title=\"Concurrency used\" help=\"Runs currently occupying scheduler slots.\">\n+        <UsageMeter percent={percent} label={`${slotsUsed} / ${max} slots used`} />\n       </Row>\n     </Panel>\n   );\ndiff --git a/docs/public/api-reference/fabro-api.yaml b/docs/public/api-reference/fabro-api.yaml\nindex 3983c37cd..220fbefb0 100644\n--- a/docs/public/api-reference/fabro-api.yaml\n+++ b/docs/public/api-reference/fabro-api.yaml\n@@ -12443,6 +12443,10 @@ components:\n           type: integer\n           format: int64\n           description: Runs currently pending, runnable, or executing.\n+        scheduler_slots_used:\n+          type: integer\n+          format: int64\n+          description: Runs currently occupying scheduler concurrency slots.\n \n     SystemResourcesResponse:\n       description: Server-visible runtime resource usage for the active Fabro process environment.\ndiff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs\nindex c290687a3..96a1dfcf6 100644\n--- a/lib/crates/fabro-server/src/server.rs\n+++ b/lib/crates/fabro-server/src/server.rs\n@@ -2521,6 +2521,16 @@ fn compute_queue_positions(runs: &HashMap<RunId, ManagedRun>) -> HashMap<RunId,\n         .collect()\n }\n \n+pub(in crate::server) fn counts_toward_scheduler_capacity(status: RunStatus) -> bool {\n+    matches!(\n+        status,\n+        RunStatus::Starting\n+            | RunStatus::Running\n+            | RunStatus::Blocked { .. }\n+            | RunStatus::Paused { .. }\n+    )\n+}\n+\n #[allow(\n     clippy::result_large_err,\n     reason = \"Run ID parsing returns HTTP 400 responses directly.\"\n@@ -4117,15 +4127,7 @@ pub fn spawn_scheduler(state: Arc<AppState>) {\n                 let runs = state.runs.lock().expect(\"runs lock poisoned\");\n                 let active = runs\n                     .values()\n-                    .filter(|r| {\n-                        matches!(\n-                            r.status,\n-                            RunStatus::Starting\n-                                | RunStatus::Running\n-                                | RunStatus::Blocked { .. }\n-                                | RunStatus::Paused { .. }\n-                        )\n-                    })\n+                    .filter(|r| counts_toward_scheduler_capacity(r.status))\n                     .count();\n                 let available = state.max_concurrent_runs.saturating_sub(active);\n                 if available == 0 {\ndiff --git a/lib/crates/fabro-server/src/server/handler/system.rs b/lib/crates/fabro-server/src/server/handler/system.rs\nindex ce836f39b..667d7d81d 100644\n--- a/lib/crates/fabro-server/src/server/handler/system.rs\n+++ b/lib/crates/fabro-server/src/server/handler/system.rs\n@@ -7,9 +7,9 @@ use super::super::{\n     BillingByModel, DfParams, FABRO_VERSION, GithubIntegrationStrategy, IntoResponse, Json, Path,\n     PruneRunsRequest, PruneRunsResponse, Query, RequiredUser, Response, Router, RunStatus, State,\n     StatusCode, SystemInfoResponse, SystemRepairRunIssue, SystemRepairRunsResponse,\n-    SystemRunCounts, build_disk_usage_response, build_prune_plan, delete_run_internal, diagnostics,\n-    get, post, resolve_interp_string, resource_sampler, spawn_blocking, system_sandbox_provider,\n-    to_i64,\n+    SystemRunCounts, build_disk_usage_response, build_prune_plan, counts_toward_scheduler_capacity,\n+    delete_run_internal, diagnostics, get, post, resolve_interp_string, resource_sampler,\n+    spawn_blocking, system_sandbox_provider, to_i64,\n };\n \n pub(super) fn routes() -> Router<Arc<AppState>> {\n@@ -44,7 +44,7 @@ async fn get_server_settings(_auth: RequiredUser, State(state): State<Arc<AppSta\n async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>) -> Response {\n     let manifest_run_settings = state.manifest_run_settings();\n     let server_settings = state.server_settings();\n-    let (total_runs, active_runs) = {\n+    let (total_runs, active_runs, scheduler_slots_used) = {\n         let runs = state.runs.lock().expect(\"runs lock poisoned\");\n         let active = runs\n             .values()\n@@ -60,7 +60,11 @@ async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>\n                 )\n             })\n             .count();\n-        (runs.len(), active)\n+        let scheduler_slots_used = runs\n+            .values()\n+            .filter(|run| counts_toward_scheduler_capacity(run.status))\n+            .count();\n+        (runs.len(), active, scheduler_slots_used)\n     };\n \n     let response = SystemInfoResponse {\n@@ -75,8 +79,9 @@ async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>\n         storage_dir:      Some(state.server_storage_dir().display().to_string()),\n         uptime_secs:      Some(to_i64(state.started_at.elapsed().as_secs())),\n         runs:             Some(SystemRunCounts {\n-            total:  Some(to_i64(total_runs)),\n-            active: Some(to_i64(active_runs)),\n+            total:                Some(to_i64(total_runs)),\n+            active:               Some(to_i64(active_runs)),\n+            scheduler_slots_used: Some(to_i64(scheduler_slots_used)),\n         }),\n         sandbox_provider: Some(system_sandbox_provider(&manifest_run_settings)),\n     };\ndiff --git a/lib/crates/fabro-server/src/server/tests.rs b/lib/crates/fabro-server/src/server/tests.rs\nindex 6379fb3eb..5e4d9abe9 100644\n--- a/lib/crates/fabro-server/src/server/tests.rs\n+++ b/lib/crates/fabro-server/src/server/tests.rs\n@@ -9517,6 +9517,20 @@ async fn worker_started_child_run_requires_approval_before_becoming_runnable() {\n         Some(\"pending\")\n     );\n \n+    let response = app\n+        .clone()\n+        .oneshot(bearer_request(\n+            Method::GET,\n+            \"/system/info\",\n+            &user_jwt,\n+            Body::empty(),\n+        ))\n+        .await\n+        .unwrap();\n+    let info_body = response_json!(response, StatusCode::OK).await;\n+    assert_eq!(info_body[\"runs\"][\"active\"], 1);\n+    assert_eq!(info_body[\"runs\"][\"scheduler_slots_used\"], 0);\n+\n     {\n         let runs = state.runs.lock().expect(\"runs lock poisoned\");\n         assert_eq!(\n@@ -13056,6 +13070,31 @@ async fn queue_position_reported_for_runnable_runs() {\n     assert_eq!(positions.get(&second_id).copied(), Some(2));\n }\n \n+#[test]\n+fn scheduler_capacity_counts_only_runs_occupying_slots() {\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Submitted));\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Pending {\n+        reason: PendingReason::ApprovalRequired,\n+    }));\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Runnable));\n+    assert!(counts_toward_scheduler_capacity(RunStatus::Starting));\n+    assert!(counts_toward_scheduler_capacity(RunStatus::Running));\n+    assert!(counts_toward_scheduler_capacity(RunStatus::Blocked {\n+        blocked_reason: BlockedReason::HumanInputRequired,\n+    }));\n+    assert!(counts_toward_scheduler_capacity(RunStatus::Paused {\n+        prior_block: None,\n+    }));\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Removing));\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Succeeded {\n+        reason: SuccessReason::Completed,\n+    }));\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Failed {\n+        reason: FailureReason::WorkflowError,\n+    }));\n+    assert!(!counts_toward_scheduler_capacity(RunStatus::Dead));\n+}\n+\n #[tokio::test(flavor = \"multi_thread\", worker_threads = 2)]\n async fn concurrency_limit_respected() {\n     let state = test_app_state_with_options(default_test_server_settings(), RunLayer::default(), 1);\ndiff --git a/lib/crates/fabro-server/tests/it/api/system.rs b/lib/crates/fabro-server/tests/it/api/system.rs\nindex a798d5c26..e7b2abbe0 100644\n--- a/lib/crates/fabro-server/tests/it/api/system.rs\n+++ b/lib/crates/fabro-server/tests/it/api/system.rs\n@@ -266,6 +266,16 @@ async fn test_app_state_with_options_respects_max_concurrent_runs() {\n             .is_some_and(std::vec::Vec::is_empty),\n         \"second run should still be waiting for scheduler capacity while the first waits at the human gate: {second_questions}\"\n     );\n+\n+    let request = Request::builder()\n+        .method(\"GET\")\n+        .uri(api(\"/system/info\"))\n+        .body(Body::empty())\n+        .unwrap();\n+    let response = app.oneshot(request).await.unwrap();\n+    let body = response_json(response, StatusCode::OK, \"GET /api/v1/system/info\").await;\n+    assert_eq!(body[\"runs\"][\"active\"], 2);\n+    assert_eq!(body[\"runs\"][\"scheduler_slots_used\"], 1);\n }\n \n #[tokio::test(flavor = \"multi_thread\", worker_threads = 2)]\ndiff --git a/lib/packages/fabro-api-client/src/models/system-run-counts.ts b/lib/packages/fabro-api-client/src/models/system-run-counts.ts\nindex ad6854320..3fe29ae9b 100644\n--- a/lib/packages/fabro-api-client/src/models/system-run-counts.ts\n+++ b/lib/packages/fabro-api-client/src/models/system-run-counts.ts\n@@ -26,4 +26,8 @@ export interface SystemRunCounts {\n      * Runs currently pending, runnable, or executing.\n      */\n     'active'?: number;\n+    /**\n+     * Runs currently occupying scheduler concurrency slots.\n+     */\n+    'scheduler_slots_used'?: number;\n }\n",
+        "summary": {
+          "files_changed": 62,
+          "additions": 2466,
+          "deletions": 253
+        }
+      }
     }
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-25T23:27:12.472641Z",
+    "status": "succeeded",
+    "timing": {
+      "wall_time_ms": 6174967,
+      "inference_time_ms": 0,
+      "tool_time_ms": 0,
+      "active_time_ms": 0
+    },
+    "final_git_commit_sha": "ec97ba860c00aa4f9b0f08ef472a9c6078a646f8",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "timing": {
+          "wall_time_ms": 0,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "toolchain",
+        "stage_label": "toolchain",
+        "timing": {
+          "wall_time_ms": 1295,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "preflight_compile",
+        "stage_label": "preflight_compile",
+        "timing": {
+          "wall_time_ms": 126843,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "preflight_lint",
+        "stage_label": "preflight_lint",
+        "timing": {
+          "wall_time_ms": 140082,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "implement",
+        "stage_label": "implement",
+        "timing": {
+          "wall_time_ms": 3400999,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "billing_usd_micros": 10817320,
+        "retries": 0
+      },
+      {
+        "stage_id": "simplify_opus",
+        "stage_label": "simplify_opus",
+        "timing": {
+          "wall_time_ms": 1670107,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "billing_usd_micros": 26235457,
+        "retries": 0
+      },
+      {
+        "stage_id": "simplify_gpt",
+        "stage_label": "simplify_gpt",
+        "timing": {
+          "wall_time_ms": 302556,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "billing_usd_micros": 4756240,
+        "retries": 0
+      },
+      {
+        "stage_id": "verify",
+        "stage_label": "verify",
+        "timing": {
+          "wall_time_ms": 504563,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      }
+    ],
+    "billing": {
+      "input_tokens": 2825270,
+      "output_tokens": 77083,
+      "total_tokens": 33613710,
+      "reasoning_tokens": 6191,
+      "cache_read_tokens": 28935573,
+      "cache_write_tokens": 1769593,
+      "total_usd_micros": 41809017
+    },
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "provider": "daytona",
     "snapshot": "fabro-v12",
@@ -1565,6 +1687,40 @@
       "handler": "command",
       "timing": {
         "wall_time_ms": 1295,
+        "inference_time_ms": 0,
+        "tool_time_ms": 0,
+        "active_time_ms": 0
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    },
+    "exit@1": {
+      "first_event_seq": 2619,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-05-25T23:27:12.419045Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-05-25T23:27:12.419022Z",
+      "handler": "exit",
+      "timing": {
+        "wall_time_ms": 0,
         "inference_time_ms": 0,
         "tool_time_ms": 0,
         "active_time_ms": 0
@@ -2226,7 +2382,12 @@
       "first_event_seq": 2609,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Script completed: git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\"disabled\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1",
+        "failure_reason": null,
+        "timestamp": "2026-05-25T23:27:08.258471Z"
+      },
       "provider_used": null,
       "diff": null,
       "script_invocation": {
@@ -2234,11 +2395,27 @@
         "command": "exec 2>&1\ngit fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\"disabled\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1",
         "language": "shell"
       },
-      "script_timing": null,
+      "script_timing": {
+        "output": "blob://sha256/35ec600284ba23bf54e08b21f56c5857b2c19dac34e52cf43a58b4b9198ec7ec",
+        "exit_code": 0,
+        "duration_ms": 504543,
+        "termination": "exited",
+        "output_bytes": 195259,
+        "live_streaming": true
+      },
       "parallel_results": null,
       "output": null,
+      "output_bytes": 195259,
+      "live_streaming": true,
+      "termination": "exited",
       "started_at": "2026-05-25T23:18:43.691383Z",
       "handler": "command",
+      "timing": {
+        "wall_time_ms": 504563,
+        "inference_time_ms": 0,
+        "tool_time_ms": 0,
+        "active_time_ms": 0
+      },
       "usage": {
         "input_tokens": 0,
         "output_tokens": 0,
@@ -2247,7 +2424,7 @@
         "cache_read_tokens": 0,
         "cache_write_tokens": 0
       },
-      "state": "running"
+      "state": "succeeded"
     },
     "preflight_compile@1": {
       "first_event_seq": 32,
