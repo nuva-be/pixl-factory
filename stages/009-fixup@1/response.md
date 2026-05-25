@@ -1,0 +1,1 @@
+All 6405 tests pass. The fix was a single-line change to `lib/crates/fabro-server/tests/it/api/runs.rs` — the test was injecting `OPENAI_API_KEY` via `env_lookup`, but after the secrets rationalization the server LLM credentials are vault-only, so it needed to use `vault_entries` instead.
