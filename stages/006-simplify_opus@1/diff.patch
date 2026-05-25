@@ -1,0 +1,266 @@
+diff --git a/lib/crates/fabro-cli/src/commands/runs/approval.rs b/lib/crates/fabro-cli/src/commands/runs/approval.rs
+index 29e0c1dc2..01017c007 100644
+--- a/lib/crates/fabro-cli/src/commands/runs/approval.rs
++++ b/lib/crates/fabro-cli/src/commands/runs/approval.rs
+@@ -25,23 +25,12 @@ enum Action {
+ }
+ 
+ impl Action {
+-    fn verb(self) -> &'static str {
++    fn past(self) -> &'static str {
+         match self {
+             Self::Approve => "approved",
+             Self::Deny => "denied",
+         }
+     }
+-
+-    fn failure_message(self) -> &'static str {
+-        match self {
+-            Self::Approve => "some runs could not be approved",
+-            Self::Deny => "some runs could not be denied",
+-        }
+-    }
+-
+-    fn json_key(self) -> &'static str {
+-        self.verb()
+-    }
+ }
+ 
+ async fn run_bulk(
+@@ -102,13 +91,13 @@ async fn run_bulk(
+ 
+     if json {
+         let mut body = serde_json::Map::new();
+-        body.insert(action.json_key().to_string(), serde_json::json!(changed));
++        body.insert(action.past().to_string(), serde_json::json!(changed));
+         body.insert("errors".to_string(), serde_json::json!(errors));
+         print_json_pretty(&serde_json::Value::Object(body))?;
+     }
+ 
+     if had_errors {
+-        bail!(action.failure_message());
++        bail!("some runs could not be {}", action.past());
+     }
+     Ok(())
+ }
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/approve.rs b/lib/crates/fabro-cli/tests/it/cmd/approve.rs
+index a47e0754e..2f4d23ad9 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/approve.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/approve.rs
+@@ -2,26 +2,9 @@ use fabro_test::{fabro_snapshot, test_context};
+ use httpmock::MockServer;
+ use serde_json::Value;
+ 
+-use super::support::remote_run_summary_json;
++use super::support::{conflict_error_body, remote_run_summary_json, ulid_filter};
+ use crate::support::unique_run_id;
+ 
+-fn ulid_filter() -> (String, String) {
+-    (
+-        r"\b[0-9A-HJKMNP-TV-Z]{12}\b".to_string(),
+-        "[ULID]".to_string(),
+-    )
+-}
+-
+-fn error_body(detail: &str) -> serde_json::Value {
+-    serde_json::json!({
+-        "errors": [{
+-            "status": "409",
+-            "title": "Conflict",
+-            "detail": detail,
+-        }]
+-    })
+-}
+-
+ #[test]
+ fn help() {
+     let context = test_context!();
+@@ -215,7 +198,7 @@ fn approve_partial_error_attempts_remaining_runs_and_reports_json() {
+             .path(format!("/api/v1/runs/{stale_run}/approve"));
+         then.status(409)
+             .header("Content-Type", "application/json")
+-            .json_body(error_body("Run is not pending approval."));
++            .json_body(conflict_error_body("Run is not pending approval."));
+     });
+     let good_approve = server.mock(|when, then| {
+         when.method("POST")
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/archive.rs b/lib/crates/fabro-cli/tests/it/cmd/archive.rs
+index dd2d39662..b6cfea329 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/archive.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/archive.rs
+@@ -4,16 +4,10 @@ use serde_json::Value;
+ 
+ use super::support::{
+     remote_run_summary_json, setup_seeded_completed_dry_run, setup_seeded_created_dry_run,
++    ulid_filter,
+ };
+ use crate::support::unique_run_id;
+ 
+-fn ulid_filter() -> (String, String) {
+-    (
+-        r"\b[0-9A-HJKMNP-TV-Z]{12}\b".to_string(),
+-        "[ULID]".to_string(),
+-    )
+-}
+-
+ #[test]
+ fn help() {
+     let context = test_context!();
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/deny.rs b/lib/crates/fabro-cli/tests/it/cmd/deny.rs
+index c9358c57d..867b65907 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/deny.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/deny.rs
+@@ -2,26 +2,9 @@ use fabro_test::{fabro_snapshot, test_context};
+ use httpmock::MockServer;
+ use serde_json::Value;
+ 
+-use super::support::remote_run_summary_json;
++use super::support::{conflict_error_body, remote_run_summary_json, ulid_filter};
+ use crate::support::unique_run_id;
+ 
+-fn ulid_filter() -> (String, String) {
+-    (
+-        r"\b[0-9A-HJKMNP-TV-Z]{12}\b".to_string(),
+-        "[ULID]".to_string(),
+-    )
+-}
+-
+-fn error_body(detail: &str) -> serde_json::Value {
+-    serde_json::json!({
+-        "errors": [{
+-            "status": "409",
+-            "title": "Conflict",
+-            "detail": detail,
+-        }]
+-    })
+-}
+-
+ #[test]
+ fn help() {
+     let context = test_context!();
+@@ -272,7 +255,7 @@ fn deny_partial_error_attempts_remaining_runs_and_reports_json() {
+             .json_body(serde_json::json!({ "reason": "Needs review" }));
+         then.status(409)
+             .header("Content-Type", "application/json")
+-            .json_body(error_body("Run is not pending approval."));
++            .json_body(conflict_error_body("Run is not pending approval."));
+     });
+     let good_deny = server.mock(|when, then| {
+         when.method("POST")
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/support.rs b/lib/crates/fabro-cli/tests/it/cmd/support.rs
+index 7e2e4c4e5..9ac2e7673 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/support.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/support.rs
+@@ -134,6 +134,27 @@ pub(crate) fn mock_resolved_run<'a>(
+     })
+ }
+ 
++/// Snapshot filter that scrubs short (12-char) ULID suffixes from output, used
++/// when the CLI prints abbreviated run IDs.
++pub(crate) fn ulid_filter() -> (String, String) {
++    (
++        r"\b[0-9A-HJKMNP-TV-Z]{12}\b".to_string(),
++        "[ULID]".to_string(),
++    )
++}
++
++/// JSON 409 error body mirroring the server's batch-error shape, used by mock
++/// HTTP servers in CLI tests that exercise partial-failure code paths.
++pub(crate) fn conflict_error_body(detail: &str) -> Value {
++    serde_json::json!({
++        "errors": [{
++            "status": "409",
++            "title": "Conflict",
++            "detail": detail,
++        }]
++    })
++}
++
+ pub(crate) fn remote_run_summary_json(
+     run_id: &str,
+     workflow_name: &str,
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/unarchive.rs b/lib/crates/fabro-cli/tests/it/cmd/unarchive.rs
+index bd7044cf7..fd90a3a7e 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/unarchive.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/unarchive.rs
+@@ -4,16 +4,10 @@ use serde_json::Value;
+ 
+ use super::support::{
+     remote_run_summary_json, setup_seeded_completed_dry_run, setup_seeded_created_dry_run,
++    ulid_filter,
+ };
+ use crate::support::unique_run_id;
+ 
+-fn ulid_filter() -> (String, String) {
+-    (
+-        r"\b[0-9A-HJKMNP-TV-Z]{12}\b".to_string(),
+-        "[ULID]".to_string(),
+-    )
+-}
+-
+ #[test]
+ fn help() {
+     let context = test_context!();
+diff --git a/lib/crates/fabro-client/src/client.rs b/lib/crates/fabro-client/src/client.rs
+index 74b11244f..b9a512c1e 100644
+--- a/lib/crates/fabro-client/src/client.rs
++++ b/lib/crates/fabro-client/src/client.rs
+@@ -934,9 +934,7 @@ impl Client {
+     }
+ 
+     pub async fn deny_run(&self, run_id: &RunId, reason: Option<String>) -> Result<Run> {
+-        let body = types::DenyRunRequest {
+-            reason: normalize_optional_text(reason.as_deref()),
+-        };
++        let body = types::DenyRunRequest { reason };
+         let response = self
+             .send_api(|client| {
+                 let body = body.clone();
+@@ -2007,13 +2005,6 @@ fn non_zero_u64_from_u32(value: u32) -> Option<NonZeroU64> {
+     NonZeroU64::new(u64::from(value))
+ }
+ 
+-fn normalize_optional_text(value: Option<&str>) -> Option<String> {
+-    value
+-        .map(str::trim)
+-        .filter(|value| !value.is_empty())
+-        .map(ToString::to_string)
+-}
+-
+ fn non_zero_u64_from_usize(value: usize) -> Option<NonZeroU64> {
+     u64::try_from(value).ok().and_then(NonZeroU64::new)
+ }
+diff --git a/lib/crates/fabro-tool/src/interact.rs b/lib/crates/fabro-tool/src/interact.rs
+index 713721063..34023120d 100644
+--- a/lib/crates/fabro-tool/src/interact.rs
++++ b/lib/crates/fabro-tool/src/interact.rs
+@@ -141,6 +141,12 @@ pub enum ValidatedInteractAction {
+ }
+ 
+ impl ValidatedInteractAction {
++    /// Actions that may only be performed by a human user, never by a
++    /// workflow-agent through its own `fabro_tools` MCP surface.
++    pub fn requires_user(&self) -> bool {
++        matches!(self, Self::Approve | Self::Deny { .. })
++    }
++
+     fn action(&self) -> RunInteractAction {
+         match self {
+             Self::Get => RunInteractAction::Get,
+diff --git a/lib/crates/fabro-workflow/src/handler/llm/api.rs b/lib/crates/fabro-workflow/src/handler/llm/api.rs
+index 92e8e8092..ce927cf07 100644
+--- a/lib/crates/fabro-workflow/src/handler/llm/api.rs
++++ b/lib/crates/fabro-workflow/src/handler/llm/api.rs
+@@ -288,11 +288,7 @@ async fn execute_fabro_run_tool(
+         fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME => {
+             let params = parse_fabro_tool_args::<fabro_tool::FabroRunInteractParams>(name, args)?;
+             let validated = fabro_tool::ValidatedInteractRun::try_from(params)?;
+-            if matches!(
+-                validated.action,
+-                fabro_tool::ValidatedInteractAction::Approve
+-                    | fabro_tool::ValidatedInteractAction::Deny { .. }
+-            ) {
++            if validated.action.requires_user() {
+                 return Err(fabro_tool::ToolError::message(
+                     "Run approval must be performed by a user through the API, CLI, web UI, or human MCP server.",
+                 ));
