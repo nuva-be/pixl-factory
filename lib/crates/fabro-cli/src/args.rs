@@ -483,6 +483,10 @@ pub(crate) struct GraphArgs {
     /// Graph layout direction (overrides the DOT file's rankdir)
     #[arg(short = 'd', long)]
     pub(crate) direction: Option<GraphDirection>,
+
+    /// Render even when workflow validation reports errors
+    #[arg(long)]
+    pub(crate) allow_invalid: bool,
 }
 
 #[derive(Args)]
