@@ -1,0 +1,1 @@
+All TypeScript tests pass. The fix updated `stage-insights-sidebar.test.tsx` to match the simplified component (which had its permission badge dropped and tools list slimmed in earlier commits on main, but its tests weren't updated at that time).
