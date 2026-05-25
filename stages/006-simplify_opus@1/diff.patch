@@ -1,0 +1,451 @@
+diff --git a/lib/crates/fabro-cli/src/commands/install.rs b/lib/crates/fabro-cli/src/commands/install.rs
+index 6dcb670b0..2f21e6fb9 100644
+--- a/lib/crates/fabro-cli/src/commands/install.rs
++++ b/lib/crates/fabro-cli/src/commands/install.rs
+@@ -28,10 +28,11 @@ use fabro_config::daemon::ServerDaemon;
+ use fabro_config::user::{SETTINGS_CONFIG_FILENAME, default_storage_dir};
+ use fabro_config::{Storage, UserSettingsBuilder, envfile};
+ use fabro_install::{
+-    InstallListenConfig, InstallPersistencePlan, PendingDevTokenWrite, PendingSettingsWrite,
+-    VaultSecretWrite, merge_server_settings as merge_server_settings_impl,
+-    prepare_dev_token_write_for_install, restore_optional_file, rollback_dev_token_write,
+-    write_github_app_settings, write_token_settings,
++    GITHUB_APP_VAULT_KEYS, GITHUB_INSTALL_SECRET_KEYS, InstallListenConfig, InstallPersistencePlan,
++    PendingDevTokenWrite, PendingSettingsWrite, VaultSecretWrite,
++    merge_server_settings as merge_server_settings_impl, prepare_dev_token_write_for_install,
++    restore_optional_file, rollback_dev_token_write, write_github_app_settings,
++    write_token_settings,
+ };
+ use fabro_model::catalog::CatalogProvider;
+ use fabro_model::{Catalog, CredentialRef, ProviderId};
+@@ -71,6 +72,7 @@ use crate::{local_server, server_client, user_config};
+ 
+ const GITHUB_TOKEN_SECRET_KEY: &str = fabro_static::EnvVars::GITHUB_TOKEN;
+ const GITHUB_APP_PRIVATE_KEY_KEY: &str = fabro_static::EnvVars::GITHUB_APP_PRIVATE_KEY;
++#[cfg(test)]
+ const GITHUB_APP_CLIENT_SECRET_KEY: &str = fabro_static::EnvVars::GITHUB_APP_CLIENT_SECRET;
+ const GITHUB_APP_WEBHOOK_SECRET_KEY: &str = fabro_static::EnvVars::GITHUB_APP_WEBHOOK_SECRET;
+ 
+@@ -1618,28 +1620,14 @@ async fn run_install_github_inner(
+                 secret_type: VaultSecretType::Token,
+                 description: None,
+             });
+-            server_env_remove.extend([
+-                GITHUB_TOKEN_SECRET_KEY,
+-                GITHUB_APP_PRIVATE_KEY_KEY,
+-                GITHUB_APP_CLIENT_SECRET_KEY,
+-                GITHUB_APP_WEBHOOK_SECRET_KEY,
+-            ]);
+-            vault_remove.extend([
+-                GITHUB_APP_PRIVATE_KEY_KEY,
+-                GITHUB_APP_CLIENT_SECRET_KEY,
+-                GITHUB_APP_WEBHOOK_SECRET_KEY,
+-            ]);
++            server_env_remove.extend(GITHUB_INSTALL_SECRET_KEYS.iter().copied());
++            vault_remove.extend(GITHUB_APP_VAULT_KEYS.iter().copied());
+         }
+         GitHubInstallSelection::App { owner, username } => {
+             let allowed_username = username.clone().context(
+                 "GitHub App install requires an authenticated GitHub username; run `gh auth login` and rerun `fabro install github`",
+             )?;
+-            server_env_remove.extend([
+-                GITHUB_TOKEN_SECRET_KEY,
+-                GITHUB_APP_PRIVATE_KEY_KEY,
+-                GITHUB_APP_CLIENT_SECRET_KEY,
+-                GITHUB_APP_WEBHOOK_SECRET_KEY,
+-            ]);
++            server_env_remove.extend(GITHUB_INSTALL_SECRET_KEYS.iter().copied());
+             let registration = setup_github_app(
+                 &s,
+                 &web_url,
+@@ -1843,17 +1831,8 @@ async fn run_install_inner(args: &InstallArgs, ctx: &CommandContext) -> Result<(
+                 type_:       ApiSecretType::Token,
+                 description: None,
+             });
+-            server_env_remove.extend([
+-                GITHUB_TOKEN_SECRET_KEY,
+-                GITHUB_APP_PRIVATE_KEY_KEY,
+-                GITHUB_APP_CLIENT_SECRET_KEY,
+-                GITHUB_APP_WEBHOOK_SECRET_KEY,
+-            ]);
+-            vault_remove.extend([
+-                GITHUB_APP_PRIVATE_KEY_KEY,
+-                GITHUB_APP_CLIENT_SECRET_KEY,
+-                GITHUB_APP_WEBHOOK_SECRET_KEY,
+-            ]);
++            server_env_remove.extend(GITHUB_INSTALL_SECRET_KEYS.iter().copied());
++            vault_remove.extend(GITHUB_APP_VAULT_KEYS.iter().copied());
+             Some(PendingGitHubSettings::Token)
+         }
+         GitHubInstallSelection::App { owner, username } => {
+@@ -1890,12 +1869,7 @@ async fn run_install_inner(args: &InstallArgs, ctx: &CommandContext) -> Result<(
+                     .into_iter()
+                     .map(|(key, value)| github_app_secret_request(key, value)),
+             );
+-            server_env_remove.extend([
+-                GITHUB_TOKEN_SECRET_KEY,
+-                GITHUB_APP_PRIVATE_KEY_KEY,
+-                GITHUB_APP_CLIENT_SECRET_KEY,
+-                GITHUB_APP_WEBHOOK_SECRET_KEY,
+-            ]);
++            server_env_remove.extend(GITHUB_INSTALL_SECRET_KEYS.iter().copied());
+             vault_remove.push(GITHUB_TOKEN_SECRET_KEY);
+             if !webhook_configured {
+                 vault_remove.push(GITHUB_APP_WEBHOOK_SECRET_KEY);
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/worker_auth.rs b/lib/crates/fabro-cli/tests/it/cmd/worker_auth.rs
+index 9f9d43921..eb9ff0290 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/worker_auth.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/worker_auth.rs
+@@ -21,6 +21,7 @@ use fabro_client::{AuthEntry, AuthStore, OAuthEntry, ServerTarget, StoredSubject
+ use fabro_config::{Storage, envfile};
+ use fabro_store::EventEnvelope;
+ use fabro_test::{apply_test_isolation, expect_reqwest_json, isolated_storage_dir, test_context};
++use fabro_vault::{SecretType, Vault};
+ 
+ use super::support::{find_run_dir, output_stderr, output_stdout};
+ use crate::support::{
+@@ -74,12 +75,19 @@ client_id = "github-client-id"
+         .unwrap();
+         envfile::merge_env_file(
+             &Storage::new(&storage_dir).runtime_directory().env_path(),
+-            [
+-                ("SESSION_SECRET", TEST_SESSION_SECRET),
+-                ("GITHUB_APP_CLIENT_SECRET", TEST_GITHUB_CLIENT_SECRET),
+-            ],
++            [("SESSION_SECRET", TEST_SESSION_SECRET)],
+         )
+         .unwrap();
++        let mut vault =
++            Vault::load(Storage::new(&storage_dir).secrets_path()).expect("test vault should load");
++        vault
++            .set(
++                "GITHUB_APP_CLIENT_SECRET",
++                TEST_GITHUB_CLIENT_SECRET,
++                SecretType::Token,
++                None,
++            )
++            .expect("GitHub client secret should store in test vault");
+ 
+         let mut cmd = Command::new(env!("CARGO_BIN_EXE_fabro"));
+         apply_test_isolation(&mut cmd, home_root.path());
+diff --git a/lib/crates/fabro-cli/tests/it/support/auth_harness.rs b/lib/crates/fabro-cli/tests/it/support/auth_harness.rs
+index e8ec21ac6..e018ff988 100644
+--- a/lib/crates/fabro-cli/tests/it/support/auth_harness.rs
++++ b/lib/crates/fabro-cli/tests/it/support/auth_harness.rs
+@@ -24,7 +24,7 @@ use fabro_server::auth::GithubEndpoints;
+ use fabro_server::ip_allowlist::IpAllowlistConfig;
+ use fabro_server::jwt_auth::resolve_auth_mode_with_lookup;
+ use fabro_server::server::{RouterOptions, build_router_with_options};
+-use fabro_server::test_support::test_app_state_with_runtime_settings_and_env_lookup_and_server_secret_env;
++use fabro_server::test_support::TestAppStateBuilder;
+ use fabro_test::{GitHubAppState, TestContext, apply_test_isolation};
+ use serde_json::Value;
+ use tokio::net::TcpListener;
+@@ -77,26 +77,20 @@ impl RealAuthHarness {
+             _ => None,
+         })
+         .expect("auth mode should resolve");
+-        let mut secrets = std::collections::HashMap::from([
+-            (
+-                "SESSION_SECRET".to_string(),
+-                TEST_SESSION_SECRET.to_string(),
+-            ),
+-            (
+-                "GITHUB_APP_CLIENT_SECRET".to_string(),
+-                github_client_secret.clone(),
+-            ),
+-        ]);
++        let mut secrets = std::collections::HashMap::from([(
++            "SESSION_SECRET".to_string(),
++            TEST_SESSION_SECRET.to_string(),
++        )]);
+         if let Some(token) = dev_token.clone() {
+             secrets.insert("FABRO_DEV_TOKEN".to_string(), token);
+         }
+-        let state = test_app_state_with_runtime_settings_and_env_lookup_and_server_secret_env(
+-            settings,
+-            RunLayer::default(),
+-            5,
+-            |_| None,
+-            &secrets,
+-        );
++        let state = TestAppStateBuilder::new()
++            .runtime_settings(settings, RunLayer::default())
++            .max_concurrent_runs(5)
++            .env_lookup(|_| None)
++            .server_secret_env(secrets)
++            .vault_entries([("GITHUB_APP_CLIENT_SECRET", github_client_secret.as_str())])
++            .build();
+         let github_base = github_base_url(&twin.base_url);
+         let router = build_router_with_options(
+             state,
+diff --git a/lib/crates/fabro-install/src/lib.rs b/lib/crates/fabro-install/src/lib.rs
+index 64e191fe0..933c161cc 100644
+--- a/lib/crates/fabro-install/src/lib.rs
++++ b/lib/crates/fabro-install/src/lib.rs
+@@ -34,6 +34,24 @@ pub const OBJECT_STORE_MANAGED_COMMENT: &str = "managed by fabro-install: object
+ pub const OBJECT_STORE_ACCESS_KEY_ID_ENV: &str = EnvVars::AWS_ACCESS_KEY_ID;
+ pub const OBJECT_STORE_SECRET_ACCESS_KEY_ENV: &str = EnvVars::AWS_SECRET_ACCESS_KEY;
+ 
++/// Every GitHub-install secret name. Used to drop stale entries from
++/// `server.env` whenever an install runs so a switch between Token and App
++/// strategies leaves no residue behind.
++pub const GITHUB_INSTALL_SECRET_KEYS: &[&str] = &[
++    EnvVars::GITHUB_TOKEN,
++    EnvVars::GITHUB_APP_PRIVATE_KEY,
++    EnvVars::GITHUB_APP_CLIENT_SECRET,
++    EnvVars::GITHUB_APP_WEBHOOK_SECRET,
++];
++
++/// GitHub App vault secret names cleared when switching back to the Token
++/// strategy.
++pub const GITHUB_APP_VAULT_KEYS: &[&str] = &[
++    EnvVars::GITHUB_APP_PRIVATE_KEY,
++    EnvVars::GITHUB_APP_CLIENT_SECRET,
++    EnvVars::GITHUB_APP_WEBHOOK_SECRET,
++];
++
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct VaultSecretWrite {
+     pub name:        String,
+diff --git a/lib/crates/fabro-server/src/install.rs b/lib/crates/fabro-server/src/install.rs
+index ed26a8823..914012c8c 100644
+--- a/lib/crates/fabro-server/src/install.rs
++++ b/lib/crates/fabro-server/src/install.rs
+@@ -17,11 +17,11 @@ use fabro_config::Storage;
+ use fabro_config::bind::{Bind, BindRequest};
+ use fabro_config::envfile::{EnvFileRemoval, EnvFileUpdate};
+ use fabro_install::{
+-    InstallListenConfig, InstallPersistencePlan, InstallSandboxSelection,
+-    OBJECT_STORE_ACCESS_KEY_ID_ENV, OBJECT_STORE_SECRET_ACCESS_KEY_ENV, PendingSettingsWrite,
+-    VaultSecretWrite, merge_server_settings, prepare_dev_token_write_for_install,
+-    write_github_app_settings, write_object_store_settings, write_sandbox_settings,
+-    write_token_settings,
++    GITHUB_APP_VAULT_KEYS, GITHUB_INSTALL_SECRET_KEYS, InstallListenConfig, InstallPersistencePlan,
++    InstallSandboxSelection, OBJECT_STORE_ACCESS_KEY_ID_ENV, OBJECT_STORE_SECRET_ACCESS_KEY_ENV,
++    PendingSettingsWrite, VaultSecretWrite, merge_server_settings,
++    prepare_dev_token_write_for_install, write_github_app_settings, write_object_store_settings,
++    write_sandbox_settings, write_token_settings,
+ };
+ use fabro_llm::client::Client as LlmClient;
+ use fabro_llm::generate::{GenerateParams, generate};
+@@ -1580,17 +1580,12 @@ async fn post_install_finish(
+                 secret_type: VaultSecretType::Token,
+                 description: None,
+             });
+-            vault_removals.extend([
+-                EnvVars::GITHUB_APP_PRIVATE_KEY.to_string(),
+-                EnvVars::GITHUB_APP_CLIENT_SECRET.to_string(),
+-                EnvVars::GITHUB_APP_WEBHOOK_SECRET.to_string(),
+-            ]);
+-            server_env_removals.extend([
+-                make_env_removal(EnvVars::GITHUB_TOKEN),
+-                make_env_removal(EnvVars::GITHUB_APP_PRIVATE_KEY),
+-                make_env_removal(EnvVars::GITHUB_APP_CLIENT_SECRET),
+-                make_env_removal(EnvVars::GITHUB_APP_WEBHOOK_SECRET),
+-            ]);
++            vault_removals.extend(GITHUB_APP_VAULT_KEYS.iter().map(|k| (*k).to_string()));
++            server_env_removals.extend(
++                GITHUB_INSTALL_SECRET_KEYS
++                    .iter()
++                    .map(|k| make_env_removal(k)),
++            );
+             let dev_token_path = Storage::new(state.storage_dir.as_ref())
+                 .runtime_directory()
+                 .dev_token_path();
+@@ -1639,12 +1634,11 @@ async fn post_install_finish(
+                 vault_removals.push(EnvVars::GITHUB_APP_WEBHOOK_SECRET.to_string());
+             }
+             vault_removals.push(EnvVars::GITHUB_TOKEN.to_string());
+-            server_env_removals.extend([
+-                make_env_removal(EnvVars::GITHUB_TOKEN),
+-                make_env_removal(EnvVars::GITHUB_APP_PRIVATE_KEY),
+-                make_env_removal(EnvVars::GITHUB_APP_CLIENT_SECRET),
+-                make_env_removal(EnvVars::GITHUB_APP_WEBHOOK_SECRET),
+-            ]);
++            server_env_removals.extend(
++                GITHUB_INSTALL_SECRET_KEYS
++                    .iter()
++                    .map(|k| make_env_removal(k)),
++            );
+         }
+     }
+ 
+diff --git a/lib/crates/fabro-server/src/test_support.rs b/lib/crates/fabro-server/src/test_support.rs
+index 9187c4dc1..b61f01df8 100644
+--- a/lib/crates/fabro-server/src/test_support.rs
++++ b/lib/crates/fabro-server/src/test_support.rs
+@@ -21,6 +21,7 @@ use fabro_store::{ArtifactStore, Database};
+ use fabro_types::settings::ServerAuthMethod;
+ use fabro_types::{AuthMethod, IdpIdentity, ServerSettings};
+ use fabro_util::error::SharedError;
++use fabro_vault::{SecretType, Vault};
+ use fabro_workflow::handler::HandlerRegistry;
+ use object_store::memory::InMemory as MemoryObjectStore;
+ use tokio_util::sync::CancellationToken;
+@@ -62,6 +63,7 @@ pub struct TestAppStateBuilder {
+     registry_factory_override: Option<Box<RegistryFactoryOverride>>,
+     store_bundle:              Option<(Arc<Database>, ArtifactStore)>,
+     vault_path:                Option<PathBuf>,
++    vault_entries:             Vec<(String, String)>,
+     server_env_path:           Option<PathBuf>,
+     active_config_path:        Option<PathBuf>,
+     server_secret_env:         HashMap<String, String>,
+@@ -78,6 +80,7 @@ impl Default for TestAppStateBuilder {
+             registry_factory_override: None,
+             store_bundle:              None,
+             vault_path:                None,
++            vault_entries:             Vec::new(),
+             server_env_path:           None,
+             active_config_path:        None,
+             server_secret_env:         HashMap::new(),
+@@ -170,9 +173,30 @@ impl TestAppStateBuilder {
+         self
+     }
+ 
++    /// Pre-populate the vault file with optional integration secrets (token
++    /// type) before [`build_app_state`] opens it.
++    pub fn vault_entries<I, K, V>(mut self, entries: I) -> Self
++    where
++        I: IntoIterator<Item = (K, V)>,
++        K: Into<String>,
++        V: Into<String>,
++    {
++        self.vault_entries
++            .extend(entries.into_iter().map(|(k, v)| (k.into(), v.into())));
++        self
++    }
++
+     pub fn build(self) -> Arc<AppState> {
+         let (store, artifact_store) = self.store_bundle.unwrap_or_else(test_store_bundle);
+         let vault_path = self.vault_path.unwrap_or_else(test_secret_store_path);
++        if !self.vault_entries.is_empty() {
++            let mut vault = Vault::load(vault_path.clone()).expect("test vault should load");
++            for (name, value) in &self.vault_entries {
++                vault
++                    .set(name, value, SecretType::Token, None)
++                    .expect("test vault entry should persist");
++            }
++        }
+         let server_env_path = self
+             .server_env_path
+             .unwrap_or_else(|| vault_path.with_file_name("server.env"));
+@@ -357,21 +381,6 @@ pub fn test_app_state_with_env_lookup(
+         .build()
+ }
+ 
+-pub fn test_app_state_with_env_lookup_and_server_secret_env(
+-    server_settings: ServerSettings,
+-    manifest_run_defaults: RunLayer,
+-    max_concurrent_runs: usize,
+-    env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+-    server_secret_env: &HashMap<String, String>,
+-) -> Arc<AppState> {
+-    TestAppStateBuilder::new()
+-        .runtime_settings(server_settings, manifest_run_defaults)
+-        .max_concurrent_runs(max_concurrent_runs)
+-        .env_lookup(env_lookup)
+-        .server_secret_env(server_secret_env.clone())
+-        .build()
+-}
+-
+ #[expect(
+     clippy::disallowed_methods,
+     reason = "test helper writes a fixture server.env with sync std::fs::write"
+diff --git a/lib/crates/fabro-server/tests/it/helpers.rs b/lib/crates/fabro-server/tests/it/helpers.rs
+index 6c81eb180..569f7e7d0 100644
+--- a/lib/crates/fabro-server/tests/it/helpers.rs
++++ b/lib/crates/fabro-server/tests/it/helpers.rs
+@@ -129,10 +129,7 @@ pub(crate) fn test_app_with_mock_anthropic(mock_base_url: &str) -> axum::Router
+             "anthropic",
+             mock_base_url,
+         ))
+-        .env_lookup(|name| match name {
+-            "ANTHROPIC_API_KEY" => Some("test-key".to_string()),
+-            _ => None,
+-        })
++        .vault_entries([("ANTHROPIC_API_KEY", "test-key")])
+         .build();
+     build_test_router(state)
+ }
+diff --git a/lib/crates/fabro-server/tests/it/openapi_conformance.rs b/lib/crates/fabro-server/tests/it/openapi_conformance.rs
+index a3cf16982..fdfa8d894 100644
+--- a/lib/crates/fabro-server/tests/it/openapi_conformance.rs
++++ b/lib/crates/fabro-server/tests/it/openapi_conformance.rs
+@@ -11,7 +11,7 @@
+ use axum::body::Body;
+ use axum::http::{Method, Request, StatusCode};
+ use fabro_server::install::{InstallAppState, build_install_router};
+-use fabro_server::test_support::test_app_state_with_runtime_settings_and_env_lookup_and_server_secret_env;
++use fabro_server::test_support::TestAppStateBuilder;
+ use serde_yaml::Value;
+ use tower::ServiceExt;
+ 
+@@ -143,16 +143,15 @@ fn github_webhook_spec_and_sdk_describe_a_json_body() {
+ 
+ #[tokio::test]
+ async fn github_webhook_spec_route_is_routable_when_webhook_secret_is_present() {
+-    let secret = "test-webhook-secret".to_string();
++    let secret = "test-webhook-secret";
+     let settings = test_settings();
+     let app = fabro_server::test_support::build_test_router(
+-        test_app_state_with_runtime_settings_and_env_lookup_and_server_secret_env(
+-            settings.server_settings,
+-            settings.manifest_run_defaults,
+-            5,
+-            |_| None,
+-            &std::collections::HashMap::from([("GITHUB_APP_WEBHOOK_SECRET".to_string(), secret)]),
+-        ),
++        TestAppStateBuilder::new()
++            .runtime_settings(settings.server_settings, settings.manifest_run_defaults)
++            .max_concurrent_runs(5)
++            .env_lookup(|_| None)
++            .vault_entries([("GITHUB_APP_WEBHOOK_SECRET", secret)])
++            .build(),
+     );
+ 
+     let response = app
+diff --git a/lib/crates/fabro-static/src/lib.rs b/lib/crates/fabro-static/src/lib.rs
+index f5d94f18e..2abbd588e 100644
+--- a/lib/crates/fabro-static/src/lib.rs
++++ b/lib/crates/fabro-static/src/lib.rs
+@@ -7,6 +7,4 @@ mod env_vars;
+ mod secret_registry;
+ 
+ pub use env_vars::EnvVars;
+-pub use secret_registry::{
+-    SecretScope, is_bootstrap_secret, is_optional_vault_secret, secret_scope,
+-};
++pub use secret_registry::is_bootstrap_secret;
+diff --git a/lib/crates/fabro-static/src/secret_registry.rs b/lib/crates/fabro-static/src/secret_registry.rs
+index 86fe1873e..534bac3aa 100644
+--- a/lib/crates/fabro-static/src/secret_registry.rs
++++ b/lib/crates/fabro-static/src/secret_registry.rs
+@@ -1,7 +1,7 @@
+ use crate::EnvVars;
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+-pub enum SecretScope {
++enum SecretScope {
+     Bootstrap,
+     OptionalVault,
+ }
+@@ -32,7 +32,7 @@ const OPTIONAL_VAULT_SECRETS: &[&str] = &[
+     EnvVars::DAYTONA_API_KEY,
+ ];
+ 
+-pub fn secret_scope(name: &str) -> Option<SecretScope> {
++fn secret_scope(name: &str) -> Option<SecretScope> {
+     if BOOTSTRAP_SECRETS.contains(&name) {
+         Some(SecretScope::Bootstrap)
+     } else if OPTIONAL_VAULT_SECRETS.contains(&name) {
+@@ -46,7 +46,8 @@ pub fn is_bootstrap_secret(name: &str) -> bool {
+     secret_scope(name) == Some(SecretScope::Bootstrap)
+ }
+ 
+-pub fn is_optional_vault_secret(name: &str) -> bool {
++#[cfg(test)]
++fn is_optional_vault_secret(name: &str) -> bool {
+     secret_scope(name) == Some(SecretScope::OptionalVault)
+ }
+ 
