@@ -1,0 +1,146 @@
+diff --git a/lib/crates/fabro-cli/src/commands/install.rs b/lib/crates/fabro-cli/src/commands/install.rs
+index 9d0f635f5..d956aa170 100644
+--- a/lib/crates/fabro-cli/src/commands/install.rs
++++ b/lib/crates/fabro-cli/src/commands/install.rs
+@@ -1030,10 +1030,23 @@ async fn setup_github_app(
+         .route(
+             "/callback",
+             get(move |Query(params): Query<CallbackParams>| async move {
+-                if let Some(tx) = code_tx.lock().unwrap().take() {
++                if let Some(tx) = code_tx
++                    .lock()
++                    .expect(
++                        "code_tx mutex is never poisoned: no code panics while holding this lock",
++                    )
++                    .take()
++                {
+                     let _ = tx.send(params.code);
+                 }
+-                if let Some(tx) = shutdown_tx.lock().unwrap().take() {
++                if let Some(tx) = shutdown_tx
++                    .lock()
++                    .expect(
++                        "shutdown_tx mutex is never poisoned: no code panics while holding this \
++                         lock",
++                    )
++                    .take()
++                {
+                     let _ = tx.send(());
+                 }
+                 Html(r#"<!DOCTYPE html>
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 96a1dfcf6..dfd192655 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -3079,7 +3079,9 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
+         EventBody::RunRemoving(_) => managed_run.status = RunStatus::Removing,
+         EventBody::RunCompleted(_) => {
+             let EventBody::RunCompleted(props) = &event.body else {
+-                unreachable!();
++                unreachable!(
++                    "outer match arm already verified event.body is EventBody::RunCompleted"
++                )
+             };
+             managed_run.status = RunStatus::Succeeded {
+                 reason: props.reason,
+diff --git a/lib/crates/fabro-workflow/src/handler/llm/api.rs b/lib/crates/fabro-workflow/src/handler/llm/api.rs
+index fc9c6998c..e00a7c255 100644
+--- a/lib/crates/fabro-workflow/src/handler/llm/api.rs
++++ b/lib/crates/fabro-workflow/src/handler/llm/api.rs
+@@ -482,14 +482,20 @@ fn track_file_event(event: &AgentEvent, state: &mut FileTracking) {
+ fn file_tracking_snapshot(
+     file_tracking: &Arc<Mutex<FileTracking>>,
+ ) -> (Vec<String>, Option<String>) {
+-    let state = file_tracking.lock().unwrap();
++    let state = file_tracking
++        .lock()
++        .expect("file_tracking mutex is never poisoned: no code panics while holding this lock");
+     let mut files: Vec<String> = state.touched.iter().cloned().collect();
+     files.sort();
+     (files, state.last.clone())
+ }
+ 
+ fn last_touched_file(file_tracking: &Arc<Mutex<FileTracking>>) -> Option<String> {
+-    file_tracking.lock().unwrap().last.clone()
++    file_tracking
++        .lock()
++        .expect("file_tracking mutex is never poisoned: no code panics while holding this lock")
++        .last
++        .clone()
+ }
+ 
+ fn last_assistant_response(session: &Session) -> String {
+@@ -540,7 +546,12 @@ fn spawn_event_forwarder(
+             emitter.touch();
+ 
+             // Track file changes from tool calls (including sub-agent events)
+-            track_file_event(&event.event, &mut file_tracking.lock().unwrap());
++            track_file_event(
++                &event.event,
++                &mut file_tracking.lock().expect(
++                    "file_tracking mutex is never poisoned: no code panics while holding this lock",
++                ),
++            );
+ 
+             // Forward non-streaming agent events to pipeline
+             if !event.event.is_streaming_noise()
+@@ -888,7 +899,7 @@ impl AgentApiBackend {
+         let sessions: Vec<Session> = self
+             .sessions
+             .lock()
+-            .unwrap()
++            .expect("sessions mutex is never poisoned: no code panics while holding this lock")
+             .drain()
+             .map(|(_, s)| s)
+             .collect();
+@@ -1152,7 +1163,11 @@ impl CodergenBackend for AgentApiBackend {
+             return Err(Error::Cancelled);
+         }
+         let (mut session, is_reused) = if let Some(ref key) = reuse_key {
+-            let existing = self.sessions.lock().unwrap().remove(key);
++            let existing = self
++                .sessions
++                .lock()
++                .expect("sessions mutex is never poisoned: no code panics while holding this lock")
++                .remove(key);
+             if let Some(s) = existing {
+                 (s, true)
+             } else {
+@@ -1521,7 +1536,10 @@ impl CodergenBackend for AgentApiBackend {
+         // the cached session is not left wired to this run's cancel token.
+         if let Some(key) = reuse_key {
+             bridge.abort();
+-            self.sessions.lock().unwrap().insert(key, session);
++            self.sessions
++                .lock()
++                .expect("sessions mutex is never poisoned: no code panics while holding this lock")
++                .insert(key, session);
+         } else {
+             let session_id = session.id().to_string();
+             if session.close() {
+diff --git a/lib/crates/fabro-workflow/src/services.rs b/lib/crates/fabro-workflow/src/services.rs
+index 9210998d3..e8c4b3974 100644
+--- a/lib/crates/fabro-workflow/src/services.rs
++++ b/lib/crates/fabro-workflow/src/services.rs
+@@ -254,12 +254,19 @@ impl EngineServices {
+ 
+     /// Read the current git state (if any).
+     pub fn git_state(&self) -> Option<Arc<GitState>> {
+-        self.git_state.read().unwrap().clone()
++        self.git_state
++            .read()
++            .expect("git_state lock is never poisoned: no code panics while holding this lock")
++            .clone()
+     }
+ 
+     /// Set the git state for the current run.
+     pub fn set_git_state(&self, state: Option<Arc<GitState>>) {
+-        *self.git_state.write().unwrap() = state;
++        *self
++            .git_state
++            .write()
++            .expect("git_state lock is never poisoned: no code panics while holding this lock") =
++            state;
+     }
+ 
+     /// Test-only default: empty registry and cross-phase services.
