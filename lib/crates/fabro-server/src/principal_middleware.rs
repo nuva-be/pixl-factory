@@ -19,7 +19,7 @@ use crate::worker_token::{self, WORKER_TOKEN_KID, WorkerScopeSet};
 
 #[derive(Clone, Debug)]
 pub(crate) struct RequestAuthContext {
-    pub principal:       Principal,
+    pub principal:       Option<Principal>,
     pub auth_status:     AuthStatus,
     pub auth_error_code: Option<AuthErrorCode>,
     pub user_profile:    Option<UserProfile>,
@@ -74,7 +74,7 @@ impl RequestAuthContext {
     #[must_use]
     pub(crate) fn initial() -> Self {
         Self {
-            principal:       Principal::Anonymous,
+            principal:       None,
             auth_status:     AuthStatus::Missing,
             auth_error_code: None,
             user_profile:    None,
@@ -85,7 +85,7 @@ impl RequestAuthContext {
     #[must_use]
     pub(crate) fn authenticated(principal: Principal, user_profile: Option<UserProfile>) -> Self {
         Self {
-            principal,
+            principal: Some(principal),
             auth_status: AuthStatus::Authenticated,
             auth_error_code: None,
             user_profile,
@@ -96,7 +96,7 @@ impl RequestAuthContext {
     #[must_use]
     pub(crate) fn authenticated_worker(run_id: RunId, scopes: WorkerScopeSet) -> Self {
         Self {
-            principal:       Principal::Worker { run_id },
+            principal:       Some(Principal::Worker { run_id }),
             auth_status:     AuthStatus::Authenticated,
             auth_error_code: None,
             user_profile:    None,
@@ -123,7 +123,7 @@ impl RequestAuthContext {
     #[must_use]
     pub(crate) fn rejected(status: AuthStatus, code: Option<AuthErrorCode>) -> Self {
         Self {
-            principal:       Principal::Anonymous,
+            principal:       None,
             auth_status:     status,
             auth_error_code: code,
             user_profile:    None,
@@ -146,7 +146,7 @@ impl AuthStatus {
 
 #[derive(Clone, Debug)]
 pub(crate) struct RequestAuthLogContext {
-    pub principal:       Principal,
+    pub principal:       Option<Principal>,
     pub auth_status:     AuthStatus,
     pub auth_error_code: Option<AuthErrorCode>,
 }
@@ -177,14 +177,14 @@ impl AuthContextSlot {
     }
 }
 
-fn principal_without_log_unused_fields(principal: &Principal) -> Principal {
+fn principal_without_log_unused_fields(principal: &Option<Principal>) -> Option<Principal> {
     match principal {
-        Principal::User(user) => Principal::User(UserPrincipal {
+        Some(Principal::User(user)) => Some(Principal::User(UserPrincipal {
             identity:    user.identity.clone(),
             login:       user.login.clone(),
             auth_method: user.auth_method,
             avatar_url:  None,
-        }),
+        })),
         principal => principal.clone(),
     }
 }
@@ -370,7 +370,7 @@ fn auth_slot_from_parts(parts: &Parts) -> AuthContextSlot {
 pub(crate) fn require_user(slot: &AuthContextSlot) -> Result<UserPrincipal, ApiError> {
     let context = slot.0.lock().expect("auth context lock poisoned");
     match &context.principal {
-        Principal::User(user) => Ok(user.clone()),
+        Some(Principal::User(user)) => Ok(user.clone()),
         _ => Err(auth_rejection(context.auth_status, context.auth_error_code)),
     }
 }
@@ -380,7 +380,7 @@ pub(crate) fn require_authenticated_user(
 ) -> Result<AuthenticatedUser, ApiError> {
     let context = slot.snapshot();
     match context.principal {
-        Principal::User(principal) => {
+        Some(Principal::User(principal)) => {
             let Some(profile) = context.user_profile else {
                 return Err(ApiError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -396,11 +396,11 @@ pub(crate) fn require_authenticated_user(
 pub(crate) fn require_run_management_actor(slot: &AuthContextSlot) -> Result<Principal, ApiError> {
     let context = slot.0.lock().expect("auth context lock poisoned");
     match &context.principal {
-        Principal::User(user) => Ok(Principal::User(user.clone())),
-        Principal::Worker { run_id } if context.worker_scopes.has_agent_run_tools() => {
+        Some(Principal::User(user)) => Ok(Principal::User(user.clone())),
+        Some(Principal::Worker { run_id }) if context.worker_scopes.has_agent_run_tools() => {
             Ok(Principal::Worker { run_id: *run_id })
         }
-        Principal::Worker { .. } => Err(ApiError::forbidden()),
+        Some(Principal::Worker { .. }) => Err(ApiError::forbidden()),
         _ => Err(auth_rejection(context.auth_status, context.auth_error_code)),
     }
 }
@@ -411,9 +411,9 @@ fn require_worker_or_user_for_run(
 ) -> Result<(), ApiError> {
     let context = slot.0.lock().expect("auth context lock poisoned");
     match &context.principal {
-        Principal::User(_) => Ok(()),
-        Principal::Worker { run_id } if run_id == route_run_id => Ok(()),
-        Principal::Worker { .. } => Err(ApiError::forbidden()),
+        Some(Principal::User(_)) => Ok(()),
+        Some(Principal::Worker { run_id }) if run_id == route_run_id => Ok(()),
+        Some(Principal::Worker { .. }) => Err(ApiError::forbidden()),
         _ => Err(auth_rejection(context.auth_status, context.auth_error_code)),
     }
 }
@@ -424,13 +424,13 @@ fn require_run_management_target(
 ) -> Result<Principal, ApiError> {
     let context = slot.0.lock().expect("auth context lock poisoned");
     match &context.principal {
-        Principal::User(user) => Ok(Principal::User(user.clone())),
-        Principal::Worker { run_id }
+        Some(Principal::User(user)) => Ok(Principal::User(user.clone())),
+        Some(Principal::Worker { run_id })
             if run_id == route_run_id || context.worker_scopes.has_agent_run_tools() =>
         {
             Ok(Principal::Worker { run_id: *run_id })
         }
-        Principal::Worker { .. } => Err(ApiError::forbidden()),
+        Some(Principal::Worker { .. }) => Err(ApiError::forbidden()),
         _ => Err(auth_rejection(context.auth_status, context.auth_error_code)),
     }
 }
@@ -646,7 +646,7 @@ mod tests {
         let context = classify_request(&request, state.as_ref());
 
         assert_eq!(context.auth_status, AuthStatus::Authenticated);
-        assert!(matches!(context.principal, Principal::User(_)));
+        assert!(matches!(context.principal, Some(Principal::User(_))));
         assert!(context.user_profile.is_some());
     }
 
@@ -686,7 +686,7 @@ mod tests {
         let context = classify_request(&request, state.as_ref());
 
         assert_eq!(context.auth_status, AuthStatus::Authenticated);
-        assert_eq!(context.principal, Principal::Worker { run_id });
+        assert_eq!(context.principal, Some(Principal::Worker { run_id }));
         assert!(!context.worker_scopes.has_agent_run_tools());
     }
 
@@ -705,7 +705,7 @@ mod tests {
         let context = classify_request(&request, state.as_ref());
 
         assert_eq!(context.auth_status, AuthStatus::Authenticated);
-        assert_eq!(context.principal, Principal::Worker { run_id });
+        assert_eq!(context.principal, Some(Principal::Worker { run_id }));
         assert!(context.worker_scopes.has_agent_run_tools());
     }
 
@@ -784,7 +784,7 @@ mod tests {
 
         assert_eq!(context.auth_status, AuthStatus::Missing);
         assert_eq!(context.auth_error_code, None);
-        assert_eq!(context.principal, Principal::Anonymous);
+        assert_eq!(context.principal, None);
     }
 
     #[test]
