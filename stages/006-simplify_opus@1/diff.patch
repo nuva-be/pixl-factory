@@ -1,0 +1,269 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 7e8f48e4c..d73ff2ac9 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2508,6 +2508,7 @@ dependencies = [
+  "clap",
+  "dirs",
+  "fabro-model",
++ "fabro-types",
+  "fabro-util",
+  "hex",
+  "ipnet",
+diff --git a/lib/crates/fabro-server/src/run_manifest.rs b/lib/crates/fabro-server/src/run_manifest.rs
+index 1760d76cf..71fc43b35 100644
+--- a/lib/crates/fabro-server/src/run_manifest.rs
++++ b/lib/crates/fabro-server/src/run_manifest.rs
+@@ -26,13 +26,11 @@ use fabro_static::EnvVars;
+ use fabro_types::settings::cli::OutputVerbosity;
+ use fabro_types::settings::interp::InterpString;
+ use fabro_types::settings::run::{EnvironmentProvider, RunGoal, RunNamespace};
+-use fabro_types::{
+-    ManifestPath, RunId, RunProvenance, SandboxProviderKind, ServerSettings, WorkflowSettings,
+-};
++use fabro_types::{ManifestPath, RunId, SandboxProviderKind, ServerSettings, WorkflowSettings};
+ use fabro_util::check_report::{CheckDetail, CheckReport, CheckResult, CheckSection, CheckStatus};
+ use fabro_validate::Severity;
+ use fabro_workflow::Error as WorkflowError;
+-use fabro_workflow::operations::{CreateRunInput, ValidateInput, WorkflowInput, validate};
++use fabro_workflow::operations::{ValidateInput, WorkflowInput, validate};
+ use fabro_workflow::pipeline::Validated;
+ use fabro_workflow::run_materialization::materialize_run;
+ use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig, WorkflowBundle};
+@@ -200,31 +198,6 @@ pub(crate) fn validate_prepared_manifest(
+     })
+ }
+ 
+-pub(crate) fn create_run_input(
+-    prepared: PreparedManifest,
+-    configured_providers: Vec<ProviderId>,
+-    provenance: RunProvenance,
+-    web_url: Option<String>,
+-) -> CreateRunInput {
+-    CreateRunInput {
+-        workflow: WorkflowInput::Bundled(prepared.workflow_input),
+-        settings: prepared.settings,
+-        cwd: prepared.cwd,
+-        workflow_slug: None,
+-        workflow_path: Some(prepared.target_path),
+-        workflow_bundle: Some(prepared.workflow_bundle),
+-        submitted_manifest_bytes: None,
+-        run_id: prepared.run_id,
+-        title: prepared.title,
+-        git: prepared.git,
+-        fork_source_ref: None,
+-        parent_id: prepared.parent_id,
+-        provenance,
+-        configured_providers,
+-        web_url,
+-    }
+-}
+-
+ pub(crate) async fn run_preflight(
+     state: &AppState,
+     prepared: &PreparedManifest,
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 25316c66a..27fd06072 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -1825,7 +1825,8 @@ async fn http_log_middleware(mut req: axum_extract::Request, next: Next) -> Resp
+                     team_id = team_id.as_str(),
+                     user_id = user_id.as_str(),
+                 ),
+-                None | Some(Principal::Agent { .. } | Principal::System { .. }) => {
++                None => emit_http_log!($level),
++                Some(Principal::Agent { .. } | Principal::System { .. }) => {
+                     emit_http_log!($level)
+                 }
+             }
+diff --git a/lib/crates/fabro-server/src/server/handler/runs.rs b/lib/crates/fabro-server/src/server/handler/runs.rs
+index e581c8048..5c6997d98 100644
+--- a/lib/crates/fabro-server/src/server/handler/runs.rs
++++ b/lib/crates/fabro-server/src/server/handler/runs.rs
+@@ -642,14 +642,23 @@ async fn create_run(
+         .map(LlmClientResult::provider_ids)
+         .unwrap_or_default();
+     let provenance = run_provenance(&headers, &actor);
+-    let mut create_input = run_manifest::create_run_input(
+-        prepared.clone(),
+-        ready_provider_ids.clone(),
++    let create_input = operations::CreateRunInput {
++        workflow: operations::WorkflowInput::Bundled(prepared.workflow_input.clone()),
++        settings: prepared.settings.clone(),
++        cwd: prepared.cwd.clone(),
++        workflow_slug: None,
++        workflow_path: Some(prepared.target_path.clone()),
++        workflow_bundle: Some(prepared.workflow_bundle.clone()),
++        submitted_manifest_bytes: Some(body.to_vec()),
++        run_id: Some(run_id),
++        title: prepared.title.clone(),
++        git: prepared.git.clone(),
++        fork_source_ref: None,
++        parent_id: prepared.parent_id,
+         provenance,
+-        web_url.clone(),
+-    );
+-    create_input.run_id = Some(run_id);
+-    create_input.submitted_manifest_bytes = Some(body.to_vec());
++        configured_providers: ready_provider_ids.clone(),
++        web_url: web_url.clone(),
++    };
+ 
+     let storage_root = match resolve_interp_string(&state.server_settings().server.storage.root) {
+         Ok(path) => PathBuf::from(path),
+diff --git a/lib/crates/fabro-types/Cargo.toml b/lib/crates/fabro-types/Cargo.toml
+index c0a6dfc1b..86cf14331 100644
+--- a/lib/crates/fabro-types/Cargo.toml
++++ b/lib/crates/fabro-types/Cargo.toml
+@@ -34,4 +34,5 @@ ulid.workspace = true
+ url.workspace = true
+ 
+ [dev-dependencies]
++fabro-types = { path = ".", features = ["test-support"] }
+ tempfile = "3"
+diff --git a/lib/crates/fabro-types/src/test_support.rs b/lib/crates/fabro-types/src/test_support.rs
+index 9db7eff91..2f2a2e147 100644
+--- a/lib/crates/fabro-types/src/test_support.rs
++++ b/lib/crates/fabro-types/src/test_support.rs
+@@ -1,4 +1,6 @@
+-use crate::{AuthMethod, IdpIdentity, Principal, RunProvenance, RunServerProvenance};
++use crate::{
++    AuthMethod, IdpIdentity, Principal, RunProvenance, RunServerProvenance, SystemActorKind,
++};
+ 
+ #[must_use]
+ pub fn test_principal() -> Principal {
+@@ -19,3 +21,16 @@ pub fn test_run_provenance() -> RunProvenance {
+         subject: test_principal(),
+     }
+ }
++
++/// Provenance attributed to the engine itself, with no server/client metadata.
++/// Used in tests that exercise system-initiated runs and serde round-trips.
++#[must_use]
++pub fn engine_run_provenance() -> RunProvenance {
++    RunProvenance {
++        server:  None,
++        client:  None,
++        subject: Principal::System {
++            system_kind: SystemActorKind::Engine,
++        },
++    }
++}
+diff --git a/lib/crates/fabro-types/tests/run_event_serde.rs b/lib/crates/fabro-types/tests/run_event_serde.rs
+index 533d21f15..be824fa8c 100644
+--- a/lib/crates/fabro-types/tests/run_event_serde.rs
++++ b/lib/crates/fabro-types/tests/run_event_serde.rs
+@@ -6,18 +6,9 @@ use fabro_types::run_event::run::{RunCreatedProps, RunParentLinkedProps, RunPare
+ use fabro_types::run_event::{RunSessionTurnFailedCode, RunSessionTurnFailedProps};
+ use fabro_types::settings::InterpString;
+ use fabro_types::settings::run::RunGoal;
++use fabro_types::test_support::engine_run_provenance;
+ use fabro_types::{EventBody, TurnId, WorkflowSettings, fixtures};
+ 
+-fn test_run_provenance() -> fabro_types::RunProvenance {
+-    fabro_types::RunProvenance {
+-        server:  None,
+-        client:  None,
+-        subject: fabro_types::Principal::System {
+-            system_kind: fabro_types::SystemActorKind::Engine,
+-        },
+-    }
+-}
+-
+ fn templated_settings() -> WorkflowSettings {
+     let mut settings = WorkflowSettings::default();
+     settings.run.goal = Some(RunGoal::Inline(InterpString::parse("Ship {{ env.TASK }}")));
+@@ -37,7 +28,7 @@ fn run_created_props_round_trip_templated_settings() {
+         source_directory: Some("/Users/client/project".to_string()),
+         workflow_slug:    Some("demo".to_string()),
+         db_prefix:        Some("run_".to_string()),
+-        provenance:       test_run_provenance(),
++        provenance:       engine_run_provenance(),
+         manifest_blob:    None,
+         git:              Some(GitContext {
+             origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
+@@ -99,7 +90,7 @@ fn run_created_props_omits_web_url_when_absent() {
+         source_directory: None,
+         workflow_slug:    None,
+         db_prefix:        None,
+-        provenance:       test_run_provenance(),
++        provenance:       engine_run_provenance(),
+         manifest_blob:    None,
+         git:              None,
+         fork_source_ref:  None,
+@@ -137,7 +128,7 @@ fn run_created_props_defaults_retried_from_when_absent() {
+         "graph": Graph::new("ship"),
+         "labels": {},
+         "run_dir": "/tmp/run",
+-        "provenance": test_run_provenance()
++        "provenance": engine_run_provenance()
+     });
+ 
+     let props: RunCreatedProps = serde_json::from_value(json).expect("props should deserialize");
+diff --git a/lib/crates/fabro-types/tests/run_spec_methods.rs b/lib/crates/fabro-types/tests/run_spec_methods.rs
+index ef29ce763..5004d87d7 100644
+--- a/lib/crates/fabro-types/tests/run_spec_methods.rs
++++ b/lib/crates/fabro-types/tests/run_spec_methods.rs
+@@ -3,18 +3,9 @@ use std::collections::HashMap;
+ use fabro_types::graph::Graph;
+ use fabro_types::run::{DirtyStatus, GitContext, PreRunPushOutcome, RunSpec};
+ use fabro_types::settings::{ProjectNamespace, WorkflowNamespace};
++use fabro_types::test_support::engine_run_provenance;
+ use fabro_types::{WorkflowSettings, fixtures};
+ 
+-fn test_run_provenance() -> fabro_types::RunProvenance {
+-    fabro_types::RunProvenance {
+-        server:  None,
+-        client:  None,
+-        subject: fabro_types::Principal::System {
+-            system_kind: fabro_types::SystemActorKind::Engine,
+-        },
+-    }
+-}
+-
+ fn sample_run_spec() -> RunSpec {
+     let settings = WorkflowSettings {
+         project: ProjectNamespace {
+@@ -36,7 +27,7 @@ fn sample_run_spec() -> RunSpec {
+         workflow_slug: Some("demo".to_string()),
+         source_directory: Some("/Users/client/project".to_string()),
+         labels: HashMap::from([("team".to_string(), "platform".to_string())]),
+-        provenance: test_run_provenance(),
++        provenance: engine_run_provenance(),
+         manifest_blob: None,
+         definition_blob: None,
+         git: Some(GitContext {
+diff --git a/lib/crates/fabro-types/tests/run_spec_serde.rs b/lib/crates/fabro-types/tests/run_spec_serde.rs
+index d45c56ac8..ebe556f3d 100644
+--- a/lib/crates/fabro-types/tests/run_spec_serde.rs
++++ b/lib/crates/fabro-types/tests/run_spec_serde.rs
+@@ -4,18 +4,9 @@ use fabro_types::graph::Graph;
+ use fabro_types::run::{DirtyStatus, ForkSourceRef, GitContext, PreRunPushOutcome, RunSpec};
+ use fabro_types::settings::InterpString;
+ use fabro_types::settings::run::RunGoal;
++use fabro_types::test_support::engine_run_provenance;
+ use fabro_types::{WorkflowSettings, fixtures};
+ 
+-fn test_run_provenance() -> fabro_types::RunProvenance {
+-    fabro_types::RunProvenance {
+-        server:  None,
+-        client:  None,
+-        subject: fabro_types::Principal::System {
+-            system_kind: fabro_types::SystemActorKind::Engine,
+-        },
+-    }
+-}
+-
+ fn templated_settings() -> WorkflowSettings {
+     let mut settings = WorkflowSettings::default();
+     settings.run.goal = Some(RunGoal::Inline(InterpString::parse("Ship {{ env.TASK }}")));
+@@ -32,7 +23,7 @@ fn run_spec_round_trips_templated_settings() {
+         workflow_slug:    Some("demo".to_string()),
+         source_directory: Some("/Users/client/project".to_string()),
+         labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
+-        provenance:       test_run_provenance(),
++        provenance:       engine_run_provenance(),
+         manifest_blob:    None,
+         definition_blob:  None,
+         git:              Some(GitContext {
