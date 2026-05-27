@@ -1,0 +1,6 @@
+{
+  "outcome": "failed",
+  "notes": null,
+  "failure_reason": "Two `expect()`/`assert` violations remain: (1) `fabro-telemetry/src/sanitize.rs:7` uses `.expect(\"valid regex\")` which describes what the regex is rather than why failure is impossible — the codebase standard for hardcoded regexes is `\"hardcoded regex should compile\"`; (2) `fabro-auth/src/strategy.rs:68` uses a bare `assert_eq!` in production code for the CodexDevice/OpenAI pairing invariant, rather than an `expect()` with a message explaining the invariant.",
+  "timestamp": "2026-05-27T02:32:19.753545Z"
+}
