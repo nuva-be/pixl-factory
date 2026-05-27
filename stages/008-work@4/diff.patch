@@ -1,0 +1,1095 @@
+diff --git a/apps/fabro-web/app/components/runs-list/preferences.ts b/apps/fabro-web/app/components/runs-list/preferences.ts
+index 4e4e594f9..c48becdf5 100644
+--- a/apps/fabro-web/app/components/runs-list/preferences.ts
++++ b/apps/fabro-web/app/components/runs-list/preferences.ts
+@@ -328,7 +328,7 @@ export function loadStoredRunsWorkspaceSearchParams(
+ // `/runs`), fall back to stored preferences so the first render already
+ // reflects the user's view/archived/etc. choice instead of route defaults.
+ // Without this, users whose only runs are archived briefly see the empty
+-// Quick Start landing before a post-commit effect restores `archived=1`.
++// Quick Start landing before a post-commit URL repair restores `archived=1`.
+ export function resolveRunsWorkspaceSearchParams(
+   urlSearchParams: URLSearchParams,
+ ): URLSearchParams {
+@@ -355,7 +355,7 @@ export function persistRunsWorkspacePreferences(
+ }
+ 
+ const CHILD_RUNS_LIST_PREFERENCES_VERSION = 1;
+-const CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY = "fabro:run-children-preferences:v1";
++export const CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY = "fabro:run-children-preferences:v1";
+ const CHILD_RUNS_LIST_PARAM_KEYS = [
+   "search",
+   "created",
+diff --git a/apps/fabro-web/app/components/toast.test.tsx b/apps/fabro-web/app/components/toast.test.tsx
+index 48f67514d..a2d704cbf 100644
+--- a/apps/fabro-web/app/components/toast.test.tsx
++++ b/apps/fabro-web/app/components/toast.test.tsx
+@@ -1,5 +1,4 @@
+ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+-import { useEffect } from "react";
+ import TestRenderer, { act } from "react-test-renderer";
+ import { toast as sonnerToast, useSonner } from "sonner";
+ 
+@@ -18,10 +17,7 @@ function CaptureToastApi({
+   onReady?: (api: ReturnType<typeof useToast>) => void;
+ }) {
+   const api = useToast();
+-
+-  useEffect(() => {
+-    onReady?.(api);
+-  }, [api, onReady]);
++  onReady?.(api);
+ 
+   return null;
+ }
+diff --git a/apps/fabro-web/app/hooks/use-data-updated-at.ts b/apps/fabro-web/app/hooks/use-data-updated-at.ts
+index 738c7c03d..699beed43 100644
+--- a/apps/fabro-web/app/hooks/use-data-updated-at.ts
++++ b/apps/fabro-web/app/hooks/use-data-updated-at.ts
+@@ -1,15 +1,10 @@
+-import { useEffect, useState } from "react";
++import { useMemo } from "react";
+ 
+ /**
+- * Captures wall-clock time when an async data identity becomes available. The
+- * timestamp update is ignored for nullish values and has no cleanup.
++ * Captures a stable wall-clock timestamp for the current async data identity.
++ * The value is derived during render and stays stable until that identity
++ * changes.
+  */
+ export function useDataUpdatedAt<T>(data: T | null | undefined): number | null {
+-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+-
+-  useEffect(() => {
+-    if (data != null) setUpdatedAt(Date.now());
+-  }, [data]);
+-
+-  return updatedAt;
++  return useMemo(() => data != null ? Date.now() : null, [data]);
+ }
+diff --git a/apps/fabro-web/app/hooks/use-hydrate-search-params-once.ts b/apps/fabro-web/app/hooks/use-hydrate-search-params-once.ts
+deleted file mode 100644
+index 23ed1e4a0..000000000
+--- a/apps/fabro-web/app/hooks/use-hydrate-search-params-once.ts
++++ /dev/null
+@@ -1,27 +0,0 @@
+-import { useEffect, useRef } from "react";
+-
+-/**
+- * Synchronizes route search params with a one-time local-storage hydration pass.
+- * The URL replacement runs at most once per mount and performs no cleanup.
+- */
+-export function useHydrateSearchParamsOnce({
+-  resolvedSearchParams,
+-  setSearchParams,
+-  urlSearchParams,
+-}: {
+-  resolvedSearchParams: URLSearchParams;
+-  setSearchParams: (
+-    next: URLSearchParams,
+-    options: { replace: boolean },
+-  ) => void;
+-  urlSearchParams: URLSearchParams;
+-}) {
+-  const hydratedFromStorage = useRef(false);
+-
+-  useEffect(() => {
+-    if (hydratedFromStorage.current) return;
+-    hydratedFromStorage.current = true;
+-    if (resolvedSearchParams === urlSearchParams) return;
+-    setSearchParams(resolvedSearchParams, { replace: true });
+-  }, [resolvedSearchParams, setSearchParams, urlSearchParams]);
+-}
+diff --git a/apps/fabro-web/app/hooks/use-install-effects.ts b/apps/fabro-web/app/hooks/use-install-effects.ts
+index e101323d1..eed8c9a74 100644
+--- a/apps/fabro-web/app/hooks/use-install-effects.ts
++++ b/apps/fabro-web/app/hooks/use-install-effects.ts
+@@ -1,4 +1,4 @@
+-import { useEffect, type Dispatch, type SetStateAction } from "react";
++import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+ 
+ import {
+   type InstallFinishResponse,
+@@ -49,15 +49,22 @@ export function useInstallGithubCallbackError({
+   dispatchInstall: (action: InstallGithubCallbackAction) => void;
+   pathname: string;
+ }) {
++  const consumedErrorPathRef = useRef<string | null>(null);
++
+   useEffect(() => {
+     if (shouldConsumeInstallGithubErrorForPath(pathname)) {
+       const { error, sanitizedUrl } = consumeInstallGithubErrorFromUrl(window.location.href);
+       if (error) {
++        consumedErrorPathRef.current = pathname;
+         dispatchInstall({ type: "saveErrorChanged", message: error });
+         window.history.replaceState(window.history.state, "", sanitizedUrl);
+         return;
+       }
++      if (consumedErrorPathRef.current === pathname) {
++        return;
++      }
+     }
++    consumedErrorPathRef.current = null;
+     dispatchInstall({ type: "saveErrorChanged", message: null });
+   }, [dispatchInstall, pathname]);
+ }
+diff --git a/apps/fabro-web/app/hooks/use-last-successful-run-files-data.ts b/apps/fabro-web/app/hooks/use-last-successful-run-files-data.ts
+deleted file mode 100644
+index 83ca9b5ef..000000000
+--- a/apps/fabro-web/app/hooks/use-last-successful-run-files-data.ts
++++ /dev/null
+@@ -1,47 +0,0 @@
+-import { useEffect, useRef } from "react";
+-
+-import type { PaginatedRunFileList } from "@qltysh/fabro-api-client";
+-import type { ToastInput } from "../components/toast";
+-
+-/**
+- * Maintains the last committed run-files payload so failed SWR revalidations can
+- * keep rendering prior file data. The refs intentionally update after render so
+- * callers can compare the current payload to the previous committed snapshot;
+- * empty-transition toasts are emitted once from that commit path.
+- */
+-export function useLastSuccessfulRunFilesData({
+-  currentData,
+-  emptyTransitionMessage,
+-  push,
+-}: {
+-  currentData: PaginatedRunFileList | null | undefined;
+-  emptyTransitionMessage: (
+-    previousFileCount: number | null,
+-    nextFileCount: number,
+-  ) => string | null;
+-  push: (toast: ToastInput) => string;
+-}) {
+-  const lastGoodDataRef = useRef<PaginatedRunFileList | null>(null);
+-  const lastFetchedAtRef = useRef<number | null>(null);
+-  const previousData = lastGoodDataRef.current;
+-
+-  useEffect(() => {
+-    if (!currentData) return;
+-    const message = emptyTransitionMessage(
+-      lastGoodDataRef.current?.data.length ?? null,
+-      currentData.data.length,
+-    );
+-    if (message) {
+-      push({ message });
+-    }
+-    lastGoodDataRef.current = currentData;
+-    lastFetchedAtRef.current = Date.now();
+-  }, [currentData, emptyTransitionMessage, push]);
+-
+-  return {
+-    data: currentData ?? lastGoodDataRef.current,
+-    hasLastGoodData: lastGoodDataRef.current !== null,
+-    lastFetchedAt: lastFetchedAtRef.current,
+-    previousToSha: previousData?.meta?.to_sha ?? null,
+-  };
+-}
+diff --git a/apps/fabro-web/app/hooks/use-stage-artifact-download-href.ts b/apps/fabro-web/app/hooks/use-stage-artifact-download-href.ts
+deleted file mode 100644
+index ebab9f08b..000000000
+--- a/apps/fabro-web/app/hooks/use-stage-artifact-download-href.ts
++++ /dev/null
+@@ -1,38 +0,0 @@
+-import { useEffect, useState } from "react";
+-
+-import { stageArtifactDownloadUrl } from "../lib/api-client";
+-
+-/**
+- * Resolves the generated API artifact URL for an anchor href. Stale async
+- * completions are ignored after the artifact identity changes or unmounts.
+- */
+-export function useStageArtifactDownloadHref({
+-  runId,
+-  stageId,
+-  relativePath,
+-  retry,
+-}: {
+-  runId: string;
+-  stageId: string;
+-  relativePath: string;
+-  retry: number;
+-}): string {
+-  const [href, setHref] = useState<string>("#");
+-
+-  useEffect(() => {
+-    let active = true;
+-    void stageArtifactDownloadUrl(
+-      runId,
+-      stageId,
+-      relativePath,
+-      retry,
+-    ).then((url) => {
+-      if (active) setHref(url);
+-    });
+-    return () => {
+-      active = false;
+-    };
+-  }, [relativePath, retry, runId, stageId]);
+-
+-  return href;
+-}
+diff --git a/apps/fabro-web/app/install-app.test.tsx b/apps/fabro-web/app/install-app.test.tsx
+index 07025a3fa..b3ba590ad 100644
+--- a/apps/fabro-web/app/install-app.test.tsx
++++ b/apps/fabro-web/app/install-app.test.tsx
+@@ -1,5 +1,6 @@
+ import { afterEach, describe, expect, mock, test } from "bun:test";
+ import type { AxiosAdapter } from "axios";
++import { StrictMode } from "react";
+ import { MemoryRouter, Route, Routes } from "react-router";
+ import TestRenderer, { act } from "react-test-renderer";
+ 
+@@ -209,11 +210,13 @@ describe("InstallApp", () => {
+       let renderer: TestRenderer.ReactTestRenderer | null = null;
+       await act(async () => {
+         renderer = TestRenderer.create(
+-          <MemoryRouter initialEntries={["/install/github?error=github-app-manifest-conversion-failed"]}>
+-            <Routes>
+-              <Route path="/install/*" element={<InstallApp />} />
+-            </Routes>
+-          </MemoryRouter>,
++          <StrictMode>
++            <MemoryRouter initialEntries={["/install/github?error=github-app-manifest-conversion-failed"]}>
++              <Routes>
++                <Route path="/install/*" element={<InstallApp />} />
++              </Routes>
++            </MemoryRouter>
++          </StrictMode>,
+         );
+       });
+ 
+diff --git a/apps/fabro-web/app/lib/api-client.test.ts b/apps/fabro-web/app/lib/api-client.test.ts
+index ae73ccf40..8d38323a1 100644
+--- a/apps/fabro-web/app/lib/api-client.test.ts
++++ b/apps/fabro-web/app/lib/api-client.test.ts
+@@ -137,10 +137,10 @@ describe("fetchAllPages", () => {
+ });
+ 
+ describe("stageArtifactDownloadUrl", () => {
+-  test("builds the download href through generated client metadata", async () => {
+-    await expect(
++  test("builds the escaped download href", () => {
++    expect(
+       stageArtifactDownloadUrl("run 1", "stage@1", "logs/output.txt", 2),
+-    ).resolves.toBe(
++    ).toBe(
+       "/api/v1/runs/run%201/stages/stage%401/artifacts/download?filename=logs%2Foutput.txt&retry=2",
+     );
+   });
+diff --git a/apps/fabro-web/app/lib/api-client.ts b/apps/fabro-web/app/lib/api-client.ts
+index b86d0fc88..feef94682 100644
+--- a/apps/fabro-web/app/lib/api-client.ts
++++ b/apps/fabro-web/app/lib/api-client.ts
+@@ -12,7 +12,6 @@ import {
+   InstallApi,
+   ModelsApi,
+   RunInternalsApi,
+-  RunInternalsApiAxiosParamCreator,
+   RunOutputsApi,
+   RunsApi,
+   SecretsApi,
+@@ -385,14 +384,17 @@ export function requestSignalOptions(request?: Request): RawAxiosRequestConfig {
+   return request?.signal ? { signal: request.signal } : {};
+ }
+ 
+-export async function stageArtifactDownloadUrl(
++export function stageArtifactDownloadUrl(
+   id: string,
+   stageId: string,
+   filename: string,
+   retry: number,
+-): Promise<string> {
+-  const requestArgs = await RunInternalsApiAxiosParamCreator(
+-    generatedApiConfiguration,
+-  ).getStageArtifact(id, stageId, filename, retry);
+-  return `${generatedApiConfiguration.basePath ?? ""}${requestArgs.url}`;
++): string {
++  const searchParams = new URLSearchParams({
++    filename,
++    retry: String(retry),
++  });
++  return `${generatedApiConfiguration.basePath ?? ""}/api/v1/runs/${
++    encodeURIComponent(id)
++  }/stages/${encodeURIComponent(stageId)}/artifacts/download?${searchParams}`;
+ }
+diff --git a/apps/fabro-web/app/routes/run-artifacts.tsx b/apps/fabro-web/app/routes/run-artifacts.tsx
+index 4238407e7..c44b6c633 100644
+--- a/apps/fabro-web/app/routes/run-artifacts.tsx
++++ b/apps/fabro-web/app/routes/run-artifacts.tsx
+@@ -5,8 +5,8 @@ import type { RunArtifactEntry } from "@qltysh/fabro-api-client";
+ 
+ import { EmptyState, ErrorState, LoadingState } from "../components/state";
+ import { StageSidebar } from "../components/stage-sidebar";
++import { stageArtifactDownloadUrl } from "../lib/api-client";
+ import { formatBytes } from "../lib/format";
+-import { useStageArtifactDownloadHref } from "../hooks/use-stage-artifact-download-href";
+ import { useRunArtifacts, useRunStages } from "../lib/queries";
+ import { formatStageLabel, mapRunStagesToSidebarStages } from "../lib/stage-sidebar";
+ 
+@@ -178,12 +178,12 @@ function StageGroupCard({ runId, group }: { runId: string; group: StageGroup })
+ }
+ 
+ function ArtifactRow({ runId, entry }: { runId: string; entry: RunArtifactEntry }) {
+-  const href = useStageArtifactDownloadHref({
++  const href = stageArtifactDownloadUrl(
+     runId,
+-    stageId:      entry.stage_id,
+-    relativePath: entry.relative_path,
+-    retry:        entry.retry,
+-  });
++    entry.stage_id,
++    entry.relative_path,
++    entry.retry,
++  );
+ 
+   return (
+     <li className="flex items-center gap-4 px-4 py-2">
+diff --git a/apps/fabro-web/app/routes/run-children.tsx b/apps/fabro-web/app/routes/run-children.tsx
+index 97f6da5c2..7a85e95f4 100644
+--- a/apps/fabro-web/app/routes/run-children.tsx
++++ b/apps/fabro-web/app/routes/run-children.tsx
+@@ -1,5 +1,5 @@
+ import { useCallback, useMemo } from "react";
+-import { useParams, useSearchParams } from "react-router";
++import { Navigate, useParams, useSearchParams } from "react-router";
+ import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+ import type { ListRunsSortEnum } from "@qltysh/fabro-api-client";
+ 
+@@ -24,7 +24,6 @@ import { SECONDARY_BUTTON_CLASS } from "../components/ui";
+ import { ApiError } from "../lib/api-client";
+ import { formatRelativeTime } from "../lib/format";
+ import { useRun, useRunsPage } from "../lib/queries";
+-import { useHydrateSearchParamsOnce } from "../hooks/use-hydrate-search-params-once";
+ import { useTickingNow } from "../lib/time";
+ import { useDataUpdatedAt } from "../hooks/use-data-updated-at";
+ 
+@@ -39,6 +38,8 @@ export default function RunChildren() {
+     () => resolveChildRunsListSearchParams(urlSearchParams),
+     [urlSearchParams],
+   );
++  const hydratedSearch =
++    searchParams === urlSearchParams ? null : `?${searchParams.toString()}`;
+ 
+   const query = searchParams.get("search") ?? "";
+   const sort = parseSort(searchParams.get("sort"));
+@@ -89,12 +90,6 @@ export default function RunChildren() {
+     [updatePreferences],
+   );
+ 
+-  useHydrateSearchParamsOnce({
+-    resolvedSearchParams: searchParams,
+-    setSearchParams,
+-    urlSearchParams,
+-  });
+-
+   const childRunsQuery = useRunsPage(
+     {
+       parentId:        id,
+@@ -114,101 +109,115 @@ export default function RunChildren() {
+     void childRunsQuery.mutate();
+     void runQuery.mutate();
+   }, [childRunsQuery, runQuery]);
++  const searchHydration = hydratedSearch
++    ? <Navigate to={{ search: hydratedSearch }} replace />
++    : null;
+ 
+   if (childRunsQuery.isLoading && !childRunsQuery.data) {
+-    return <LoadingState label="Loading child runs…" />;
++    return (
++      <>
++        {searchHydration}
++        <LoadingState label="Loading child runs…" />
++      </>
++    );
+   }
+ 
+   const apiError =
+     childRunsQuery.error instanceof ApiError ? childRunsQuery.error : null;
+   if (apiError && !childRunsQuery.data) {
+     return (
+-      <ErrorState
+-        title="Couldn't load child runs"
+-        description={`Server returned ${apiError.status}.`}
+-        onRetry={handleRefresh}
+-      />
++      <>
++        {searchHydration}
++        <ErrorState
++          title="Couldn't load child runs"
++          description={`Server returned ${apiError.status}.`}
++          onRetry={handleRefresh}
++        />
++      </>
+     );
+   }
+ 
+   const lowerQuery = query.toLowerCase();
+ 
+   return (
+-    <div className="space-y-4">
+-      <div className="flex flex-wrap items-center gap-2">
+-        <div className="relative w-64">
+-          <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-muted" />
+-          <input
+-            type="text"
+-            name="search"
+-            aria-label="Search child runs"
+-            placeholder="Search child runs…"
+-            value={query}
+-            onChange={(e) => setQuery(e.target.value)}
+-            className="w-full rounded-md border border-line bg-panel/80 py-2 pl-9 pr-3 text-sm text-fg-2 placeholder-fg-muted outline-none transition-colors focus:border-focus focus:ring-0"
+-          />
++    <>
++      {searchHydration}
++      <div className="space-y-4">
++        <div className="flex flex-wrap items-center gap-2">
++          <div className="relative w-64">
++            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-muted" />
++            <input
++              type="text"
++              name="search"
++              aria-label="Search child runs"
++              placeholder="Search child runs…"
++              value={query}
++              onChange={(e) => setQuery(e.target.value)}
++              className="w-full rounded-md border border-line bg-panel/80 py-2 pl-9 pr-3 text-sm text-fg-2 placeholder-fg-muted outline-none transition-colors focus:border-focus focus:ring-0"
++            />
++          </div>
++
++          <div className="ml-auto flex items-center gap-3">
++            {updatedAt != null ? (
++              <span className="font-mono text-xs text-fg-muted">
++                Updated{" "}
++                {formatRelativeTime(new Date(updatedAt).toISOString(), now)}
++              </span>
++            ) : null}
++            <button
++              type="button"
++              onClick={handleRefresh}
++              disabled={childRunsQuery.isValidating}
++              aria-label={
++                childRunsQuery.isValidating
++                  ? "Refreshing child runs"
++                  : "Refresh child runs"
++              }
++              title="Refresh"
++              className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-panel/80 text-fg-3 transition-colors hover:bg-panel hover:text-fg disabled:cursor-default disabled:opacity-60 disabled:hover:bg-panel/80 disabled:hover:text-fg-3"
++            >
++              <ArrowPathIcon
++                className={`size-4 ${childRunsQuery.isValidating ? "animate-spin [animation-duration:450ms]" : ""}`}
++                aria-hidden="true"
++              />
++            </button>
++            <ColumnPickerButton hidden={hiddenColumns} onChange={setHiddenColumns} />
++          </div>
+         </div>
+ 
+-        <div className="ml-auto flex items-center gap-3">
+-          {updatedAt != null ? (
+-            <span className="font-mono text-xs text-fg-muted">
+-              Updated{" "}
+-              {formatRelativeTime(new Date(updatedAt).toISOString(), now)}
+-            </span>
+-          ) : null}
+-          <button
+-            type="button"
+-            onClick={handleRefresh}
+-            disabled={childRunsQuery.isValidating}
+-            aria-label={
+-              childRunsQuery.isValidating
+-                ? "Refreshing child runs"
+-                : "Refresh child runs"
+-            }
+-            title="Refresh"
+-            className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-panel/80 text-fg-3 transition-colors hover:bg-panel hover:text-fg disabled:cursor-default disabled:opacity-60 disabled:hover:bg-panel/80 disabled:hover:text-fg-3"
+-          >
+-            <ArrowPathIcon
+-              className={`size-4 ${childRunsQuery.isValidating ? "animate-spin [animation-duration:450ms]" : ""}`}
+-              aria-hidden="true"
++        <RunsListView
++          data={childRunsQuery.data ?? undefined}
++          isLoading={childRunsQuery.data == null && childRunsQuery.isLoading}
++          emptyState={
++            <EmptyState
++              title="No child runs"
++              description="When you launch another run with this run as its parent, it will appear here."
++              action={
++                <a
++                  href="https://docs.fabro.sh/execution/child-runs"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  className={SECONDARY_BUTTON_CLASS}
++                >
++                  Learn about child runs
++                </a>
++              }
+             />
+-          </button>
+-          <ColumnPickerButton hidden={hiddenColumns} onChange={setHiddenColumns} />
+-        </div>
++          }
++          sort={sort}
++          direction={direction}
++          page={page}
++          pageSize={pageSize}
++          hiddenColumns={hiddenColumns}
++          onSortClick={handleSortClick}
++          onPageChange={setPage}
++          onPageSizeChange={setPageSize}
++          query={lowerQuery}
++          repoFilter="all"
++          workflowFilter="all"
++          createdCutoffMs={null}
++        />
+       </div>
+-
+-      <RunsListView
+-        data={childRunsQuery.data ?? undefined}
+-        isLoading={childRunsQuery.data == null && childRunsQuery.isLoading}
+-        emptyState={
+-          <EmptyState
+-            title="No child runs"
+-            description="When you launch another run with this run as its parent, it will appear here."
+-            action={
+-              <a
+-                href="https://docs.fabro.sh/execution/child-runs"
+-                target="_blank"
+-                rel="noopener noreferrer"
+-                className={SECONDARY_BUTTON_CLASS}
+-              >
+-                Learn about child runs
+-              </a>
+-            }
+-          />
+-        }
+-        sort={sort}
+-        direction={direction}
+-        page={page}
+-        pageSize={pageSize}
+-        hiddenColumns={hiddenColumns}
+-        onSortClick={handleSortClick}
+-        onPageChange={setPage}
+-        onPageSizeChange={setPageSize}
+-        query={lowerQuery}
+-        repoFilter="all"
+-        workflowFilter="all"
+-        createdCutoffMs={null}
+-      />
+-    </div>
++    </>
+   );
+ }
+diff --git a/apps/fabro-web/app/routes/run-files.render.test.tsx b/apps/fabro-web/app/routes/run-files.render.test.tsx
+index 5c9a24722..457f4bd41 100644
+--- a/apps/fabro-web/app/routes/run-files.render.test.tsx
++++ b/apps/fabro-web/app/routes/run-files.render.test.tsx
+@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
+ import { useRef } from "react";
+ import TestRenderer, { act } from "react-test-renderer";
+ import { MemoryRouter, Route, Routes } from "react-router";
++import { toast as sonnerToast } from "sonner";
+ 
+ import { ToastProvider } from "../components/toast";
+ 
+@@ -177,6 +178,22 @@ function renderRunFiles(initialEntry = "/runs/run_1/files") {
+   return renderer!;
+ }
+ 
++function treeText(
++  node: ReturnType<TestRenderer.ReactTestRenderer["toJSON"]>,
++): string {
++  if (!node) return "";
++  if (typeof node === "string") return node;
++  if (Array.isArray(node)) return node.map(treeText).join("");
++  return (node.children ?? []).map(treeText).join("");
++}
++
++async function flushAsyncUpdates() {
++  await act(async () => {
++    await Promise.resolve();
++    await new Promise((resolve) => setTimeout(resolve, 0));
++  });
++}
++
+ describe("RunFiles rendering", () => {
+   afterEach(() => {
+     act(() => {
+@@ -193,6 +210,7 @@ describe("RunFiles rendering", () => {
+     virtualizerCalls.length = 0;
+     providerCalls.length = 0;
+     useRunFilesCalls.length = 0;
++    sonnerToast.dismiss();
+     delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
+   });
+ 
+@@ -306,4 +324,17 @@ describe("RunFiles rendering", () => {
+     expect(lastCall.patch).toContain("+uncommitted");
+     expect(lastCall.mountId).not.toBe(firstMountId);
+   });
++
++  test("refreshing from a populated diff to an empty diff shows a no-changes toast", async () => {
++    currentFilesPayload = makePayload(1);
++    const renderer = renderRunFiles("/runs/run_1/files?scope=all");
++
++    currentFilesPayload = makePayload(0);
++    await act(async () => {
++      renderer.root.findByProps({ "aria-label": "Refresh files" }).props.onClick();
++    });
++    await flushAsyncUpdates();
++
++    expect(treeText(renderer.toJSON())).toContain("No changes in this run.");
++  });
+ });
+diff --git a/apps/fabro-web/app/routes/run-files.tsx b/apps/fabro-web/app/routes/run-files.tsx
+index 0a7ab2539..a2f3a1a25 100644
+--- a/apps/fabro-web/app/routes/run-files.tsx
++++ b/apps/fabro-web/app/routes/run-files.tsx
+@@ -44,7 +44,6 @@ import { buildRunCommitOptions } from "./run-files/commit-options";
+ import { VirtualizedDiffList } from "./run-files/virtualized-diff-list";
+ import { useLocationHash, useMediaQuery } from "../hooks/effects";
+ import { useFocusAfterRefreshCompletes } from "../hooks/use-focus-after-refresh";
+-import { useLastSuccessfulRunFilesData } from "../hooks/use-last-successful-run-files-data";
+ import { useMinimumRefreshSpinner } from "../hooks/use-minimum-refresh-spinner";
+ import { useRunFileDeepLinkFocus } from "../hooks/use-run-file-deep-link";
+ import { ApiError, extractRequestId } from "../lib/api-client";
+@@ -452,6 +451,9 @@ export default function RunFiles() {
+           toSha:   selectedCommit.toSha,
+         }
+       : runFileScopeSelection(selectedScope);
++  const effectiveScope = fileSelection.kind === "commit"
++    ? `commit:${fileSelection.toSha}`
++    : fileSelection.scope;
+   const filesQuery = useRunFiles(
+     waitingForCommitSelection ? undefined : params.id,
+     fileSelection,
+@@ -460,13 +462,14 @@ export default function RunFiles() {
+   const { push } = useToast();
+   const narrow = useNarrowViewport();
+   const runStatus = runQuery.data?.lifecycle.status.kind;
+-
+-  const runFilesData = useLastSuccessfulRunFilesData({
+-    currentData: filesQuery.data,
+-    emptyTransitionMessage: emptyTransitionToastMessage,
+-    push,
+-  });
+-  const data: PaginatedRunFileList | null = runFilesData.data;
++  // `useRunFiles` owns server-state retention with SWR `keepPreviousData`; when
++  // a revalidation fails, SWR keeps the last successful payload in `data`.
++  const data: PaginatedRunFileList | null = filesQuery.data ?? null;
++  const dataFetchedAt = useMemo(() => data ? Date.now() : null, [data]);
++  const [refreshConfirmation, setRefreshConfirmation] = useState<{
++    scope: string;
++    toSha: string;
++  } | null>(null);
+ 
+   const isInitialLoading = (waitingForCommitSelection || filesQuery.isLoading) && !data;
+   const isRevalidating = filesQuery.isValidating;
+@@ -478,12 +481,12 @@ export default function RunFiles() {
+   // on with no data).
+   const apiError = filesQuery.error instanceof ApiError ? filesQuery.error : null;
+   const revalidationError =
+-    apiError && runFilesData.hasLastGoodData
++    apiError && data
+       ? `Couldn't refresh (${apiError.status}).`
+       : null;
+-  const initialError = apiError && !runFilesData.hasLastGoodData ? apiError : null;
++  const initialError = apiError && !data ? apiError : null;
+ 
+-  const freshness = useFreshness(data?.meta ?? null, runFilesData.lastFetchedAt);
++  const freshness = useFreshness(data?.meta ?? null, dataFetchedAt);
+ 
+   // Persisted desktop preference + md-breakpoint forced unified.
+   const [persistedStyle, setPersistedStyle] = useState<DiffStyle>(
+@@ -507,9 +510,28 @@ export default function RunFiles() {
+     start: startMinRefresh,
+   } = useMinimumRefreshSpinner(MIN_REFRESH_SPIN_MS);
+   const handleRefresh = useCallback(() => {
++    const previousFileCount = data?.data.length ?? null;
++    const previousToSha = data?.meta.to_sha ?? null;
+     startMinRefresh();
+-    void filesQuery.mutate();
+-  }, [filesQuery, startMinRefresh]);
++    void filesQuery.mutate()
++      .then((nextData) => {
++        if (nextData) {
++          const message = emptyTransitionToastMessage(
++            previousFileCount,
++            nextData.data.length,
++          );
++          if (message) push({ message });
++        }
++
++        const nextToSha = nextData?.meta.to_sha ?? null;
++        setRefreshConfirmation(
++          previousToSha && nextToSha === previousToSha
++            ? { scope: effectiveScope, toSha: nextToSha }
++            : null,
++        );
++      })
++      .catch(() => undefined);
++  }, [data, effectiveScope, filesQuery, push, startMinRefresh]);
+   const handlePickerChange = useCallback(
+     (selection: DiffPickerValue) => {
+       const search = new URLSearchParams(routeLocation.search);
+@@ -597,17 +619,12 @@ export default function RunFiles() {
+     selectedCommit && selectedCommit.fromSha
+       ? { kind: "commit", sha: selectedCommit.sha }
+       : { kind: "scope", scope: showScopePicker ? selectedScope : "committed" };
+-  const effectiveScope = fileSelection.kind === "commit"
+-    ? `commit:${fileSelection.toSha}`
+-    : fileSelection.scope;
+-
+-  // Refresh is disabled when the server reports the same `to_sha` it
+-  // reported on the previous successful fetch — no new checkpoint yet.
+-  // `runFilesData.previousToSha` intentionally lags the current payload by one
+-  // committed render.
+-  const prevToSha = runFilesData.previousToSha;
++  // Refresh is disabled only after a user-triggered refresh confirms that the
++  // same selection still resolves to the same `to_sha` — no new checkpoint yet.
+   const refreshDisabled =
+-    !!meta.to_sha && prevToSha !== null && prevToSha === meta.to_sha;
++    !!meta.to_sha &&
++    refreshConfirmation?.scope === effectiveScope &&
++    refreshConfirmation.toSha === meta.to_sha;
+ 
+   const toolbar = (
+     <Toolbar
+diff --git a/apps/fabro-web/app/routes/runs.preferences.test.tsx b/apps/fabro-web/app/routes/runs.preferences.test.tsx
+index 648d8e35a..0bccc2451 100644
+--- a/apps/fabro-web/app/routes/runs.preferences.test.tsx
++++ b/apps/fabro-web/app/routes/runs.preferences.test.tsx
+@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
+ import type { PaginatedRunList, Run } from "@qltysh/fabro-api-client";
+ 
+ import { ToastProvider } from "../components/toast";
++import { CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY } from "../components/runs-list/preferences";
+ import { setupReactTestEnv } from "../lib/test-utils";
+ 
+ class MemoryStorage {
+@@ -79,9 +80,22 @@ mock.module("../lib/queries", () => ({
+     queryCalls.push({ hook: "useAllRuns", args });
+     return { data: allRuns, isLoading: false };
+   },
++  useRun: (...args: unknown[]) => {
++    queryCalls.push({ hook: "useRun", args });
++    return {
++      data:      run(String(args[0] ?? "run-1")),
++      isLoading: false,
++      mutate:    () => Promise.resolve(undefined),
++    };
++  },
+   useRunsPage: (...args: unknown[]) => {
+     queryCalls.push({ hook: "useRunsPage", args });
+-    return { data: pageRuns, isLoading: false };
++    return {
++      data:         pageRuns,
++      isLoading:    false,
++      isValidating: false,
++      mutate:       () => Promise.resolve(pageRuns),
++    };
+   },
+   useAuthConfig: () => ({ data: { methods: ["github"] } }),
+   useSystemInfo: () => ({ data: { server_url: "http://127.0.0.1:32276" } }),
+@@ -100,6 +114,7 @@ const {
+   default: Runs,
+   RUNS_PREFERENCES_STORAGE_KEY,
+ } = await import("./runs");
++const { default: RunChildren } = await import("./run-children");
+ 
+ function installWindow() {
+   class TestElement {}
+@@ -149,6 +164,23 @@ async function renderRuns(initialEntry: string) {
+   return { renderer, router };
+ }
+ 
++async function renderChildRuns(initialEntry: string) {
++  const router = createMemoryRouter(
++    [{ path: "/runs/:id/children", element: <RunChildren /> }],
++    { initialEntries: [initialEntry] },
++  );
++  let renderer!: TestRenderer.ReactTestRenderer;
++  await act(async () => {
++    renderer = TestRenderer.create(
++      <ToastProvider>
++        <RouterProvider router={router} />
++      </ToastProvider>,
++    );
++  });
++  mountedRenderers.push(renderer);
++  return { renderer, router };
++}
++
+ async function flushEffects() {
+   await act(async () => {});
+ }
+@@ -210,8 +242,8 @@ describe("Runs workspace preference restoration", () => {
+ 
+     // The first frame the user sees must already reflect stored prefs.
+     // Before this was fixed, the route briefly rendered the columns view
+-    // with includeArchived=false (default state) before a post-commit
+-    // useEffect restored the URL, flashing the Quick Start empty state for
++    // with includeArchived=false (default state) before a post-commit URL
++    // repair restored the URL, flashing the Quick Start empty state for
+     // users whose only runs were archived.
+     const firstAllRuns = queryCalls.find((c) => c.hook === "useAllRuns");
+     const firstRunsPage = queryCalls.find((c) => c.hook === "useRunsPage");
+@@ -220,6 +252,33 @@ describe("Runs workspace preference restoration", () => {
+     expect(firstRunsPage?.args[1]).toBe(true);
+   });
+ 
++  test("child runs applies stored list prefs on the first render and hydrates the URL", async () => {
++    storage.setItem(
++      CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY,
++      JSON.stringify({
++        version:   1,
++        sort:      "title",
++        direction: "asc",
++        size:      50,
++      }),
++    );
++
++    const { router } = await renderChildRuns("/runs/parent-run/children");
++
++    const firstRunsPage = queryCalls.find((c) => c.hook === "useRunsPage");
++    expect(firstRunsPage?.args[0]).toMatchObject({
++      parentId:  "parent-run",
++      sort:      "title",
++      direction: "asc",
++      limit:     50,
++      offset:    0,
++    });
++    expect(firstRunsPage?.args[1]).toBe(true);
++
++    await flushEffects();
++    expect(router.state.location.search).toBe("?sort=title&direction=asc&size=50");
++  });
++
+   test("/runs?view=columns ignores stored list view", async () => {
+     storage.setItem(
+       RUNS_PREFERENCES_STORAGE_KEY,
+diff --git a/apps/fabro-web/app/routes/runs.tsx b/apps/fabro-web/app/routes/runs.tsx
+index f24845204..4f1699bc6 100644
+--- a/apps/fabro-web/app/routes/runs.tsx
++++ b/apps/fabro-web/app/routes/runs.tsx
+@@ -1,5 +1,5 @@
+ import { useState, useCallback, useMemo, useRef } from "react";
+-import { Link } from "react-router";
++import { Link, Navigate } from "react-router";
+ import { CheckIcon, ChevronDownIcon, CommandLineIcon } from "@heroicons/react/24/outline";
+ import { EllipsisVerticalIcon } from "@heroicons/react/20/solid";
+ import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
+@@ -717,6 +717,7 @@ function RunsLandingEmpty({
+ 
+ export default function Runs() {
+   const {
++    hydratedSearch,
+     query,
+     repoFilter,
+     workflowFilter,
+@@ -842,75 +843,78 @@ export default function Runs() {
+   );
+ 
+   return (
+-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+-      <div className="space-y-4">
+-        <RunsToolbar
+-          query={query}
+-          repoFilter={repoFilter}
+-          workflowFilter={workflowFilter}
+-          createdFilter={createdFilter}
+-          statusFilter={statusFilter}
+-          includeArchived={includeArchived}
+-          view={view}
+-          hiddenColumns={hiddenColumns}
+-          allRepos={allRepos}
+-          allWorkflows={allWorkflows}
+-          onQueryChange={setQuery}
+-          onRepoFilterChange={setRepoFilter}
+-          onWorkflowFilterChange={setWorkflowFilter}
+-          onCreatedFilterChange={setCreatedFilter}
+-          onStatusFilterChange={setStatusFilter}
+-          onIncludeArchivedChange={setIncludeArchived}
+-          onViewChange={setView}
+-          onHiddenColumnsChange={setHiddenColumns}
+-        />
+-
+-        {view === "columns" ? (
+-          <>
+-            <div className="flex gap-5 overflow-x-auto pb-4">
+-              {visibleColumns.map((col) => (
+-                <div key={col.id} className="w-72 shrink-0">
+-                  <BoardColumnView column={col} />
+-                </div>
+-              ))}
+-            </div>
+-            {isLandingReady && totalRuns === 0 ? (
+-              <RunsLandingEmpty
+-                hasGitHubAuth={hasGitHubAuth}
+-                serverUrl={serverUrl}
+-              />
+-            ) : totalRuns > 0 && filteredRuns === 0 ? (
+-              <div className="py-8">
+-                <EmptyState
+-                  title="No matching runs"
+-                  description="Try clearing the search or repo filter."
+-                />
+-              </div>
+-            ) : null}
+-          </>
+-        ) : (
+-          <RunsListView
+-            data={listRunsPage.data}
+-            isLoading={listRunsPage.data === undefined && listRunsPage.isLoading}
+-            emptyState={
+-              <RunsLandingEmpty hasGitHubAuth={hasGitHubAuth} serverUrl={serverUrl} />
+-            }
+-            sort={sort}
+-            direction={direction}
+-            page={page}
+-            pageSize={pageSize}
+-            hiddenColumns={hiddenColumns}
+-            onSortClick={handleSortClick}
+-            onPageChange={setPage}
+-            onPageSizeChange={setPageSize}
+-            query={lowerQuery}
++    <>
++      {hydratedSearch ? <Navigate to={{ search: hydratedSearch }} replace /> : null}
++      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
++        <div className="space-y-4">
++          <RunsToolbar
++            query={query}
+             repoFilter={repoFilter}
+             workflowFilter={workflowFilter}
++            createdFilter={createdFilter}
+             statusFilter={statusFilter}
+-            createdCutoffMs={createdCutoffMs}
++            includeArchived={includeArchived}
++            view={view}
++            hiddenColumns={hiddenColumns}
++            allRepos={allRepos}
++            allWorkflows={allWorkflows}
++            onQueryChange={setQuery}
++            onRepoFilterChange={setRepoFilter}
++            onWorkflowFilterChange={setWorkflowFilter}
++            onCreatedFilterChange={setCreatedFilter}
++            onStatusFilterChange={setStatusFilter}
++            onIncludeArchivedChange={setIncludeArchived}
++            onViewChange={setView}
++            onHiddenColumnsChange={setHiddenColumns}
+           />
+-        )}
+-      </div>
+-    </DndContext>
++
++          {view === "columns" ? (
++            <>
++              <div className="flex gap-5 overflow-x-auto pb-4">
++                {visibleColumns.map((col) => (
++                  <div key={col.id} className="w-72 shrink-0">
++                    <BoardColumnView column={col} />
++                  </div>
++                ))}
++              </div>
++              {isLandingReady && totalRuns === 0 ? (
++                <RunsLandingEmpty
++                  hasGitHubAuth={hasGitHubAuth}
++                  serverUrl={serverUrl}
++                />
++              ) : totalRuns > 0 && filteredRuns === 0 ? (
++                <div className="py-8">
++                  <EmptyState
++                    title="No matching runs"
++                    description="Try clearing the search or repo filter."
++                  />
++                </div>
++              ) : null}
++            </>
++          ) : (
++            <RunsListView
++              data={listRunsPage.data}
++              isLoading={listRunsPage.data === undefined && listRunsPage.isLoading}
++              emptyState={
++                <RunsLandingEmpty hasGitHubAuth={hasGitHubAuth} serverUrl={serverUrl} />
++              }
++              sort={sort}
++              direction={direction}
++              page={page}
++              pageSize={pageSize}
++              hiddenColumns={hiddenColumns}
++              onSortClick={handleSortClick}
++              onPageChange={setPage}
++              onPageSizeChange={setPageSize}
++              query={lowerQuery}
++              repoFilter={repoFilter}
++              workflowFilter={workflowFilter}
++              statusFilter={statusFilter}
++              createdCutoffMs={createdCutoffMs}
++            />
++          )}
++        </div>
++      </DndContext>
++    </>
+   );
+ }
+diff --git a/apps/fabro-web/app/routes/runs/workspace-preferences.ts b/apps/fabro-web/app/routes/runs/workspace-preferences.ts
+index 69ce19016..bcff1217b 100644
+--- a/apps/fabro-web/app/routes/runs/workspace-preferences.ts
++++ b/apps/fabro-web/app/routes/runs/workspace-preferences.ts
+@@ -23,7 +23,6 @@ import {
+ } from "../../components/runs-list/preferences";
+ import { serializeHiddenColumns } from "../../components/runs-list/toggleable-column";
+ import type { ToggleableColumn } from "../../components/runs-list/toggleable-column";
+-import { useHydrateSearchParamsOnce } from "../../hooks/use-hydrate-search-params-once";
+ 
+ export function useRunsWorkspacePreferences() {
+   const [urlSearchParams, setSearchParams] = useSearchParams();
+@@ -31,6 +30,8 @@ export function useRunsWorkspacePreferences() {
+     () => resolveRunsWorkspaceSearchParams(urlSearchParams),
+     [urlSearchParams],
+   );
++  const hydratedSearch =
++    searchParams === urlSearchParams ? null : `?${searchParams.toString()}`;
+   const preferences = useMemo(
+     () => runsWorkspacePreferencesFromSearchParams(searchParams),
+     [searchParams],
+@@ -102,13 +103,8 @@ export function useRunsWorkspacePreferences() {
+     [updatePreferences],
+   );
+ 
+-  useHydrateSearchParamsOnce({
+-    resolvedSearchParams: searchParams,
+-    setSearchParams,
+-    urlSearchParams,
+-  });
+-
+   return {
++    hydratedSearch,
+     query,
+     repoFilter,
+     workflowFilter,
+diff --git a/apps/fabro-web/app/routes/settings-live-events.test.tsx b/apps/fabro-web/app/routes/settings-live-events.test.tsx
+index b7d9d4e74..85881c88f 100644
+--- a/apps/fabro-web/app/routes/settings-live-events.test.tsx
++++ b/apps/fabro-web/app/routes/settings-live-events.test.tsx
+@@ -1,5 +1,4 @@
+ import { afterEach, describe, expect, mock, test } from "bun:test";
+-import { useEffect } from "react";
+ import TestRenderer, { act } from "react-test-renderer";
+ import { MemoryRouter, Route, Routes } from "react-router";
+ 
+@@ -17,12 +16,7 @@ mock.module("../lib/live-events", () => ({
+     };
+   },
+   useLiveEventsSubscription: (onEvent: (payload: LiveEventPayload) => void) => {
+-    useEffect(() => {
+-      capturedOnEvent = onEvent;
+-      return () => {
+-        if (capturedOnEvent === onEvent) capturedOnEvent = null;
+-      };
+-    }, [onEvent]);
++    capturedOnEvent = onEvent;
+   },
+ }));
+ 
