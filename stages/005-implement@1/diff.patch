@@ -1,0 +1,1123 @@
+diff --git a/docs/public/reference/cli.mdx b/docs/public/reference/cli.mdx
+index 67e390987..f264f7bab 100644
+--- a/docs/public/reference/cli.mdx
++++ b/docs/public/reference/cli.mdx
+@@ -104,6 +104,7 @@ fabro [OPTIONS] [COMMAND]
+ | `fabro uninstall` | Uninstall Fabro from this machine |
+ | `fabro upgrade` | Upgrade fabro to the latest version |
+ | `fabro validate` | Validate a workflow |
++| `fabro variable` | Manage server-owned variables |
+ | `fabro version` | Show client and server version information |
+ | `fabro wait` | Block until a workflow run completes |
+ | `fabro workflow` | Workflow operations |
+@@ -1571,6 +1572,87 @@ fabro validate [OPTIONS] <WORKFLOW>
+ | --- | --- |
+ | `WORKFLOW` | Path to the .fabro workflow file |
+ 
++### `fabro variable`
++
++Manage server-owned variables
++
++```bash
++fabro variable [OPTIONS] <COMMAND>
++```
++
++#### Options
++
++| Option | Description |
++| --- | --- |
++| `--server <server>` | Fabro server target: http(s) URL or absolute Unix socket path |
++
++#### Subcommands
++
++| Command | Description |
++| --- | --- |
++| `fabro variable get` | Get a variable value |
++| `fabro variable list` | List variables |
++| `fabro variable rm` | Remove a variable |
++| `fabro variable set` | Set a variable value |
++
++#### `fabro variable get`
++
++Get a variable value
++
++```bash
++fabro variable get [OPTIONS] <NAME>
++```
++
++#### Arguments
++
++| Name | Description |
++| --- | --- |
++| `NAME` | Name of the variable to get |
++
++#### `fabro variable list`
++
++List variables
++
++```bash
++fabro variable list [OPTIONS]
++```
++
++#### `fabro variable rm`
++
++Remove a variable
++
++```bash
++fabro variable rm [OPTIONS] <NAME>
++```
++
++#### Arguments
++
++| Name | Description |
++| --- | --- |
++| `NAME` | Name of the variable to remove |
++
++#### `fabro variable set`
++
++Set a variable value
++
++```bash
++fabro variable set [OPTIONS] <NAME> [VALUE]
++```
++
++#### Arguments
++
++| Name | Description |
++| --- | --- |
++| `NAME` | Name of the variable |
++| `VALUE` | Value to store |
++
++#### Options
++
++| Option | Description |
++| --- | --- |
++| `--description <description>` | Optional human-readable description |
++| `--value-stdin` | Read the variable value from stdin |
++
+ ### `fabro version`
+ 
+ Show client and server version information
+diff --git a/docs/public/workflows/variables.mdx b/docs/public/workflows/variables.mdx
+index 9869a16af..c3a7be4e9 100644
+--- a/docs/public/workflows/variables.mdx
++++ b/docs/public/workflows/variables.mdx
+@@ -59,6 +59,25 @@ fabro run .fabro/workflows/check/workflow.toml -I repo_name=fabro-2 --input lang
+ 
+ CLI input values use TOML scalar parsing when possible. Quoted strings, booleans, integers, and floats keep their typed values; unquoted bare text falls back to a string. Empty values such as `foo=` are accepted as empty strings. Arrays, inline tables, and datetimes are rejected.
+ 
++## Server-managed run config variables
++
++Use server-managed variables for non-sensitive values that should be shared across runs, such as deployment environments, default branches, regions, or image tags:
++
++```bash
++fabro variable set DEPLOY_ENV staging --description "Deployment target"
++```
++
++Run configuration strings can reference these values with `{{ vars.NAME }}`:
++
++```toml title="workflow.toml"
++_version = 1
++
++[run]
++goal = "Deploy {{ vars.DEPLOY_ENV }}"
++```
++
++Variables are intentionally readable: `fabro variable list` and `fabro variable get DEPLOY_ENV` show stored values. Do not store tokens, API keys, or credentials as variables; use `fabro secret set` for sensitive values.
++
+ ## `goal`
+ 
+ Agent and prompt nodes also receive the workflow goal at runtime:
+diff --git a/lib/crates/fabro-cli/src/args.rs b/lib/crates/fabro-cli/src/args.rs
+index 72aa82b52..f560b62e6 100644
+--- a/lib/crates/fabro-cli/src/args.rs
++++ b/lib/crates/fabro-cli/src/args.rs
+@@ -676,6 +676,35 @@ pub(crate) struct SecretSetArgs {
+     pub(crate) description: Option<String>,
+ }
+ 
++#[derive(Args)]
++pub(crate) struct VariableListArgs;
++
++#[derive(Args)]
++pub(crate) struct VariableGetArgs {
++    /// Name of the variable to get
++    pub(crate) name: String,
++}
++
++#[derive(Args)]
++pub(crate) struct VariableRmArgs {
++    /// Name of the variable to remove
++    pub(crate) name: String,
++}
++
++#[derive(Args)]
++pub(crate) struct VariableSetArgs {
++    /// Name of the variable
++    pub(crate) name:        String,
++    /// Value to store
++    pub(crate) value:       Option<String>,
++    /// Read the variable value from stdin
++    #[arg(long, conflicts_with = "value")]
++    pub(crate) value_stdin: bool,
++    /// Optional human-readable description
++    #[arg(long)]
++    pub(crate) description: Option<String>,
++}
++
+ #[derive(Debug, Args)]
+ pub(crate) struct ResumeArgs {
+     #[command(flatten)]
+@@ -1261,6 +1290,8 @@ pub(crate) enum Commands {
+     Parent(ParentNamespace),
+     /// Manage server-owned secrets
+     Secret(SecretNamespace),
++    /// Manage server-owned variables
++    Variable(VariableNamespace),
+     /// Inspect effective settings
+     Settings(SettingsArgs),
+     /// Workflow operations
+@@ -1376,6 +1407,12 @@ impl Commands {
+                 SecretCommand::Rm(_) => "secret rm",
+                 SecretCommand::Set(_) => "secret set",
+             },
++            Self::Variable(ns) => match &ns.command {
++                VariableCommand::List(_) => "variable list",
++                VariableCommand::Get(_) => "variable get",
++                VariableCommand::Rm(_) => "variable rm",
++                VariableCommand::Set(_) => "variable set",
++            },
+             Self::Settings(_) => "settings",
+             Self::Workflow(ns) => match &ns.command {
+                 WorkflowCommand::List(_) => "workflow list",
+@@ -1479,6 +1516,28 @@ pub(crate) enum SecretCommand {
+     Set(SecretSetArgs),
+ }
+ 
++#[derive(Args)]
++pub(crate) struct VariableNamespace {
++    #[command(flatten)]
++    pub(crate) target: ServerTargetArgs,
++
++    #[command(subcommand)]
++    pub(crate) command: VariableCommand,
++}
++
++#[derive(Subcommand)]
++pub(crate) enum VariableCommand {
++    /// List variables
++    #[command(alias = "ls")]
++    List(VariableListArgs),
++    /// Get a variable value
++    Get(VariableGetArgs),
++    /// Remove a variable
++    Rm(VariableRmArgs),
++    /// Set a variable value
++    Set(VariableSetArgs),
++}
++
+ #[derive(Args)]
+ pub(crate) struct ServerNamespace {
+     #[command(subcommand)]
+diff --git a/lib/crates/fabro-cli/src/commands/mod.rs b/lib/crates/fabro-cli/src/commands/mod.rs
+index 71d66bd08..18e22d5f7 100644
+--- a/lib/crates/fabro-cli/src/commands/mod.rs
++++ b/lib/crates/fabro-cli/src/commands/mod.rs
+@@ -25,6 +25,7 @@ pub(crate) mod system;
+ pub(crate) mod uninstall;
+ pub(crate) mod upgrade;
+ pub(crate) mod validate;
++pub(crate) mod variable;
+ pub(crate) mod version;
+ pub(crate) mod workflow;
+ 
+diff --git a/lib/crates/fabro-cli/src/commands/variable/get.rs b/lib/crates/fabro-cli/src/commands/variable/get.rs
+new file mode 100644
+index 000000000..bdd588c9c
+--- /dev/null
++++ b/lib/crates/fabro-cli/src/commands/variable/get.rs
+@@ -0,0 +1,16 @@
++use anyhow::Result;
++
++use crate::args::VariableGetArgs;
++use crate::command_context::CommandContext;
++use crate::shared::print_json_pretty;
++
++pub(super) async fn get_command(args: &VariableGetArgs, ctx: &CommandContext) -> Result<()> {
++    let client = ctx.server().await?;
++    let variable = client.get_variable(&args.name).await?;
++    if ctx.json_output() {
++        print_json_pretty(&variable)?;
++    } else {
++        fabro_util::printout!(ctx.printer(), "{}", variable.value);
++    }
++    Ok(())
++}
+diff --git a/lib/crates/fabro-cli/src/commands/variable/list.rs b/lib/crates/fabro-cli/src/commands/variable/list.rs
+new file mode 100644
+index 000000000..f57dd2f42
+--- /dev/null
++++ b/lib/crates/fabro-cli/src/commands/variable/list.rs
+@@ -0,0 +1,71 @@
++use anyhow::Result;
++use chrono::{DateTime, Utc};
++use cli_table::format::{Border, Separator};
++use cli_table::{Cell, CellStruct, Style, Table};
++use fabro_util::terminal::Styles;
++
++use crate::args::VariableListArgs;
++use crate::command_context::CommandContext;
++use crate::shared::print_json_pretty;
++
++fn format_age(dt: DateTime<Utc>, now: DateTime<Utc>) -> String {
++    let dur = now.signed_duration_since(dt);
++    if dur.num_days() > 0 {
++        format!("{}d ago", dur.num_days())
++    } else if dur.num_hours() > 0 {
++        format!("{}h ago", dur.num_hours())
++    } else {
++        format!("{}m ago", dur.num_minutes().max(1))
++    }
++}
++
++pub(super) async fn list_command(_args: &VariableListArgs, ctx: &CommandContext) -> Result<()> {
++    let client = ctx.server().await?;
++    let printer = ctx.printer();
++    let variables = client.list_variables().await?;
++    if ctx.json_output() {
++        print_json_pretty(&variables)?;
++        return Ok(());
++    }
++
++    if variables.is_empty() {
++        fabro_util::printerr!(printer, "No variables found.");
++        return Ok(());
++    }
++
++    let styles = Styles::detect_stdout();
++    let use_color = styles.use_color;
++    let now = Utc::now();
++
++    let title: Vec<CellStruct> = vec![
++        "NAME".cell().bold(use_color),
++        "VALUE".cell().bold(use_color),
++        "UPDATED".cell().bold(use_color),
++    ];
++
++    let rows: Vec<Vec<CellStruct>> = variables
++        .iter()
++        .map(|variable| {
++            vec![
++                variable.name.clone().cell().bold(use_color),
++                variable.value.clone().cell(),
++                format_age(variable.updated_at, now).cell(),
++            ]
++        })
++        .collect();
++
++    let color_choice = if use_color {
++        cli_table::ColorChoice::Auto
++    } else {
++        cli_table::ColorChoice::Never
++    };
++    let table = rows
++        .table()
++        .title(title)
++        .color_choice(color_choice)
++        .border(Border::builder().build())
++        .separator(Separator::builder().build());
++    fabro_util::printout!(printer, "{}", table.display()?);
++
++    Ok(())
++}
+diff --git a/lib/crates/fabro-cli/src/commands/variable/mod.rs b/lib/crates/fabro-cli/src/commands/variable/mod.rs
+new file mode 100644
+index 000000000..cc38b32c8
+--- /dev/null
++++ b/lib/crates/fabro-cli/src/commands/variable/mod.rs
+@@ -0,0 +1,19 @@
++mod get;
++mod list;
++mod rm;
++mod set;
++
++use anyhow::Result;
++
++use crate::args::{VariableCommand, VariableNamespace};
++use crate::command_context::CommandContext;
++
++pub(crate) async fn dispatch(ns: VariableNamespace, base_ctx: &CommandContext) -> Result<()> {
++    let ctx = base_ctx.with_target(&ns.target)?;
++    match ns.command {
++        VariableCommand::List(args) => list::list_command(&args, &ctx).await,
++        VariableCommand::Get(args) => get::get_command(&args, &ctx).await,
++        VariableCommand::Rm(args) => rm::rm_command(&args, &ctx).await,
++        VariableCommand::Set(args) => set::set_command(&args, &ctx).await,
++    }
++}
+diff --git a/lib/crates/fabro-cli/src/commands/variable/rm.rs b/lib/crates/fabro-cli/src/commands/variable/rm.rs
+new file mode 100644
+index 000000000..b5904cab8
+--- /dev/null
++++ b/lib/crates/fabro-cli/src/commands/variable/rm.rs
+@@ -0,0 +1,16 @@
++use anyhow::Result;
++
++use crate::args::VariableRmArgs;
++use crate::command_context::CommandContext;
++use crate::shared::print_json_pretty;
++
++pub(super) async fn rm_command(args: &VariableRmArgs, ctx: &CommandContext) -> Result<()> {
++    let client = ctx.server().await?;
++    client.delete_variable(&args.name).await?;
++    if ctx.json_output() {
++        print_json_pretty(&serde_json::json!({ "name": args.name }))?;
++    } else {
++        fabro_util::printerr!(ctx.printer(), "Removed {}", args.name);
++    }
++    Ok(())
++}
+diff --git a/lib/crates/fabro-cli/src/commands/variable/set.rs b/lib/crates/fabro-cli/src/commands/variable/set.rs
+new file mode 100644
+index 000000000..0a999eb71
+--- /dev/null
++++ b/lib/crates/fabro-cli/src/commands/variable/set.rs
+@@ -0,0 +1,56 @@
++#![expect(
++    clippy::disallowed_types,
++    reason = "sync CLI `variable set` command: reads variable value from stdin via blocking std::io::Read"
++)]
++#![expect(
++    clippy::disallowed_methods,
++    reason = "sync CLI `variable set` command: reads variable value from std::io::stdin"
++)]
++
++use std::io::Read as _;
++
++use anyhow::{Context as _, Result, bail};
++use fabro_api::types;
++use tokio::task::spawn_blocking;
++
++use crate::args::VariableSetArgs;
++use crate::command_context::CommandContext;
++use crate::shared::print_json_pretty;
++
++async fn resolve_value(args: &VariableSetArgs) -> Result<String> {
++    if let Some(value) = &args.value {
++        return Ok(value.clone());
++    }
++
++    if args.value_stdin {
++        let value = spawn_blocking(|| {
++            let mut raw = String::new();
++            std::io::stdin()
++                .read_to_string(&mut raw)
++                .context("failed to read variable value from stdin")?;
++            Ok::<String, anyhow::Error>(raw.trim_end_matches(['\r', '\n']).to_string())
++        })
++        .await??;
++        return Ok(value);
++    }
++
++    bail!("variable value required: pass <VALUE> or use --value-stdin")
++}
++
++pub(super) async fn set_command(args: &VariableSetArgs, ctx: &CommandContext) -> Result<()> {
++    let value = resolve_value(args).await?;
++    let client = ctx.server().await?;
++    let variable = client
++        .create_variable(types::CreateVariableRequest {
++            name: args.name.clone(),
++            value,
++            description: args.description.clone(),
++        })
++        .await?;
++    if ctx.json_output() {
++        print_json_pretty(&variable)?;
++    } else {
++        fabro_util::printerr!(ctx.printer(), "Set {}", variable.name);
++    }
++    Ok(())
++}
+diff --git a/lib/crates/fabro-cli/src/main.rs b/lib/crates/fabro-cli/src/main.rs
+index c3402f1a7..3081e1ee3 100644
+--- a/lib/crates/fabro-cli/src/main.rs
++++ b/lib/crates/fabro-cli/src/main.rs
+@@ -363,6 +363,9 @@ async fn main_inner(worker_token: Option<String>) -> (String, Result<()>) {
+             Commands::Secret(ns) => {
+                 commands::secret::dispatch(ns, &base_ctx).await?;
+             }
++            Commands::Variable(ns) => {
++                commands::variable::dispatch(ns, &base_ctx).await?;
++            }
+             Commands::Settings(args) => {
+                 Box::pin(commands::config::execute(&args, &base_ctx)).await?;
+             }
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/fabro.rs b/lib/crates/fabro-cli/tests/it/cmd/fabro.rs
+index 3fe9c2bf7..d4950c196 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/fabro.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/fabro.rs
+@@ -46,6 +46,7 @@ fn help() {
+       pr          Pull request operations
+       parent      Manage run parent links
+       secret      Manage server-owned secrets
++      variable    Manage server-owned variables
+       settings    Inspect effective settings
+       workflow    Workflow operations
+       discord     Open the Discord community in the browser
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/json_global.rs b/lib/crates/fabro-cli/tests/it/cmd/json_global.rs
+index 5c52cded3..9a9992806 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/json_global.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/json_global.rs
+@@ -92,6 +92,26 @@ fn secret_list_uses_json_output_format_from_home_config() {
+     assert!(value.is_array(), "secret list JSON should be an array");
+ }
+ 
++#[test]
++fn variable_list_uses_json_output_format_from_home_config() {
++    let context = test_context!();
++    context.write_home(
++        ".fabro/settings.toml",
++        "_version = 1\n\n[cli.output]\nformat = \"json\"\n",
++    );
++
++    let output = context
++        .command()
++        .args(["variable", "list"])
++        .output()
++        .expect("command should run");
++
++    assert!(output.status.success());
++    let value: Value =
++        serde_json::from_slice(&output.stdout).expect("variable list config JSON should parse");
++    assert!(value.is_array(), "variable list JSON should be an array");
++}
++
+ #[test]
+ fn completion_succeeds_with_json_output_format_from_home_config() {
+     let context = test_context!();
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/mod.rs b/lib/crates/fabro-cli/tests/it/cmd/mod.rs
+index fbd02b92d..e80e79562 100644
+--- a/lib/crates/fabro-cli/tests/it/cmd/mod.rs
++++ b/lib/crates/fabro-cli/tests/it/cmd/mod.rs
+@@ -75,6 +75,11 @@ mod unarchive;
+ mod uninstall;
+ mod upgrade;
+ mod validate;
++mod variable;
++mod variable_get;
++mod variable_list;
++mod variable_rm;
++mod variable_set;
+ mod version;
+ mod wait;
+ mod worker_auth;
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/variable.rs b/lib/crates/fabro-cli/tests/it/cmd/variable.rs
+new file mode 100644
+index 000000000..ba637c587
+--- /dev/null
++++ b/lib/crates/fabro-cli/tests/it/cmd/variable.rs
+@@ -0,0 +1,97 @@
++use fabro_test::{fabro_snapshot, test_context};
++
++#[test]
++fn help() {
++    let context = test_context!();
++    let mut cmd = context.variable();
++    cmd.arg("--help");
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: true
++    exit_code: 0
++    ----- stdout -----
++    Manage server-owned variables
++
++    Usage: fabro variable [OPTIONS] <COMMAND>
++
++    Commands:
++      list  List variables
++      get   Get a variable value
++      rm    Remove a variable
++      set   Set a variable value
++      help  Print this message or the help of the given subcommand(s)
++
++    Options:
++          --json              Output as JSON [env: FABRO_JSON=]
++          --server <SERVER>   Fabro server target: http(s) URL or absolute Unix socket path [env: FABRO_SERVER=]
++          --debug             Enable DEBUG-level logging (default is INFO) [env: FABRO_DEBUG=]
++          --no-upgrade-check  Disable automatic upgrade check [env: FABRO_NO_UPGRADE_CHECK=true]
++          --quiet             Suppress non-essential output [env: FABRO_QUIET=]
++          --verbose           Enable verbose output [env: FABRO_VERBOSE=]
++      -h, --help              Print help
++    ----- stderr -----
++    ");
++}
++
++#[test]
++fn variable_lifecycle() {
++    let context = test_context!();
++    let name = format!("DEPLOY_ENV_{}", context.test_case_id());
++
++    context
++        .variable()
++        .args([
++            "set",
++            &name,
++            "staging",
++            "--description",
++            "Deployment target",
++        ])
++        .assert()
++        .success()
++        .stderr(format!("Set {name}\n"));
++
++    context
++        .variable()
++        .args(["list"])
++        .assert()
++        .success()
++        .stdout(predicates::str::contains(&name))
++        .stdout(predicates::str::contains("staging"))
++        .stdout(predicates::str::contains("UPDATED"));
++
++    context
++        .variable()
++        .args(["get", &name])
++        .assert()
++        .success()
++        .stdout("staging\n");
++
++    context
++        .variable()
++        .args(["set", &name, "production"])
++        .assert()
++        .success();
++
++    context
++        .variable()
++        .args(["get", &name])
++        .assert()
++        .success()
++        .stdout("production\n");
++
++    context
++        .variable()
++        .args(["rm", &name])
++        .assert()
++        .success()
++        .stderr(format!("Removed {name}\n"));
++
++    context
++        .variable()
++        .args(["get", &name])
++        .assert()
++        .failure()
++        .stderr(predicates::str::contains(format!(
++            "variable not found: {name}"
++        )));
++}
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/variable_get.rs b/lib/crates/fabro-cli/tests/it/cmd/variable_get.rs
+new file mode 100644
+index 000000000..bdb529d3d
+--- /dev/null
++++ b/lib/crates/fabro-cli/tests/it/cmd/variable_get.rs
+@@ -0,0 +1,91 @@
++use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
++use serde_json::Value;
++
++#[test]
++fn help() {
++    let context = test_context!();
++    let mut cmd = context.variable();
++    cmd.args(["get", "--help"]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: true
++    exit_code: 0
++    ----- stdout -----
++    Get a variable value
++
++    Usage: fabro variable get [OPTIONS] <NAME>
++
++    Arguments:
++      <NAME>  Name of the variable to get
++
++    Options:
++          --json              Output as JSON [env: FABRO_JSON=]
++          --debug             Enable DEBUG-level logging (default is INFO) [env: FABRO_DEBUG=]
++          --no-upgrade-check  Disable automatic upgrade check [env: FABRO_NO_UPGRADE_CHECK=true]
++          --quiet             Suppress non-essential output [env: FABRO_QUIET=]
++          --verbose           Enable verbose output [env: FABRO_VERBOSE=]
++      -h, --help              Print help
++    ----- stderr -----
++    ");
++}
++
++#[test]
++fn variable_get_plain_outputs_raw_value() {
++    let context = test_context!();
++    let name = format!("GET_RAW_{}", context.test_case_id());
++    context
++        .variable()
++        .args(["set", &name, "staging"])
++        .assert()
++        .success();
++
++    context
++        .variable()
++        .args(["get", &name])
++        .assert()
++        .success()
++        .stdout("staging\n");
++}
++
++#[test]
++fn variable_get_json_returns_full_variable() {
++    let context = test_context!();
++    let name = format!("GET_JSON_{}", context.test_case_id());
++    context
++        .variable()
++        .args(["set", &name, "json-value", "--description", "Readable"])
++        .assert()
++        .success();
++
++    let output = context
++        .variable()
++        .args(["--json", "get", &name])
++        .output()
++        .expect("command should run");
++
++    assert!(output.status.success());
++    let value: Value = serde_json::from_slice(&output.stdout).expect("variable get should parse");
++    fabro_json_snapshot!(context, &value, @r#"
++    {
++      "name": "GET_JSON_[TEST_CASE]",
++      "value": "json-value",
++      "description": "Readable",
++      "created_at": "[TIMESTAMP]",
++      "updated_at": "[TIMESTAMP]"
++    }
++    "#);
++}
++
++#[test]
++fn variable_get_missing_fails() {
++    let context = test_context!();
++    let name = format!("GET_MISSING_{}", context.test_case_id());
++    let mut cmd = context.variable();
++    cmd.args(["get", &name]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: false
++    exit_code: 1
++    ----- stdout -----
++    ----- stderr -----
++      × variable not found: GET_MISSING_[TEST_CASE]
++    ");
++}
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/variable_list.rs b/lib/crates/fabro-cli/tests/it/cmd/variable_list.rs
+new file mode 100644
+index 000000000..f86620dcc
+--- /dev/null
++++ b/lib/crates/fabro-cli/tests/it/cmd/variable_list.rs
+@@ -0,0 +1,87 @@
++use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
++use serde_json::Value;
++
++#[test]
++fn help() {
++    let context = test_context!();
++    let mut cmd = context.variable();
++    cmd.args(["list", "--help"]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: true
++    exit_code: 0
++    ----- stdout -----
++    List variables
++
++    Usage: fabro variable list [OPTIONS]
++
++    Options:
++          --json              Output as JSON [env: FABRO_JSON=]
++          --debug             Enable DEBUG-level logging (default is INFO) [env: FABRO_DEBUG=]
++          --no-upgrade-check  Disable automatic upgrade check [env: FABRO_NO_UPGRADE_CHECK=true]
++          --quiet             Suppress non-essential output [env: FABRO_QUIET=]
++          --verbose           Enable verbose output [env: FABRO_VERBOSE=]
++      -h, --help              Print help
++    ----- stderr -----
++    ");
++}
++
++#[test]
++fn variable_list_json_returns_full_variables() {
++    let context = test_context!();
++    let name = format!("LIST_JSON_{}", context.test_case_id());
++    context
++        .variable()
++        .args([
++            "set",
++            &name,
++            "staging",
++            "--description",
++            "Deployment target",
++        ])
++        .assert()
++        .success();
++
++    let output = context
++        .variable()
++        .args(["--json", "list"])
++        .output()
++        .expect("command should run");
++
++    assert!(output.status.success());
++    let value: Value = serde_json::from_slice(&output.stdout).expect("variable list should parse");
++    let entry = value
++        .as_array()
++        .expect("variable list should be an array")
++        .iter()
++        .find(|entry| entry["name"] == name)
++        .expect("variable list should include the saved variable");
++    fabro_json_snapshot!(context, entry, @r#"
++    {
++      "name": "LIST_JSON_[TEST_CASE]",
++      "value": "staging",
++      "description": "Deployment target",
++      "created_at": "[TIMESTAMP]",
++      "updated_at": "[TIMESTAMP]"
++    }
++    "#);
++}
++
++#[test]
++fn variable_list_alias_ls_includes_values() {
++    let context = test_context!();
++    let name = format!("LIST_ALIAS_{}", context.test_case_id());
++    context
++        .variable()
++        .args(["set", &name, "visible-value"])
++        .assert()
++        .success();
++
++    context
++        .variable()
++        .args(["ls"])
++        .assert()
++        .success()
++        .stdout(predicates::str::contains(&name))
++        .stdout(predicates::str::contains("visible-value"))
++        .stdout(predicates::str::contains("VALUE"));
++}
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/variable_rm.rs b/lib/crates/fabro-cli/tests/it/cmd/variable_rm.rs
+new file mode 100644
+index 000000000..a09ddb032
+--- /dev/null
++++ b/lib/crates/fabro-cli/tests/it/cmd/variable_rm.rs
+@@ -0,0 +1,65 @@
++use fabro_test::{fabro_snapshot, test_context};
++use serde_json::Value;
++
++#[test]
++fn help() {
++    let context = test_context!();
++    let mut cmd = context.variable();
++    cmd.args(["rm", "--help"]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: true
++    exit_code: 0
++    ----- stdout -----
++    Remove a variable
++
++    Usage: fabro variable rm [OPTIONS] <NAME>
++
++    Arguments:
++      <NAME>  Name of the variable to remove
++
++    Options:
++          --json              Output as JSON [env: FABRO_JSON=]
++          --debug             Enable DEBUG-level logging (default is INFO) [env: FABRO_DEBUG=]
++          --no-upgrade-check  Disable automatic upgrade check [env: FABRO_NO_UPGRADE_CHECK=true]
++          --quiet             Suppress non-essential output [env: FABRO_QUIET=]
++          --verbose           Enable verbose output [env: FABRO_VERBOSE=]
++      -h, --help              Print help
++    ----- stderr -----
++    ");
++}
++
++#[test]
++fn variable_rm_json_outputs_removed_name() {
++    let context = test_context!();
++    let name = format!("RM_JSON_{}", context.test_case_id());
++    context
++        .variable()
++        .args(["set", &name, "remove-me"])
++        .assert()
++        .success();
++
++    let output = context
++        .variable()
++        .args(["--json", "rm", &name])
++        .output()
++        .expect("command should run");
++
++    assert!(output.status.success());
++    let value: Value = serde_json::from_slice(&output.stdout).expect("variable rm should parse");
++    assert_eq!(value, serde_json::json!({ "name": name }));
++}
++
++#[test]
++fn variable_rm_missing_fails() {
++    let context = test_context!();
++    let name = format!("RM_MISSING_{}", context.test_case_id());
++    let mut cmd = context.variable();
++    cmd.args(["rm", &name]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: false
++    exit_code: 1
++    ----- stdout -----
++    ----- stderr -----
++      × variable not found: RM_MISSING_[TEST_CASE]
++    ");
++}
+diff --git a/lib/crates/fabro-cli/tests/it/cmd/variable_set.rs b/lib/crates/fabro-cli/tests/it/cmd/variable_set.rs
+new file mode 100644
+index 000000000..1402226d8
+--- /dev/null
++++ b/lib/crates/fabro-cli/tests/it/cmd/variable_set.rs
+@@ -0,0 +1,156 @@
++use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
++use serde_json::Value;
++
++#[test]
++fn help() {
++    let context = test_context!();
++    let mut cmd = context.variable();
++    cmd.args(["set", "--help"]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: true
++    exit_code: 0
++    ----- stdout -----
++    Set a variable value
++
++    Usage: fabro variable set [OPTIONS] <NAME> [VALUE]
++
++    Arguments:
++      <NAME>   Name of the variable
++      [VALUE]  Value to store
++
++    Options:
++          --json                       Output as JSON [env: FABRO_JSON=]
++          --value-stdin                Read the variable value from stdin
++          --debug                      Enable DEBUG-level logging (default is INFO) [env: FABRO_DEBUG=]
++          --description <DESCRIPTION>  Optional human-readable description
++          --no-upgrade-check           Disable automatic upgrade check [env: FABRO_NO_UPGRADE_CHECK=true]
++          --quiet                      Suppress non-essential output [env: FABRO_QUIET=]
++          --verbose                    Enable verbose output [env: FABRO_VERBOSE=]
++      -h, --help                       Print help
++    ----- stderr -----
++    ");
++}
++
++#[test]
++fn variable_set_json_returns_full_variable() {
++    let context = test_context!();
++    let name = format!("SET_JSON_{}", context.test_case_id());
++    let output = context
++        .variable()
++        .args([
++            "--json",
++            "set",
++            &name,
++            "json-value",
++            "--description",
++            "Deployment target",
++        ])
++        .output()
++        .expect("command should run");
++
++    assert!(output.status.success());
++    let value: Value = serde_json::from_slice(&output.stdout).expect("variable set should parse");
++    fabro_json_snapshot!(context, &value, @r#"
++    {
++      "name": "SET_JSON_[TEST_CASE]",
++      "value": "json-value",
++      "description": "Deployment target",
++      "created_at": "[TIMESTAMP]",
++      "updated_at": "[TIMESTAMP]"
++    }
++    "#);
++}
++
++#[test]
++fn variable_set_update_preserves_description_when_omitted() {
++    let context = test_context!();
++    let name = format!("SET_PRESERVE_{}", context.test_case_id());
++    context
++        .variable()
++        .args([
++            "set",
++            &name,
++            "staging",
++            "--description",
++            "Deployment target",
++        ])
++        .assert()
++        .success();
++
++    let output = context
++        .variable()
++        .args(["--json", "set", &name, "production"])
++        .output()
++        .expect("command should run");
++
++    assert!(output.status.success());
++    let value: Value = serde_json::from_slice(&output.stdout).expect("variable set should parse");
++    assert_eq!(value["value"], "production");
++    assert_eq!(value["description"], "Deployment target");
++}
++
++#[test]
++fn variable_set_accepts_explicit_empty_value() {
++    let context = test_context!();
++    let name = format!("SET_EMPTY_{}", context.test_case_id());
++    context
++        .variable()
++        .args(["set", &name, ""])
++        .assert()
++        .success();
++
++    context
++        .variable()
++        .args(["get", &name])
++        .assert()
++        .success()
++        .stdout("\n");
++}
++
++#[test]
++fn variable_set_accepts_empty_stdin_value() {
++    let context = test_context!();
++    let name = format!("SET_STDIN_EMPTY_{}", context.test_case_id());
++    context
++        .variable()
++        .args(["set", &name, "--value-stdin"])
++        .write_stdin("\n")
++        .assert()
++        .success();
++
++    context
++        .variable()
++        .args(["get", &name])
++        .assert()
++        .success()
++        .stdout("\n");
++}
++
++#[test]
++fn variable_set_invalid_name_fails() {
++    let context = test_context!();
++    let mut cmd = context.variable();
++    cmd.args(["set", "1BAD", "value"]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: false
++    exit_code: 1
++    ----- stdout -----
++    ----- stderr -----
++      × invalid variable name
++    ");
++}
++
++#[test]
++fn variable_set_requires_value_or_stdin() {
++    let context = test_context!();
++    let name = format!("SET_MISSING_VALUE_{}", context.test_case_id());
++    let mut cmd = context.variable();
++    cmd.args(["set", &name]);
++    fabro_snapshot!(context.filters(), cmd, @"
++    success: false
++    exit_code: 1
++    ----- stdout -----
++    ----- stderr -----
++      × variable value required: pass <VALUE> or use --value-stdin
++    ");
++}
+diff --git a/lib/crates/fabro-client/src/client.rs b/lib/crates/fabro-client/src/client.rs
+index b9a512c1e..89caa3a48 100644
+--- a/lib/crates/fabro-client/src/client.rs
++++ b/lib/crates/fabro-client/src/client.rs
+@@ -715,6 +715,60 @@ impl Client {
+         Ok(())
+     }
+ 
++    pub async fn list_variables(&self) -> Result<Vec<types::Variable>> {
++        let response = self
++            .send_api(|client| async move { client.list_variables().send().await })
++            .await?;
++        Ok(response.into_inner().data)
++    }
++
++    pub async fn get_variable(&self, name: &str) -> Result<types::Variable> {
++        let response = self
++            .send_api(
++                |client| async move { client.get_variable().name(name.to_string()).send().await },
++            )
++            .await?;
++        Ok(response.into_inner())
++    }
++
++    pub async fn create_variable(
++        &self,
++        body: types::CreateVariableRequest,
++    ) -> Result<types::Variable> {
++        let response = self
++            .send_api(
++                |client| async move { client.create_variable().body(body.clone()).send().await },
++            )
++            .await?;
++        Ok(response.into_inner())
++    }
++
++    pub async fn update_variable(
++        &self,
++        name: &str,
++        body: types::UpdateVariableRequest,
++    ) -> Result<types::Variable> {
++        let response = self
++            .send_api(|client| async move {
++                client
++                    .update_variable()
++                    .name(name.to_string())
++                    .body(body.clone())
++                    .send()
++                    .await
++            })
++            .await?;
++        Ok(response.into_inner())
++    }
++
++    pub async fn delete_variable(&self, name: &str) -> Result<()> {
++        self.send_api(|client| async move {
++            client.delete_variable().name(name.to_string()).send().await
++        })
++        .await?;
++        Ok(())
++    }
++
+     pub async fn list_models(
+         &self,
+         provider: Option<&str>,
+diff --git a/lib/crates/fabro-test/src/lib.rs b/lib/crates/fabro-test/src/lib.rs
+index 48c6ef4fc..cd8b041f0 100644
+--- a/lib/crates/fabro-test/src/lib.rs
++++ b/lib/crates/fabro-test/src/lib.rs
+@@ -1454,6 +1454,13 @@ impl TestContext {
+         cmd
+     }
+ 
++    /// Build a `variable` subcommand.
++    pub fn variable(&self) -> Command {
++        let mut cmd = self.command();
++        cmd.arg("variable");
++        cmd
++    }
++
+     /// Build a `doctor` subcommand.
+     pub fn doctor(&self) -> Command {
+         let mut cmd = self.command();
