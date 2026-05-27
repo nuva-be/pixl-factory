@@ -1,0 +1,1836 @@
+diff --git a/apps/fabro-web/app/components/event-debug.tsx b/apps/fabro-web/app/components/event-debug.tsx
+index 1a1436264..bc56f15b4 100644
+--- a/apps/fabro-web/app/components/event-debug.tsx
++++ b/apps/fabro-web/app/components/event-debug.tsx
+@@ -1,4 +1,5 @@
+-import { useEffect, useMemo, useState } from "react";
++import { useMemo, useState } from "react";
++import { useWindowEvent } from "../hooks/use-window-event";
+ import { createPortal } from "react-dom";
+ import {
+   Listbox,
+@@ -77,16 +78,12 @@ export function DetailsPanel({
+   onClose: () => void;
+   children: React.ReactNode;
+ }) {
+-  // react-doctor-disable-next-line react-doctor/prefer-use-effect-event -- React's useEffectEvent is not in the installed React type surface yet.
+-  useEffect(() => {
+-    if (!isOpen) return;
+-    function handleKey(event: KeyboardEvent) {
+-      if (event.key === "Escape") onClose();
+-    }
+-    window.addEventListener("keydown", handleKey);
+-    return () => window.removeEventListener("keydown", handleKey);
+-    // react-doctor-disable-next-line react-doctor/prefer-use-effect-event -- React's useEffectEvent is not in the installed React type surface yet.
+-  }, [isOpen, onClose]);
++  useWindowEvent(
++    "keydown",
++    (event) => { if (event.key === "Escape") onClose(); },
++    undefined,
++    isOpen,
++  );
+ 
+   return (
+     <div
+diff --git a/apps/fabro-web/app/components/run-waterfall.tsx b/apps/fabro-web/app/components/run-waterfall.tsx
+index 33a7a2c8e..907ccbb75 100644
+--- a/apps/fabro-web/app/components/run-waterfall.tsx
++++ b/apps/fabro-web/app/components/run-waterfall.tsx
+@@ -1,4 +1,4 @@
+-import { useEffect, useMemo, useState, type ReactNode } from "react";
++import { useMemo, type ReactNode } from "react";
+ import { Link } from "react-router";
+ import { StageState, type RunStage } from "@qltysh/fabro-api-client";
+ 
+@@ -11,6 +11,7 @@ import {
+   stageStatusTone,
+ } from "../lib/stage-sidebar";
+ import { deriveRunPhases, type RunPhase } from "../lib/run-phases";
++import { useTickingNow } from "../lib/time";
+ import type { EventEnvelope } from "@qltysh/fabro-api-client";
+ 
+ interface WaterfallProps {
+@@ -35,15 +36,6 @@ interface Row {
+ 
+ const MIN_BAR_WIDTH_PCT = 0.4;
+ 
+-function useTickingNow(intervalMs: number): number {
+-  const [now, setNow] = useState(() => Date.now());
+-  useEffect(() => {
+-    const id = setInterval(() => setNow(Date.now()), intervalMs);
+-    return () => clearInterval(id);
+-  }, [intervalMs]);
+-  return now;
+-}
+-
+ function stageBarClass(status: StageState): string {
+   switch (status) {
+     case StageState.RUNNING:
+@@ -194,7 +186,7 @@ export function RunWaterfall({
+   createdAtIso,
+   completedAtIso,
+ }: WaterfallProps) {
+-  const nowMs = useTickingNow(1000);
++  const nowMs = useTickingNow(true, 1000);
+   const rows = useMemo(
+     () => buildRows({ runId, events, stages, createdAtIso, nowMs }),
+     [runId, events, stages, createdAtIso, nowMs],
+diff --git a/apps/fabro-web/app/components/runs-list/selection-checkbox.tsx b/apps/fabro-web/app/components/runs-list/selection-checkbox.tsx
+index 7b7b1649d..b8dd81de6 100644
+--- a/apps/fabro-web/app/components/runs-list/selection-checkbox.tsx
++++ b/apps/fabro-web/app/components/runs-list/selection-checkbox.tsx
+@@ -1,4 +1,6 @@
+-import { useEffect, useRef } from "react";
++// `indeterminate` is an HTMLInputElement imperative property that cannot be
++// set via an HTML attribute. We use a ref callback that React 19 calls on
++// every render, ensuring the property stays in sync with the prop.
+ 
+ export function SelectionCheckbox({
+   checked,
+@@ -13,13 +15,9 @@ export function SelectionCheckbox({
+   onChange:       () => void;
+   ariaLabel:      string;
+ }) {
+-  const ref = useRef<HTMLInputElement>(null);
+-  useEffect(() => {
+-    if (ref.current) ref.current.indeterminate = indeterminate;
+-  }, [indeterminate]);
+   return (
+     <input
+-      ref={ref}
++      ref={(el) => { if (el) el.indeterminate = indeterminate; }}
+       type="checkbox"
+       aria-label={ariaLabel}
+       checked={checked}
+diff --git a/apps/fabro-web/app/components/terminal-view.tsx b/apps/fabro-web/app/components/terminal-view.tsx
+index eed8b4d8c..7d6d2c73c 100644
+--- a/apps/fabro-web/app/components/terminal-view.tsx
++++ b/apps/fabro-web/app/components/terminal-view.tsx
+@@ -6,7 +6,6 @@ import {
+   useState,
+ } from "react";
+ import type { Terminal as XtermTerminal } from "@xterm/xterm";
+-import type { FitAddon as XtermFitAddon } from "@xterm/addon-fit";
+ import {
+   ArrowPathIcon,
+   ArrowTopRightOnSquareIcon,
+@@ -140,55 +139,22 @@ function StatusPill({
+   );
+ }
+ 
+-export default function TerminalView({
+-  runId,
+-  leading,
+-  chromeless = false,
+-}: {
+-  runId: string;
+-  leading?: React.ReactNode;
+-  chromeless?: boolean;
+-}) {
+-  const { push } = useToast();
+-  const stateQuery = useRunState(runId);
+-  const sandbox = stateQuery.data?.sandbox ?? null;
+-  const provider = sandbox?.provider ?? null;
+-  const sandboxDetail = sandboxStatusDetail(sandbox);
+-  const accessCommandLabel = terminalAccessCommandLabel(provider);
+-  const [connectionKey, reconnectTerminal] = useReducer((key: number) => key + 1, 0);
+-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
+-  const [error, setError] = useState<{ message: string; recoverable: boolean } | null>(null);
+-  const terminalEl = useRef<HTMLDivElement | null>(null);
+-  const terminalRef = useRef<XtermTerminal | null>(null);
+-  const fitRef = useRef<XtermFitAddon | null>(null);
+-  const socketRef = useRef<WebSocket | null>(null);
+-  const headingId = `run-terminal-${runId}`;
+-
+-  const reconnect = useCallback(() => {
+-    setError(null);
+-    setStatus("connecting");
+-    reconnectTerminal();
+-  }, []);
+-
+-  const copyAccessCommand = useCallback(async () => {
+-    if (!accessCommandLabel) return;
+-    try {
+-      const response = await apiData(() =>
+-        humanInTheLoopApi.createRunSshAccess(runId, { ttl_minutes: 60 }),
+-      );
+-      await navigator.clipboard.writeText(response.command);
+-      push({ message: terminalAccessCommandCopiedMessage(provider) });
+-    } catch (err) {
+-      push({
+-        tone: "error",
+-        message: err instanceof Error
+-          ? err.message
+-          : terminalAccessCommandErrorMessage(provider),
+-      });
+-    }
+-  }, [accessCommandLabel, runId, provider, push]);
+-
+-  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- listeners, socket, xterm, and ResizeObserver are disposed in the returned cleanup.
++/**
++ * Creates and manages an xterm.js Terminal + WebSocket session for the given
++ * run. A new session is established each time `connectionKey` increments.
++ *
++ * External systems: xterm.js (dynamic ESM import), WebSocket, ResizeObserver,
++ * and the browser `document.fonts.ready` promise.
++ * Cleanup: disconnects ResizeObserver, disposes xterm disposables, closes the
++ * WebSocket gracefully, and disposes the terminal instance.
++ */
++function useTerminalSession(
++  runId: string,
++  connectionKey: number,
++  terminalEl: React.RefObject<HTMLDivElement | null>,
++  setStatus: React.Dispatch<React.SetStateAction<ConnectionStatus>>,
++  setError: React.Dispatch<React.SetStateAction<{ message: string; recoverable: boolean } | null>>,
++): void {
+   useEffect(() => {
+     if (!terminalEl.current) return undefined;
+ 
+@@ -196,6 +162,8 @@ export default function TerminalView({
+     let resizeObserver: ResizeObserver | null = null;
+     const textEncoder = new TextEncoder();
+     const disposables: Array<{ dispose: () => void }> = [];
++    const terminalRef: { current: XtermTerminal | null } = { current: null };
++    const socketRef: { current: WebSocket | null } = { current: null };
+ 
+     async function connect() {
+       setStatus("connecting");
+@@ -222,7 +190,6 @@ export default function TerminalView({
+       fitAddon.fit();
+       terminal.focus();
+       terminalRef.current = terminal;
+-      fitRef.current = fitAddon;
+ 
+       const socket = new WebSocket(buildTerminalWebSocketUrl(window.location, runId));
+       socket.binaryType = "arraybuffer";
+@@ -262,7 +229,7 @@ export default function TerminalView({
+         terminal.write(bytes);
+       };
+       const handleClose = () => {
+-        setStatus((current) => current === "error" ? current : "closed");
++        setStatus((current: ConnectionStatus) => current === "error" ? current : "closed");
+       };
+       const handleError = () => {
+         setStatus("error");
+@@ -310,9 +277,56 @@ export default function TerminalView({
+       socketRef.current = null;
+       terminalRef.current?.dispose();
+       terminalRef.current = null;
+-      fitRef.current = null;
+     };
+-  }, [connectionKey, runId]);
++  }, [connectionKey, runId, terminalEl, setStatus, setError]);
++}
++
++export default function TerminalView({
++  runId,
++  leading,
++  chromeless = false,
++}: {
++  runId: string;
++  leading?: React.ReactNode;
++  chromeless?: boolean;
++}) {
++  const { push } = useToast();
++  const stateQuery = useRunState(runId);
++  const sandbox = stateQuery.data?.sandbox ?? null;
++  const provider = sandbox?.provider ?? null;
++  const sandboxDetail = sandboxStatusDetail(sandbox);
++  const accessCommandLabel = terminalAccessCommandLabel(provider);
++  const [connectionKey, reconnectTerminal] = useReducer((key: number) => key + 1, 0);
++  const [status, setStatus] = useState<ConnectionStatus>("connecting");
++  const [error, setError] = useState<{ message: string; recoverable: boolean } | null>(null);
++  const terminalEl = useRef<HTMLDivElement | null>(null);
++  const headingId = `run-terminal-${runId}`;
++
++  const reconnect = useCallback(() => {
++    setError(null);
++    setStatus("connecting");
++    reconnectTerminal();
++  }, []);
++
++  const copyAccessCommand = useCallback(async () => {
++    if (!accessCommandLabel) return;
++    try {
++      const response = await apiData(() =>
++        humanInTheLoopApi.createRunSshAccess(runId, { ttl_minutes: 60 }),
++      );
++      await navigator.clipboard.writeText(response.command);
++      push({ message: terminalAccessCommandCopiedMessage(provider) });
++    } catch (err) {
++      push({
++        tone: "error",
++        message: err instanceof Error
++          ? err.message
++          : terminalAccessCommandErrorMessage(provider),
++      });
++    }
++  }, [accessCommandLabel, runId, provider, push]);
++
++  useTerminalSession(runId, connectionKey, terminalEl, setStatus, setError);
+ 
+   return (
+     <section
+diff --git a/apps/fabro-web/app/components/toast.tsx b/apps/fabro-web/app/components/toast.tsx
+index e17d194c0..28e536cec 100644
+--- a/apps/fabro-web/app/components/toast.tsx
++++ b/apps/fabro-web/app/components/toast.tsx
+@@ -2,12 +2,12 @@ import {
+   createContext,
+   use,
+   useCallback,
+-  useEffect,
+   useMemo,
+   useRef,
+   useState,
+   type ReactNode,
+ } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
+ import { XMarkIcon } from "@heroicons/react/20/solid";
+ 
+ export type ToastTone = "info" | "error";
+@@ -143,7 +143,9 @@ export function ToastProvider({
+     return id;
+   }, [autoDismissMs, dismiss]);
+ 
+-  useEffect(() => clear, [clear]);
++  // Clear all pending auto-dismiss timers when the provider unmounts so they
++  // cannot call setToasts on an unmounted component.
++  useMountEffect(() => clear);
+ 
+   const value = useMemo(() => ({ push, dismiss, clear }), [push, dismiss, clear]);
+ 
+diff --git a/apps/fabro-web/app/components/ui.tsx b/apps/fabro-web/app/components/ui.tsx
+index fac25dcf4..85e6cce91 100644
+--- a/apps/fabro-web/app/components/ui.tsx
++++ b/apps/fabro-web/app/components/ui.tsx
+@@ -2,7 +2,8 @@
+ // exposes the primary button, secondary button, input, error message, and
+ // copy button so the auth and in-app surfaces can match.
+ 
+-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
++import { useId, useRef, useState, type ReactNode } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
+ import { createPortal } from "react-dom";
+ import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
+ import {
+@@ -165,7 +166,8 @@ function useHoverAnchor(openDelay = 0) {
+     setOpen(false);
+   };
+ 
+-  useEffect(() => clearTimer, []);
++  // Cancel any pending open-delay timer when the anchor unmounts.
++  useMountEffect(() => clearTimer);
+ 
+   const rect = open ? (triggerRef.current?.getBoundingClientRect() ?? null) : null;
+   const triggerProps = {
+diff --git a/apps/fabro-web/app/hooks/use-debounced-value.ts b/apps/fabro-web/app/hooks/use-debounced-value.ts
+new file mode 100644
+index 000000000..7adc04f82
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-debounced-value.ts
+@@ -0,0 +1,16 @@
++import { useEffect, useState } from "react";
++
++/**
++ * Returns a debounced copy of `value` that only updates after `delayMs`
++ * milliseconds of stability. Synchronizes React state with a `setTimeout`
++ * timer; the timer is cancelled and reset whenever `value` or `delayMs`
++ * changes.
++ */
++export function useDebouncedValue<T>(value: T, delayMs: number): T {
++  const [debounced, setDebounced] = useState(value);
++  useEffect(() => {
++    const id = setTimeout(() => setDebounced(value), delayMs);
++    return () => clearTimeout(id);
++  }, [value, delayMs]);
++  return debounced;
++}
+diff --git a/apps/fabro-web/app/hooks/use-document-title.ts b/apps/fabro-web/app/hooks/use-document-title.ts
+new file mode 100644
+index 000000000..28cc3282d
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-document-title.ts
+@@ -0,0 +1,15 @@
++import { useEffect } from "react";
++
++/**
++ * Sets `document.title` to `title` and restores the previous title on unmount.
++ * Synchronizes React with the browser's `document.title` global.
++ */
++export function useDocumentTitle(title: string): void {
++  useEffect(() => {
++    const previous = document.title;
++    document.title = title;
++    return () => {
++      document.title = previous;
++    };
++  }, [title]);
++}
+diff --git a/apps/fabro-web/app/hooks/use-dot-language-ready.ts b/apps/fabro-web/app/hooks/use-dot-language-ready.ts
+new file mode 100644
+index 000000000..cba789e6d
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-dot-language-ready.ts
+@@ -0,0 +1,29 @@
++import { useState } from "react";
++import { registerDotLanguage } from "../data/register-dot-language";
++import { useMountEffect } from "./use-mount-effect";
++
++/**
++ * Triggers dot language registration with the Pierre syntax highlighter on
++ * mount and returns `true` once the async registration resolves. Components
++ * that render dot-syntax files should wait for this before rendering the
++ * highlighted view to avoid a flash of unstyled content.
++ *
++ * Registration is idempotent; duplicate calls from Strict Mode remount are
++ * harmless because `attachResolvedLanguages` only registers once per
++ * highlighter instance.
++ */
++export function useDotLanguageReady(): boolean {
++  const [ready, setReady] = useState(false);
++
++  useMountEffect(() => {
++    let cancelled = false;
++    registerDotLanguage().then(() => {
++      if (!cancelled) setReady(true);
++    });
++    return () => {
++      cancelled = true;
++    };
++  });
++
++  return ready;
++}
+diff --git a/apps/fabro-web/app/hooks/use-interval.ts b/apps/fabro-web/app/hooks/use-interval.ts
+new file mode 100644
+index 000000000..42d1a5965
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-interval.ts
+@@ -0,0 +1,25 @@
++import { useEffect, useRef } from "react";
++
++/**
++ * Calls `callback` every `delayMs` milliseconds while `active` is true
++ * (default: always active). The interval is cleared when the component
++ * unmounts or when `active` or `delayMs` changes.
++ *
++ * The callback ref is updated on every render so the interval always sees
++ * the latest version without restarting. Synchronizes React with
++ * `setInterval`.
++ */
++export function useInterval(
++  callback: () => void,
++  delayMs: number,
++  active = true,
++): void {
++  const callbackRef = useRef(callback);
++  callbackRef.current = callback;
++
++  useEffect(() => {
++    if (!active) return;
++    const id = setInterval(() => callbackRef.current(), delayMs);
++    return () => clearInterval(id);
++  }, [delayMs, active]);
++}
+diff --git a/apps/fabro-web/app/hooks/use-media-query.ts b/apps/fabro-web/app/hooks/use-media-query.ts
+new file mode 100644
+index 000000000..bfd55dbc6
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-media-query.ts
+@@ -0,0 +1,24 @@
++import { useSyncExternalStore } from "react";
++
++const noop = () => () => {};
++
++/**
++ * Returns `true` while the browser matches the given CSS media query string.
++ * Uses `useSyncExternalStore` to stay in sync with `MediaQueryList` changes
++ * without an effect. Falls back to `false` in SSR and test environments
++ * without a `window` global.
++ */
++export function useMediaQuery(query: string): boolean {
++  return useSyncExternalStore(
++    typeof window === "undefined"
++      ? noop
++      : (onStoreChange) => {
++          const mql = window.matchMedia(query);
++          mql.addEventListener("change", onStoreChange);
++          return () => mql.removeEventListener("change", onStoreChange);
++        },
++    () =>
++      typeof window === "undefined" ? false : window.matchMedia(query).matches,
++    () => false,
++  );
++}
+diff --git a/apps/fabro-web/app/hooks/use-mount-effect.ts b/apps/fabro-web/app/hooks/use-mount-effect.ts
+new file mode 100644
+index 000000000..3b6f95523
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-mount-effect.ts
+@@ -0,0 +1,16 @@
++import { useEffect } from "react";
++
++/**
++ * Runs `setup` once on mount. The function may return a cleanup that runs on
++ * unmount. Use this only when the code attaches to, creates, or subscribes to
++ * an external resource and the cleanup disposes it.
++ *
++ * Do not use `useMountEffect` as a way to avoid dependency arrays when the
++ * effect actually depends on changing React values — write a purpose-named hook
++ * with those values in its API instead.
++ */
++// eslint-disable-next-line react-hooks/exhaustive-deps
++export function useMountEffect(setup: () => void | (() => void)): void {
++  // eslint-disable-next-line react-hooks/exhaustive-deps
++  useEffect(setup, []);
++}
+diff --git a/apps/fabro-web/app/hooks/use-resize-observer.ts b/apps/fabro-web/app/hooks/use-resize-observer.ts
+new file mode 100644
+index 000000000..d3113f77c
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-resize-observer.ts
+@@ -0,0 +1,30 @@
++import { useEffect, useRef, type RefObject } from "react";
++
++/**
++ * Attaches a `ResizeObserver` to the element referenced by `ref` and calls
++ * `callback` with each `ResizeObserverEntry`. Disconnects on unmount or when
++ * the observed element changes.
++ *
++ * The callback ref is updated on every render so the latest version fires
++ * without restarting the observer. Synchronizes React with the browser
++ * `ResizeObserver` API.
++ */
++export function useResizeObserver<T extends Element>(
++  ref: RefObject<T | null>,
++  callback: (entry: ResizeObserverEntry) => void,
++): void {
++  const callbackRef = useRef(callback);
++  callbackRef.current = callback;
++
++  useEffect(() => {
++    const el = ref.current;
++    if (!el) return;
++
++    const observer = new ResizeObserver((entries) => {
++      const entry = entries[0];
++      if (entry) callbackRef.current(entry);
++    });
++    observer.observe(el);
++    return () => observer.disconnect();
++  }, [ref]);
++}
+diff --git a/apps/fabro-web/app/hooks/use-window-event.ts b/apps/fabro-web/app/hooks/use-window-event.ts
+new file mode 100644
+index 000000000..3dfa27b0d
+--- /dev/null
++++ b/apps/fabro-web/app/hooks/use-window-event.ts
+@@ -0,0 +1,28 @@
++import { useEffect, useRef } from "react";
++
++/**
++ * Adds `handler` as a `window` event listener for `type` and removes it on
++ * unmount. The subscription restarts when `type` or `active` changes.
++ *
++ * The handler ref is updated on every render so the latest version fires
++ * without restarting the listener. Synchronizes React with `window.addEventListener`.
++ */
++export function useWindowEvent<K extends keyof WindowEventMap>(
++  type: K,
++  handler: (event: WindowEventMap[K]) => void,
++  options?: boolean | AddEventListenerOptions,
++  active = true,
++): void {
++  const handlerRef = useRef(handler);
++  handlerRef.current = handler;
++
++  useEffect(() => {
++    if (!active || typeof window === "undefined") return;
++    const listener = (event: WindowEventMap[K]) => handlerRef.current(event);
++    window.addEventListener(type, listener, options);
++    return () => window.removeEventListener(type, listener, options);
++    // options intentionally omitted: changing options identity should not
++    // restart the listener. Pass a stable object if needed.
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [type, active]);
++}
+diff --git a/apps/fabro-web/app/lib/live-events.ts b/apps/fabro-web/app/lib/live-events.ts
+index 72120e43a..e22a7b809 100644
+--- a/apps/fabro-web/app/lib/live-events.ts
++++ b/apps/fabro-web/app/lib/live-events.ts
+@@ -1,3 +1,4 @@
++import { useEffect, useRef } from "react";
+ import type { Key } from "swr";
+ 
+ import {
+@@ -63,3 +64,21 @@ export function subscribeToLiveEvents(
+       }),
+   });
+ }
++
++
++/**
++ * Subscribes to the live system event stream for the lifetime of the calling
++ * component. Calls `onEvent` for every incoming payload. Unsubscribes on
++ * unmount. Synchronizes React with the cross-tab SSE coordinator.
++ *
++ * The subscription is created once at mount; `onEvent` is kept current via a
++ * ref so the latest closure always fires without restarting the stream.
++ */
++export function useLiveEvents(
++  onEvent: (payload: LiveEventPayload) => void,
++): void {
++  const onEventRef = useRef(onEvent);
++  onEventRef.current = onEvent;
++
++  useEffect(() => subscribeToLiveEvents((payload) => onEventRef.current(payload)), []);
++}
+diff --git a/apps/fabro-web/app/routes/automation-definition.tsx b/apps/fabro-web/app/routes/automation-definition.tsx
+index e587ed354..6c3156f40 100644
+--- a/apps/fabro-web/app/routes/automation-definition.tsx
++++ b/apps/fabro-web/app/routes/automation-definition.tsx
+@@ -1,7 +1,6 @@
+-import { useEffect, useState } from "react";
+ import { useOutletContext, useParams } from "react-router";
+ import type { BundledLanguage } from "@pierre/diffs";
+-import { registerDotLanguage } from "../data/register-dot-language";
++import { useDotLanguageReady } from "../hooks/use-dot-language-ready";
+ import { workflowData, type WorkflowEntry } from "./automation-detail";
+ import { CollapsibleFile } from "../components/collapsible-file";
+ 
+@@ -9,17 +8,7 @@ export default function AutomationDefinition() {
+   const { name } = useParams();
+   const context = useOutletContext<{ workflow?: WorkflowEntry } | null>();
+   const workflow = context?.workflow ?? workflowData[name ?? ""];
+-  const [dotReady, setDotReady] = useState(false);
+-
+-  useEffect(() => {
+-    let cancelled = false;
+-    registerDotLanguage().then(() => {
+-      if (!cancelled) setDotReady(true);
+-    });
+-    return () => {
+-      cancelled = true;
+-    };
+-  }, []);
++  const dotReady = useDotLanguageReady();
+ 
+   if (workflow == null) {
+     return <p className="text-sm text-fg-muted">No settings found.</p>;
+diff --git a/apps/fabro-web/app/routes/automation-diagram.tsx b/apps/fabro-web/app/routes/automation-diagram.tsx
+index 55058d776..6c2aeaf9e 100644
+--- a/apps/fabro-web/app/routes/automation-diagram.tsx
++++ b/apps/fabro-web/app/routes/automation-diagram.tsx
+@@ -1,4 +1,4 @@
+-import { useCallback, useEffect, useRef, useState } from "react";
++import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+ import { ArrowDownIcon, ArrowRightIcon, MinusIcon, PlusIcon } from "@heroicons/react/20/solid";
+ import { graphTheme } from "../lib/graph-theme";
+ 
+@@ -67,17 +67,21 @@ function stripGraphTitle(svg: SVGSVGElement) {
+ const ZOOM_STEPS = [25, 50, 75, 100, 150, 200];
+ const DEFAULT_ZOOM_INDEX = 2; // 75%
+ 
+-export default function AutomationDiagram() {
+-  const containerRef = useRef<HTMLDivElement>(null);
+-  const innerRef = useRef<HTMLDivElement>(null);
+-  const svgRef = useRef<SVGSVGElement | null>(null);
+-  const [error, setError] = useState<string | null>(null);
+-  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+-  const [direction, setDirection] = useState<Direction>("LR");
+-  const [pan, setPan] = useState({ x: 0, y: 0 });
+-  const dragState = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
+-  const zoom = ZOOM_STEPS[zoomIndex];
+-
++/**
++ * Lazily loads @viz-js/viz, renders the DOT source for the given direction
++ * into an SVGElement, and places it in innerRef's DOM node. Cancels the
++ * async render when direction changes or the component unmounts.
++ *
++ * External systems: dynamic ESM import of @viz-js/viz, imperative DOM insertion.
++ * Cleanup: sets cancelled flag so in-flight renders are discarded.
++ */
++function useVizDiagram(
++  direction: Direction,
++  innerRef: RefObject<HTMLDivElement | null>,
++  svgRef: RefObject<SVGSVGElement | null>,
++  setError: (msg: string | null) => void,
++  setPan: (pan: { x: number; y: number }) => void,
++): void {
+   useEffect(() => {
+     let cancelled = false;
+ 
+@@ -102,7 +106,23 @@ export default function AutomationDiagram() {
+     setPan({ x: 0, y: 0 });
+     render();
+     return () => { cancelled = true; };
+-  }, [direction]);
++    // setError and setPan are stable React state setters; svgRef/innerRef are
++    // stable refs. Only direction triggers a new render.
++  }, [direction, innerRef, svgRef]);
++}
++
++export default function AutomationDiagram() {
++  const containerRef = useRef<HTMLDivElement>(null);
++  const innerRef = useRef<HTMLDivElement>(null);
++  const svgRef = useRef<SVGSVGElement | null>(null);
++  const [error, setError] = useState<string | null>(null);
++  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
++  const [direction, setDirection] = useState<Direction>("LR");
++  const [pan, setPan] = useState({ x: 0, y: 0 });
++  const dragState = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
++  const zoom = ZOOM_STEPS[zoomIndex];
++
++  useVizDiagram(direction, innerRef, svgRef, setError, setPan);
+ 
+   const onPointerDown = useCallback((e: React.PointerEvent) => {
+     if ((e.target as HTMLElement).closest("button")) return;
+diff --git a/apps/fabro-web/app/routes/chats-detail.tsx b/apps/fabro-web/app/routes/chats-detail.tsx
+index def71da9c..13d9b1400 100644
+--- a/apps/fabro-web/app/routes/chats-detail.tsx
++++ b/apps/fabro-web/app/routes/chats-detail.tsx
+@@ -1,4 +1,5 @@
+-import { useEffect, useMemo, useRef } from "react";
++import { useMemo, useRef } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
+ import { useNavigate, useParams } from "react-router";
+ import {
+   AssistantRuntimeProvider,
+@@ -53,10 +54,9 @@ function ChatRuntime({ chatId, chat }: { chatId: string; chat: Chat }) {
+ 
+   // Keep latest `chat` accessible to the stable adapter closure below without
+   // recreating the adapter (and the assistant-ui runtime) on every store dispatch.
++  // Updating during render is safe here because chatRef is not used to render UI.
+   const chatRef = useRef(chat);
+-  useEffect(() => {
+-    chatRef.current = chat;
+-  });
++  chatRef.current = chat;
+ 
+   const initialMessages = useMemo(
+     () => toThreadMessages(chat.seedMessages),
+@@ -76,17 +76,14 @@ function ChatRuntime({ chatId, chat }: { chatId: string; chat: Chat }) {
+ 
+   // Autorespond: chats arriving here from /chats/new carry the user's first
+   // message in seedMessages with pendingResponse=true. Trigger one startRun
+-  // once per mount; the ref dedupes within a StrictMode mount cycle (state
+-  // updates from consumePendingResponse aren't visible to the re-fired effect
+-  // closure), and the store flag dedupes across mounts (e.g. navigating away
+-  // and back to the same chat).
+-  const didStartRef = useRef(false);
+-  useEffect(() => {
+-    if (!chat.pendingResponse || didStartRef.current) return;
+-    didStartRef.current = true;
++  // once per mount. ChatRuntime is keyed by chatId so it mounts fresh for each
++  // chat; pendingResponse is set before mount and consumed here. The store flag
++  // in consumePendingResponse dedupes across mounts (e.g. navigating away and back).
++  useMountEffect(() => {
++    if (!chat.pendingResponse) return;
+     consumePendingResponse(chatId);
+     runtime.thread.startRun({ parentId: null });
+-  }, [chat.pendingResponse, chatId, consumePendingResponse, runtime]);
++  });
+ 
+   return (
+     <AssistantRuntimeProvider runtime={runtime}>
+diff --git a/apps/fabro-web/app/routes/insights-editor.tsx b/apps/fabro-web/app/routes/insights-editor.tsx
+index 97a19b2df..db71f8cdc 100644
+--- a/apps/fabro-web/app/routes/insights-editor.tsx
++++ b/apps/fabro-web/app/routes/insights-editor.tsx
+@@ -1,4 +1,6 @@
+-import { useState, useRef, useEffect, useCallback } from "react";
++import { useState, useRef, useCallback } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
++import { useResizeObserver } from "../hooks/use-resize-observer";
+ import { useLocation } from "react-router";
+ import {
+   Dialog,
+@@ -113,20 +115,9 @@ function BarChart({ result }: { result: QueryResult }) {
+   const containerRef = useRef<HTMLDivElement>(null);
+   const [containerWidth, setContainerWidth] = useState(0);
+ 
+-  useEffect(() => {
+-    const el = containerRef.current;
+-    if (!el) return;
+-
+-    const observer = new ResizeObserver((entries) => {
+-      const entry = entries[0];
+-      if (entry) {
+-        setContainerWidth(entry.contentRect.width);
+-      }
+-    });
+-    // react-doctor-disable-next-line react-doctor/no-initialize-state -- ResizeObserver is the first reliable source for this rendered container's width.
+-    observer.observe(el);
+-    return () => observer.disconnect();
+-  }, []);
++  useResizeObserver(containerRef, (entry) => {
++    setContainerWidth(entry.contentRect.width);
++  });
+ 
+   const labelCol = result.columns[0];
+   const valueCols = result.columns.slice(1).filter((col) => {
+@@ -411,7 +402,8 @@ export default function InsightsEditor() {
+     }, delay);
+   }, [sql]);
+ 
+-  useEffect(() => {
++  // Cancel any pending query run when the editor component unmounts.
++  useMountEffect(() => {
+     const runRequestIds = runRequestIdRef;
+     const runTimeouts = runTimeoutRef;
+     return () => {
+@@ -421,7 +413,7 @@ export default function InsightsEditor() {
+         runTimeouts.current = null;
+       }
+     };
+-  }, []);
++  });
+ 
+   return (
+     <div className="space-y-4">
+diff --git a/apps/fabro-web/app/routes/redirect-home.tsx b/apps/fabro-web/app/routes/redirect-home.tsx
+index a38e48044..2ab6695eb 100644
+--- a/apps/fabro-web/app/routes/redirect-home.tsx
++++ b/apps/fabro-web/app/routes/redirect-home.tsx
+@@ -1,22 +1,17 @@
+-import { useEffect } from "react";
+-import { useNavigate } from "react-router";
++import { Navigate } from "react-router";
+ import { ApiError } from "../lib/api-client";
+ import { useAuthMe } from "../lib/queries";
+ 
+ export default function RedirectHome() {
+-  const navigate = useNavigate();
+   const { data, error } = useAuthMe();
+ 
+-  useEffect(() => {
+-    if (data) {
+-      navigate("/runs", { replace: true });
+-      return;
+-    }
++  if (data) {
++    return <Navigate to="/runs" replace />;
++  }
+ 
+-    if (error instanceof ApiError && error.status === 401) {
+-      navigate("/login", { replace: true });
+-    }
+-  }, [data, error, navigate]);
++  if (error instanceof ApiError && error.status === 401) {
++    return <Navigate to="/login" replace />;
++  }
+ 
+   return null;
+ }
+diff --git a/apps/fabro-web/app/routes/run-artifacts.tsx b/apps/fabro-web/app/routes/run-artifacts.tsx
+index 40d4cf27f..16787b4fe 100644
+--- a/apps/fabro-web/app/routes/run-artifacts.tsx
++++ b/apps/fabro-web/app/routes/run-artifacts.tsx
+@@ -1,4 +1,5 @@
+-import { useEffect, useMemo, useState } from "react";
++import { useMemo, useState } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
+ import { useParams } from "react-router";
+ import { ArrowDownTrayIcon, PaperClipIcon } from "@heroicons/react/24/outline";
+ import type { RunArtifactEntry } from "@qltysh/fabro-api-client";
+@@ -180,7 +181,10 @@ function StageGroupCard({ runId, group }: { runId: string; group: StageGroup })
+ function ArtifactRow({ runId, entry }: { runId: string; entry: RunArtifactEntry }) {
+   const [href, setHref] = useState<string>("#");
+ 
+-  useEffect(() => {
++  // Each ArtifactRow is keyed by the entry's identity so it mounts once per
++  // unique entry. The download URL is derived from immutable entry props plus
++  // the stable runId; computing it once on mount is correct.
++  useMountEffect(() => {
+     let active = true;
+     void stageArtifactDownloadUrl(
+       runId,
+@@ -193,7 +197,7 @@ function ArtifactRow({ runId, entry }: { runId: string; entry: RunArtifactEntry
+     return () => {
+       active = false;
+     };
+-  }, [entry.relative_path, entry.retry, entry.stage_id, runId]);
++  });
+ 
+   return (
+     <li className="flex items-center gap-4 px-4 py-2">
+diff --git a/apps/fabro-web/app/routes/run-children.tsx b/apps/fabro-web/app/routes/run-children.tsx
+index f4f5ab826..8463daf09 100644
+--- a/apps/fabro-web/app/routes/run-children.tsx
++++ b/apps/fabro-web/app/routes/run-children.tsx
+@@ -1,4 +1,6 @@
+-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
++import { useCallback, useMemo, useRef, useState } from "react";
++import { useInterval } from "../hooks/use-interval";
++import { useMountEffect } from "../hooks/use-mount-effect";
+ import { useParams, useSearchParams } from "react-router";
+ import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+ import type { ListRunsSortEnum } from "@qltysh/fabro-api-client";
+@@ -86,13 +88,14 @@ export default function RunChildren() {
+     [updatePreferences],
+   );
+ 
+-  const hydratedFromStorage = useRef(false);
+-  useEffect(() => {
+-    if (hydratedFromStorage.current) return;
+-    hydratedFromStorage.current = true;
+-    if (searchParams === urlSearchParams) return;
+-    setSearchParams(searchParams, { replace: true });
+-  }, [searchParams, urlSearchParams, setSearchParams]);
++  // Apply any URL defaults that were resolved from localStorage on mount so
++  // queries fire with the correct params. Runs only once; mount-time values
++  // are stable for this initialization purpose.
++  useMountEffect(() => {
++    if (searchParams !== urlSearchParams) {
++      setSearchParams(searchParams, { replace: true });
++    }
++  });
+ 
+   const childRunsQuery = useRunsPage(
+     {
+@@ -106,20 +109,19 @@ export default function RunChildren() {
+     id != null,
+   );
+ 
++  // Track when data was last fetched so the relative timestamp stays fresh.
++  // Updated at render time when data identity changes so the "Updated just now"
++  // label appears on the same render as the new data (SWR already re-renders
++  // this component when childRunsQuery.data changes).
+   const lastFetchedAtRef = useRef<number | null>(null);
+-  const [now, setNow] = useState<number>(() => Date.now());
+-
+-  useEffect(() => {
+-    if (childRunsQuery.data) {
+-      lastFetchedAtRef.current = Date.now();
+-      setNow(Date.now());
+-    }
+-  }, [childRunsQuery.data]);
++  const prevDataRef = useRef(childRunsQuery.data);
++  if (childRunsQuery.data && childRunsQuery.data !== prevDataRef.current) {
++    prevDataRef.current = childRunsQuery.data;
++    lastFetchedAtRef.current = Date.now();
++  }
+ 
+-  useEffect(() => {
+-    const interval = window.setInterval(() => setNow(Date.now()), 15_000);
+-    return () => window.clearInterval(interval);
+-  }, []);
++  const [now, setNow] = useState<number>(() => Date.now());
++  useInterval(() => setNow(Date.now()), 15_000);
+ 
+   const handleRefresh = useCallback(() => {
+     void childRunsQuery.mutate();
+diff --git a/apps/fabro-web/app/routes/run-detail.tsx b/apps/fabro-web/app/routes/run-detail.tsx
+index 3f3b75390..dbb92a196 100644
+--- a/apps/fabro-web/app/routes/run-detail.tsx
++++ b/apps/fabro-web/app/routes/run-detail.tsx
+@@ -52,8 +52,8 @@ import {
+ } from "./run-detail/lifecycle-toasts";
+ import {
+   buildRunDetailRun,
+-  useTickingNow,
+ } from "./run-detail/model";
++import { useTickingNow } from "../lib/time";
+ import {
+   buildRunDetailTabs,
+   childRouteLayoutFlags,
+@@ -104,7 +104,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
+     childrenCount,
+   });
+   const steerBarRef = useRef<SteerBarHandle | null>(null);
+-  const now = useTickingNow(30_000);
++  const now = useTickingNow(true, 30_000);
+   const { fullHeight, hideSteerBar } = childRouteLayoutFlags(matches);
+ 
+   useRunEvents(params.id);
+diff --git a/apps/fabro-web/app/routes/run-detail/docked-controls.tsx b/apps/fabro-web/app/routes/run-detail/docked-controls.tsx
+index b9c2eec32..954e66d17 100644
+--- a/apps/fabro-web/app/routes/run-detail/docked-controls.tsx
++++ b/apps/fabro-web/app/routes/run-detail/docked-controls.tsx
+@@ -4,6 +4,22 @@ import {
+   type ReactNode,
+   type RefObject,
+ } from "react";
++
++/**
++ * Registers the Ask Fabro sidebar's current pixel width with the shared layout
++ * context so sibling panels can respond to it. Resets to zero on unmount so
++ * the context does not retain a stale width after this component is removed.
++ *
++ * External system: `useAskFabroLayout` shared layout context.
++ * Cleanup: resets width to 0 on unmount.
++ */
++function useAskFabroSidebarWidth(sidebarWidth: number): void {
++  const { setSidebarWidth } = useAskFabroLayout();
++  useEffect(() => {
++    setSidebarWidth(sidebarWidth);
++    return () => setSidebarWidth(0);
++  }, [sidebarWidth, setSidebarWidth]);
++}
+ import { SparklesIcon } from "@heroicons/react/20/solid";
+ 
+ import AskFabroSidebar, {
+@@ -52,12 +68,8 @@ export function RunDetailAskFabroShell({
+   const [askOpen, setAskOpen] = useState(false);
+   const [askWidth, setAskWidth] = useState(SIDEBAR_WIDTH);
+   const sidebarWidth = askAvailable && askOpen ? askWidth : 0;
+-  const { setSidebarWidth, isResizing } = useAskFabroLayout();
+-
+-  useEffect(() => {
+-    setSidebarWidth(sidebarWidth);
+-    return () => setSidebarWidth(0);
+-  }, [sidebarWidth, setSidebarWidth]);
++  const { isResizing } = useAskFabroLayout();
++  useAskFabroSidebarWidth(sidebarWidth);
+ 
+   return (
+     <>
+diff --git a/apps/fabro-web/app/routes/run-detail/model.ts b/apps/fabro-web/app/routes/run-detail/model.ts
+index 87ff0a97d..758009ea7 100644
+--- a/apps/fabro-web/app/routes/run-detail/model.ts
++++ b/apps/fabro-web/app/routes/run-detail/model.ts
+@@ -1,5 +1,3 @@
+-import { useEffect, useState } from "react";
+-
+ import {
+   isRunStatus,
+   mapRunToRunItem,
+@@ -11,15 +9,6 @@ export function classNames(...classes: Array<string | false | null | undefined>)
+   return classes.filter(Boolean).join(" ");
+ }
+ 
+-export function useTickingNow(intervalMs: number): number {
+-  const [now, setNow] = useState(() => Date.now());
+-  useEffect(() => {
+-    const id = setInterval(() => setNow(Date.now()), intervalMs);
+-    return () => clearInterval(id);
+-  }, [intervalMs]);
+-  return now;
+-}
+-
+ export type RunDetailRun = ReturnType<typeof mapRunToRunItem> & {
+   statusLabel: string;
+   statusDot: string;
+diff --git a/apps/fabro-web/app/routes/run-files.tsx b/apps/fabro-web/app/routes/run-files.tsx
+index 6e0b5e391..ee3aad983 100644
+--- a/apps/fabro-web/app/routes/run-files.tsx
++++ b/apps/fabro-web/app/routes/run-files.tsx
+@@ -10,6 +10,10 @@ import {
+   type ReactElement,
+   type RefObject,
+ } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
++import { useMediaQuery } from "../hooks/use-media-query";
++import { useInterval } from "../hooks/use-interval";
++import { useWindowEvent } from "../hooks/use-window-event";
+ import { useLocation, useNavigate, useParams } from "react-router";
+ import {
+   MultiFileDiff,
+@@ -78,18 +82,7 @@ export function normalizeRunFileScope(value: string | null): RunFileScope {
+ }
+ 
+ function useNarrowViewport(): boolean {
+-  const [narrow, setNarrow] = useState(() => {
+-    if (typeof window === "undefined") return false;
+-    return window.matchMedia(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`).matches;
+-  });
+-  useEffect(() => {
+-    if (typeof window === "undefined") return;
+-    const mql = window.matchMedia(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`);
+-    const apply = () => setNarrow(mql.matches);
+-    mql.addEventListener("change", apply);
+-    return () => mql.removeEventListener("change", apply);
+-  }, []);
+-  return narrow;
++  return useMediaQuery(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`);
+ }
+ 
+ function useFreshness(
+@@ -102,11 +95,7 @@ function useFreshness(
+   const hasLabel =
+     !!meta && (!!meta.to_sha_committed_at || lastFetchedAt !== null);
+   const [, setTick] = useState(0);
+-  useEffect(() => {
+-    if (!hasLabel) return undefined;
+-    const id = setInterval(() => setTick((t) => t + 1), 10_000);
+-    return () => clearInterval(id);
+-  }, [hasLabel]);
++  useInterval(() => setTick((t) => t + 1), 10_000, hasLabel);
+ 
+   if (!meta) return null;
+   const now = Date.now();
+@@ -338,6 +327,111 @@ const RunFileRow = memo(function RunFileRow({
+   );
+ });
+ 
++// ---------------------------------------------------------------------------
++// Route-scoped integration hooks
++// ---------------------------------------------------------------------------
++
++/**
++ * Manages the "last good data" fallback for failed SWR revalidations and shows
++ * a toast when files transition from present to empty. Wraps the effect so the
++ * route component body stays free of direct useEffect calls.
++ *
++ * External systems: toast notification service (push) and the SWR cache.
++ * Cleanup: none required (effect only reads + writes refs and calls push).
++ */
++function useRunFileTransition(
++  filesQuery: ReturnType<typeof useRunFiles>,
++  push: ReturnType<typeof useToast>["push"],
++): {
++  data: PaginatedRunFileList | null;
++  lastFetchedAt: number | null;
++  prevToSha: string | null;
++  revalidationError: string | null;
++  initialError: ApiError | null;
++} {
++  const lastGoodDataRef = useRef<PaginatedRunFileList | null>(null);
++  const lastFetchedAtRef = useRef<number | null>(null);
++
++  // prevToSha is captured before the effect so the render that triggered the
++  // new fetch still sees the prior sha (enabling the refresh-disabled check).
++  const prevToSha = lastGoodDataRef.current?.meta?.to_sha ?? null;
++
++  useEffect(() => {
++    if (!filesQuery.data) return;
++    const message = emptyTransitionToastMessage(
++      lastGoodDataRef.current?.data.length ?? null,
++      filesQuery.data.data.length,
++    );
++    if (message) push({ message });
++    lastGoodDataRef.current = filesQuery.data;
++    lastFetchedAtRef.current = Date.now();
++  }, [push, filesQuery.data]);
++
++  const data = filesQuery.data ?? lastGoodDataRef.current;
++  const apiError = filesQuery.error instanceof ApiError ? filesQuery.error : null;
++  const revalidationError =
++    apiError && lastGoodDataRef.current
++      ? `Couldn't refresh (${apiError.status}).`
++      : null;
++  const initialError = apiError && !lastGoodDataRef.current ? apiError : null;
++
++  return { data, lastFetchedAt: lastFetchedAtRef.current, prevToSha, revalidationError, initialError };
++}
++
++/**
++ * Returns keyboard focus to a button after a boolean `active` flag transitions
++ * from true → false (e.g. after an async refresh visibly completes).
++ *
++ * External system: browser focus API.
++ * Cleanup: none required (no resource is acquired).
++ */
++function useFocusAfterActive(
++  active: boolean,
++  ref: RefObject<HTMLButtonElement | null>,
++): void {
++  const prevRef = useRef(false);
++  useEffect(() => {
++    if (prevRef.current && !active) {
++      ref.current?.focus({ preventScroll: true });
++    }
++    prevRef.current = active;
++  }, [active, ref]);
++}
++
++/**
++ * After URL hash and file data have both settled, scrolls to and focuses the
++ * deep-link target row, or shows a "not found" toast when the file is absent.
++ *
++ * External systems: browser DOM scroll/focus APIs, toast notification service.
++ * Cleanup: none required (no resource is acquired).
++ */
++function useDeepLinkFocus(
++  hashFile: string | null,
++  data: PaginatedRunFileList | null,
++  push: ReturnType<typeof useToast>["push"],
++  lastDeepLinkToastRef: RefObject<string | null>,
++): void {
++  useEffect(() => {
++    const toast = resolveDeepLinkToast(hashFile, data);
++    if (toast) {
++      if (lastDeepLinkToastRef.current !== toast.key) {
++        push({ message: toast.message, autoDismissMs: 5000 });
++        lastDeepLinkToastRef.current = toast.key;
++      }
++      return;
++    }
++    lastDeepLinkToastRef.current = null;
++    if (!hashFile || !data) return;
++    const el = document.getElementById(fileRowId(hashFile));
++    if (el) {
++      el.scrollIntoView({ block: "start", behavior: "smooth" });
++      el.focus({ preventScroll: true });
++    }
++  }, [data, hashFile, push, lastDeepLinkToastRef]);
++}
++
++// ---------------------------------------------------------------------------
++
+ function RunFilesLoaded({
+   containerRef,
+   toolbar,
+@@ -475,41 +569,18 @@ export default function RunFiles() {
+ 
+   // Preserve the last successful payload so a failed revalidation can keep
+   // rendering the previous files while surfacing an inline banner.
+-  const lastGoodDataRef = useRef<PaginatedRunFileList | null>(null);
+-  const lastFetchedAtRef = useRef<number | null>(null);
+-
+-  useEffect(() => {
+-    if (!filesQuery.data) return;
+-    const message = emptyTransitionToastMessage(
+-      lastGoodDataRef.current?.data.length ?? null,
+-      filesQuery.data.data.length,
+-    );
+-    if (message) {
+-      push({ message });
+-    }
+-    lastGoodDataRef.current = filesQuery.data;
+-    lastFetchedAtRef.current = Date.now();
+-  }, [push, filesQuery.data]);
+-
+-  const data: PaginatedRunFileList | null =
+-    filesQuery.data ?? lastGoodDataRef.current;
++  const {
++    data,
++    lastFetchedAt,
++    prevToSha,
++    revalidationError,
++    initialError,
++  } = useRunFileTransition(filesQuery, push);
+ 
+   const isInitialLoading = (waitingForCommitSelection || filesQuery.isLoading) && !data;
+   const isRevalidating = filesQuery.isValidating;
+ 
+-  // Revalidation error is whatever the most recent loader call returned;
+-  // the inline banner renders when we still have prior data to show. When
+-  // there's no prior data AND this is the initial load, we render a
+-  // full-panel error state instead (the Toolbar would have nothing to act
+-  // on with no data).
+-  const apiError = filesQuery.error instanceof ApiError ? filesQuery.error : null;
+-  const revalidationError =
+-    apiError && lastGoodDataRef.current
+-      ? `Couldn't refresh (${apiError.status}).`
+-      : null;
+-  const initialError = apiError && !lastGoodDataRef.current ? apiError : null;
+-
+-  const freshness = useFreshness(data?.meta ?? null, lastFetchedAtRef.current);
++  const freshness = useFreshness(data?.meta ?? null, lastFetchedAt);
+ 
+   // Persisted desktop preference + md-breakpoint forced unified.
+   const [persistedStyle, setPersistedStyle] = useState<DiffStyle>(
+@@ -565,20 +636,14 @@ export default function RunFiles() {
+     },
+     [routeLocation.hash, routeLocation.pathname, routeLocation.search, navigate],
+   );
+-  useEffect(() => clearMinRefreshTimer, [clearMinRefreshTimer]);
++  // Cancel the minimum-refresh timer when the view unmounts.
++  useMountEffect(() => clearMinRefreshTimer);
+   // react-doctor-disable-next-line react-doctor/no-event-handler -- The refresh spinner is driven by both SWR revalidation and the click-owned minimum timer.
+   const showRefreshing = isRevalidating || minRefreshActive;
+ 
+   // Return focus to the Refresh button after a refresh visibly completes so
+   // keyboard-first users stay oriented.
+-  const refreshingPrev = useRef(false);
+-  useEffect(() => {
+-    // react-doctor-disable-next-line react-doctor/no-event-handler -- Returning focus after async refresh completion is an accessibility sync effect.
+-    if (refreshingPrev.current && !showRefreshing) {
+-      refreshButtonRef.current?.focus({ preventScroll: true });
+-    }
+-    refreshingPrev.current = showRefreshing;
+-  }, [showRefreshing]);
++  useFocusAfterActive(showRefreshing, refreshButtonRef);
+ 
+   const fileCount = data?.data.length ?? 0;
+   useFileKeyboardNav(containerRef, fileCount);
+@@ -592,33 +657,13 @@ export default function RunFiles() {
+     if (typeof window === "undefined") return null;
+     return decodeDeepLinkFile(window.location.hash);
+   });
+-  useEffect(() => {
+-    if (typeof window === "undefined") return;
+-    const onHashChange = () =>
+-      setHashFile(decodeDeepLinkFile(window.location.hash));
+-    window.addEventListener("hashchange", onHashChange);
+-    return () => window.removeEventListener("hashchange", onHashChange);
+-  }, []);
++  useWindowEvent("hashchange", () =>
++    setHashFile(decodeDeepLinkFile(window.location.hash)),
++  );
+ 
+-  // react-doctor-disable-next-line react-doctor/no-event-handler -- Deep-link focus has to run after URL hash and file data have both rendered matching DOM rows.
+-  useEffect(() => {
+-    // react-doctor-disable-next-line react-doctor/no-event-handler -- Toasting missing deep links also depends on resolved file data.
+-    const toast = resolveDeepLinkToast(hashFile, data);
+-    if (toast) {
+-      if (lastDeepLinkToastRef.current !== toast.key) {
+-        push({ message: toast.message, autoDismissMs: 5000 });
+-        lastDeepLinkToastRef.current = toast.key;
+-      }
+-      return;
+-    }
+-    lastDeepLinkToastRef.current = null;
+-    if (!hashFile || !data) return;
+-    const el = document.getElementById(fileRowId(hashFile));
+-    if (el) {
+-      el.scrollIntoView({ block: "start", behavior: "smooth" });
+-      el.focus({ preventScroll: true });
+-    }
+-  }, [data, hashFile, push]);
++  // After URL hash and file data have both settled, scroll to + focus the row
++  // (or show a "not found" toast when the file is absent).
++  useDeepLinkFocus(hashFile, data, push, lastDeepLinkToastRef);
+ 
+   const handleFileSelect = useCallback((path: string) => {
+     if (typeof window === "undefined") return;
+@@ -666,9 +711,6 @@ export default function RunFiles() {
+ 
+   // Refresh is disabled when the server reports the same `to_sha` it
+   // reported on the previous successful fetch — no new checkpoint yet.
+-  // `lastGoodDataRef.current` is updated in a useEffect, so during render
+-  // it still holds the previous render's data (or null on first load).
+-  const prevToSha = lastGoodDataRef.current?.meta?.to_sha ?? null;
+   const refreshDisabled =
+     !!meta.to_sha && prevToSha !== null && prevToSha === meta.to_sha;
+ 
+diff --git a/apps/fabro-web/app/routes/run-files/file-tree-sidebar.tsx b/apps/fabro-web/app/routes/run-files/file-tree-sidebar.tsx
+index c07317b23..afa45efcb 100644
+--- a/apps/fabro-web/app/routes/run-files/file-tree-sidebar.tsx
++++ b/apps/fabro-web/app/routes/run-files/file-tree-sidebar.tsx
+@@ -3,6 +3,7 @@ import {
+   useMemo,
+   useRef,
+   type CSSProperties,
++  type RefObject,
+ } from "react";
+ import {
+   FileTree,
+@@ -67,6 +68,71 @@ function syncSelection(
+   if (item && !item.isSelected()) item.select();
+ }
+ 
++/**
++ * Keeps the Pierre FileTree imperative model aligned with React props and
++ * with the model's own selection state.
++ *
++ * Two separate concerns are managed here:
++ *
++ * 1. Path / git-status sync (paths/gitStatus/model deps): when the file list
++ *    changes, resetPaths and setGitStatus are called. A didSyncModelRef guard
++ *    skips the initial run because useFileTree already initialises the model
++ *    with the first render's values.
++ *
++ * 2. Selection sync (selection/selectedPath/changedPaths deps): keeps the
++ *    tree's highlighted row consistent with both the URL-controlled
++ *    `selectedPath` prop and any pending selection written by the
++ *    onSelectionChange callback.
++ *
++ * External systems: @pierre/trees imperative FileTreeModel API.
++ * Cleanup: none required (no resource is acquired).
++ */
++function useFileTreeModelSync(
++  model: FileTreeModel,
++  paths: string[],
++  gitStatus: GitStatusEntry[],
++  selectedPath: string | null,
++  changedPaths: ReadonlySet<string>,
++  pendingSelectedPathRef: RefObject<string | null>,
++  selectedPathRef: RefObject<string | null>,
++  changedPathsRef: RefObject<ReadonlySet<string>>,
++): void {
++  const didSyncModelRef = useRef(false);
++  useEffect(() => {
++    if (!didSyncModelRef.current) {
++      didSyncModelRef.current = true;
++      return;
++    }
++    model.resetPaths(paths);
++    model.setGitStatus(gitStatus);
++    pendingSelectedPathRef.current = null;
++    const currentSelectedPath = selectedPathRef.current;
++    syncSelection(
++      model,
++      model.getSelectedPaths(),
++      currentSelectedPath && changedPathsRef.current.has(currentSelectedPath)
++        ? currentSelectedPath
++        : null,
++    );
++  }, [gitStatus, model, paths, pendingSelectedPathRef, selectedPathRef, changedPathsRef]);
++
++  const selection = useFileTreeSelection(model);
++  useEffect(() => {
++    const pendingSelectedPath = pendingSelectedPathRef.current;
++    // Keeps Pierre's imperative tree model aligned after the tree emits a
++    // selection change.
++    if (pendingSelectedPath === selectedPath) {
++      pendingSelectedPathRef.current = null;
++    }
++    const nextSelectedPath = pendingSelectedPath ?? selectedPath;
++    syncSelection(
++      model,
++      selection,
++      nextSelectedPath && changedPaths.has(nextSelectedPath) ? nextSelectedPath : null,
++    );
++  }, [changedPaths, model, pendingSelectedPathRef, selectedPath, selection]);
++}
++
+ interface FileTreeSidebarProps {
+   files: readonly FileDiff[];
+   selectedPath: string | null;
+@@ -117,39 +183,16 @@ export function FileTreeSidebar({
+     },
+   });
+ 
+-  const didSyncModelRef = useRef(false);
+-  useEffect(() => {
+-    if (!didSyncModelRef.current) {
+-      didSyncModelRef.current = true;
+-      return;
+-    }
+-    model.resetPaths(paths);
+-    model.setGitStatus(gitStatus);
+-    pendingSelectedPathRef.current = null;
+-    const currentSelectedPath = selectedPathRef.current;
+-    syncSelection(
+-      model,
+-      model.getSelectedPaths(),
+-      currentSelectedPath && changedPathsRef.current.has(currentSelectedPath)
+-        ? currentSelectedPath
+-        : null,
+-    );
+-  }, [gitStatus, model, paths]);
+-
+-  const selection = useFileTreeSelection(model);
+-  useEffect(() => {
+-    const pendingSelectedPath = pendingSelectedPathRef.current;
+-    // react-doctor-disable-next-line react-doctor/no-event-handler -- This keeps Pierre's imperative tree model aligned after the tree emits a selection change.
+-    if (pendingSelectedPath === selectedPath) {
+-      pendingSelectedPathRef.current = null;
+-    }
+-    const nextSelectedPath = pendingSelectedPath ?? selectedPath;
+-    syncSelection(
+-      model,
+-      selection,
+-      nextSelectedPath && changedPaths.has(nextSelectedPath) ? nextSelectedPath : null,
+-    );
+-  }, [changedPaths, model, selectedPath, selection]);
++  useFileTreeModelSync(
++    model,
++    paths,
++    gitStatus,
++    selectedPath,
++    changedPaths,
++    pendingSelectedPathRef,
++    selectedPathRef,
++    changedPathsRef,
++  );
+ 
+   const themeStyles = useMemo<TreeThemeStyle>(
+     () => ({
+diff --git a/apps/fabro-web/app/routes/run-overview.tsx b/apps/fabro-web/app/routes/run-overview.tsx
+index 131c11738..6a45f5416 100644
+--- a/apps/fabro-web/app/routes/run-overview.tsx
++++ b/apps/fabro-web/app/routes/run-overview.tsx
+@@ -1,4 +1,4 @@
+-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
++import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+ import { createPortal } from "react-dom";
+ import { useNavigate, useParams } from "react-router";
+ import { graphTheme } from "../lib/graph-theme";
+@@ -24,59 +24,25 @@ import {
+ 
+ const HOVER_OPEN_DELAY_MS = 200;
+ 
+-interface NodeHover {
+-  stage: Stage;
+-  rect:  DOMRect;
+-}
+-
+-export const handle = { wide: true };
+-
+-type Direction = "LR" | "TB";
+-
+-export default function RunOverview() {
+-  const { id } = useParams();
+-  const [direction, setDirection] = useState<Direction>("LR");
+-  const stagesQuery = useRunStages(id);
+-  const graphQuery = useRunGraph(id, direction);
+-  const runQuery = useRun(id);
+-  const stages = useMemo(
+-    () => mapRunStagesToSidebarStages(stagesQuery.data),
+-    [stagesQuery.data],
+-  );
+-  const graphSvg = graphQuery.data;
+-  const graphErrorDescription =
+-    graphQuery.error instanceof ApiError
+-      ? graphQuery.error.message
+-      : graphQuery.error
+-        ? "The graph render request failed."
+-        : undefined;
+-  const apiStatus = runQuery.data?.lifecycle.status;
+-  const terminalOutcome: "succeeded" | "failed" | "dead" | null =
+-    apiStatus?.kind === "succeeded" ||
+-    apiStatus?.kind === "failed" ||
+-    apiStatus?.kind === "dead"
+-      ? apiStatus.kind
+-      : null;
+-  const containerRef = useRef<HTMLDivElement>(null);
+-  const innerRef = useRef<HTMLDivElement>(null);
+-  const svgRef = useRef<SVGSVGElement | null>(null);
+-  const navigate = useNavigate();
+-  const [zoomIndex, setZoomIndex] = useState(GRAPH_DEFAULT_ZOOM_INDEX);
+-  const [pan, setPan] = useState({ x: 0, y: 0 });
+-  const dragState = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
+-  const zoom = GRAPH_ZOOM_STEPS[zoomIndex];
+-  const [hoveredNode, setHoveredNode] = useState<NodeHover | null>(null);
+-
+-  // Per-stage lookup keyed by latest visit's `stageId`, used when the SVG's
+-  // imperative hover handlers need to resolve a node to its sidebar Stage.
+-  const stageById = useMemo(() => {
+-    const map = new Map<string, Stage>();
+-    for (const stage of stages) map.set(stage.id, stage);
+-    return map;
+-  }, [stages]);
+-
+-  // Render SVG with stage annotations
+-  // react-doctor-disable-next-line react-doctor/no-cascading-set-state -- This effect mutates local Set/Map instances and the Graphviz SVG DOM; it does not call React state setters.
++/**
++ * Sets the SVG innerHTML from the Graphviz API response, colors nodes by their
++ * current run status, and attaches click/hover listeners to each SVG node group.
++ *
++ * External systems: raw SVG DOM (innerHTML mutation + createElement), browser
++ * event listeners, and a CSS animation via SVGAnimateElement.
++ * Cleanup: removes all attached listeners and clears the hover popover.
++ */
++function useGraphSvgAnnotations(
++  innerRef: RefObject<HTMLDivElement | null>,
++  svgRef: RefObject<SVGSVGElement | null>,
++  graphSvg: string | undefined,
++  stages: Stage[],
++  stageById: Map<string, Stage>,
++  id: string | undefined,
++  navigate: (to: string) => void,
++  terminalOutcome: "succeeded" | "failed" | "dead" | null,
++  setHoveredNode: (node: NodeHover | null) => void,
++): void {
+   useEffect(() => {
+     const inner = innerRef.current;
+     if (!inner || !graphSvg) return;
+@@ -211,7 +177,76 @@ export default function RunOverview() {
+       }
+       setHoveredNode(null);
+     };
++    // setHoveredNode is a stable state setter; omitted from deps intentionally.
++    // navigate is stable from useNavigate.
+   }, [stages, stageById, graphSvg, id, navigate, terminalOutcome]);
++}
++
++interface NodeHover {
++  stage: Stage;
++  rect:  DOMRect;
++}
++
++export const handle = { wide: true };
++
++type Direction = "LR" | "TB";
++
++export default function RunOverview() {
++  const { id } = useParams();
++  const [direction, setDirection] = useState<Direction>("LR");
++  const stagesQuery = useRunStages(id);
++  const graphQuery = useRunGraph(id, direction);
++  const runQuery = useRun(id);
++  const stages = useMemo(
++    () => mapRunStagesToSidebarStages(stagesQuery.data),
++    [stagesQuery.data],
++  );
++  const graphSvg = graphQuery.data;
++  const graphErrorDescription =
++    graphQuery.error instanceof ApiError
++      ? graphQuery.error.message
++      : graphQuery.error
++        ? "The graph render request failed."
++        : undefined;
++  const apiStatus = runQuery.data?.lifecycle.status;
++  const terminalOutcome: "succeeded" | "failed" | "dead" | null =
++    apiStatus?.kind === "succeeded" ||
++    apiStatus?.kind === "failed" ||
++    apiStatus?.kind === "dead"
++      ? apiStatus.kind
++      : null;
++  const containerRef = useRef<HTMLDivElement>(null);
++  const innerRef = useRef<HTMLDivElement>(null);
++  const svgRef = useRef<SVGSVGElement | null>(null);
++  const navigate = useNavigate();
++  const [zoomIndex, setZoomIndex] = useState(GRAPH_DEFAULT_ZOOM_INDEX);
++  const [pan, setPan] = useState({ x: 0, y: 0 });
++  const dragState = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
++  const zoom = GRAPH_ZOOM_STEPS[zoomIndex];
++  const [hoveredNode, setHoveredNode] = useState<NodeHover | null>(null);
++
++  // Per-stage lookup keyed by latest visit's `stageId`, used when the SVG's
++  // imperative hover handlers need to resolve a node to its sidebar Stage.
++  const stageById = useMemo(() => {
++    const map = new Map<string, Stage>();
++    for (const stage of stages) map.set(stage.id, stage);
++    return map;
++  }, [stages]);
++
++  // Render SVG with stage annotations: sets innerHTML, colors nodes, and
++  // attaches click/hover listeners. Extracted to a named hook to keep this
++  // component body free of direct useEffect calls.
++  useGraphSvgAnnotations(
++    innerRef,
++    svgRef,
++    graphSvg,
++    stages,
++    stageById,
++    id,
++    navigate,
++    terminalOutcome,
++    setHoveredNode,
++  );
+ 
+   const onPointerDown = useCallback((e: React.PointerEvent) => {
+     if ((e.target as HTMLElement).closest("button")) return;
+diff --git a/apps/fabro-web/app/routes/run-sandbox/filesystem-panel.tsx b/apps/fabro-web/app/routes/run-sandbox/filesystem-panel.tsx
+index 0c8bb4a96..23404dbb3 100644
+--- a/apps/fabro-web/app/routes/run-sandbox/filesystem-panel.tsx
++++ b/apps/fabro-web/app/routes/run-sandbox/filesystem-panel.tsx
+@@ -1,6 +1,5 @@
+ import {
+   useCallback,
+-  useEffect,
+   useMemo,
+   useRef,
+   useState,
+@@ -371,9 +370,11 @@ function DirectoryPane({
+     },
+   });
+ 
+-  useEffect(() => {
+-    model.resetPaths(treeInputs.paths);
+-  }, [model, treeInputs.paths]);
++  // Render-phase model sync: useFileTree only consumes `paths` at construction
++  // time, so keep the imperative model in sync on every render by calling
++  // resetPaths directly. This is safe because resetPaths only mutates the
++  // external widget model, not React state.
++  model.resetPaths(treeInputs.paths);
+ 
+   const themeStyles = useMemo<TreeThemeStyle>(
+     () => ({
+diff --git a/apps/fabro-web/app/routes/run-source.tsx b/apps/fabro-web/app/routes/run-source.tsx
+index 621e94de0..022a74687 100644
+--- a/apps/fabro-web/app/routes/run-source.tsx
++++ b/apps/fabro-web/app/routes/run-source.tsx
+@@ -1,11 +1,11 @@
+-import { useEffect, useMemo, useState } from "react";
++import { useMemo } from "react";
+ import { useParams } from "react-router";
+ import type { BundledLanguage } from "@pierre/diffs";
+ import { useRunGraphSource, useRunStages } from "../lib/queries";
+ import { LoadingState } from "../components/state";
+ import { StageSidebar } from "../components/stage-sidebar";
+ import { CollapsibleFile } from "../components/collapsible-file";
+-import { registerDotLanguage } from "../data/register-dot-language";
++import { useDotLanguageReady } from "../hooks/use-dot-language-ready";
+ import { mapRunStagesToSidebarStages } from "../lib/stage-sidebar";
+ 
+ export const handle = { wide: true };
+@@ -18,17 +18,7 @@ export default function RunSource() {
+     () => mapRunStagesToSidebarStages(stagesQuery.data),
+     [stagesQuery.data],
+   );
+-  const [dotReady, setDotReady] = useState(false);
+-
+-  useEffect(() => {
+-    let cancelled = false;
+-    registerDotLanguage().then(() => {
+-      if (!cancelled) setDotReady(true);
+-    });
+-    return () => {
+-      cancelled = true;
+-    };
+-  }, []);
++  const dotReady = useDotLanguageReady();
+ 
+   const source = sourceQuery.data;
+   const loading = source === undefined && !sourceQuery.error;
+diff --git a/apps/fabro-web/app/routes/run-terminal.tsx b/apps/fabro-web/app/routes/run-terminal.tsx
+index 78c7f42cf..b6fb6d3cb 100644
+--- a/apps/fabro-web/app/routes/run-terminal.tsx
++++ b/apps/fabro-web/app/routes/run-terminal.tsx
+@@ -1,16 +1,9 @@
+-import { useEffect } from "react";
+-
++import { useDocumentTitle } from "../hooks/use-document-title";
+ import TerminalView from "../components/terminal-view";
+ import { ToastProvider } from "../components/toast";
+ 
+ export default function RunTerminal({ params }: { params: { id: string } }) {
+-  useEffect(() => {
+-    const previous = document.title;
+-    document.title = `Terminal · ${params.id} · Fabro`;
+-    return () => {
+-      document.title = previous;
+-    };
+-  }, [params.id]);
++  useDocumentTitle(`Terminal · ${params.id} · Fabro`);
+ 
+   return (
+     <ToastProvider>
+diff --git a/apps/fabro-web/app/routes/runs.tsx b/apps/fabro-web/app/routes/runs.tsx
+index 28bc4a9d6..50f5c3a83 100644
+--- a/apps/fabro-web/app/routes/runs.tsx
++++ b/apps/fabro-web/app/routes/runs.tsx
+@@ -1,4 +1,4 @@
+-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
++import { useState, useCallback, useMemo, useRef } from "react";
+ import { Link } from "react-router";
+ import { CheckIcon, ChevronDownIcon, CommandLineIcon } from "@heroicons/react/24/outline";
+ import { EllipsisVerticalIcon } from "@heroicons/react/20/solid";
+@@ -781,12 +781,19 @@ export default function Runs() {
+   );
+   allWorkflows.sort();
+   const [columns, setColumns] = useState(initialColumns);
+-  const lowerQuery = query.toLowerCase();
+-  useBoardEvents();
+ 
+-  useEffect(() => {
++  // Sync columns with incoming SWR data. Calling setColumns during render
++  // (the render-phase state update pattern) avoids an effect and the extra
++  // render round-trip. React re-renders this component immediately with the
++  // updated columns while preserving drag-state between fetches.
++  const prevInitialColumnsRef = useRef(initialColumns);
++  if (prevInitialColumnsRef.current !== initialColumns) {
++    prevInitialColumnsRef.current = initialColumns;
+     setColumns(initialColumns);
+-  }, [initialColumns]);
++  }
++
++  const lowerQuery = query.toLowerCase();
++  useBoardEvents();
+ 
+   const sensors = useSensors(
+     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+diff --git a/apps/fabro-web/app/routes/runs/workspace-preferences.ts b/apps/fabro-web/app/routes/runs/workspace-preferences.ts
+index ee1e2aff5..04416440e 100644
+--- a/apps/fabro-web/app/routes/runs/workspace-preferences.ts
++++ b/apps/fabro-web/app/routes/runs/workspace-preferences.ts
+@@ -1,9 +1,8 @@
+ import {
+   useCallback,
+-  useEffect,
+   useMemo,
+-  useRef,
+ } from "react";
++import { useMountEffect } from "../../hooks/use-mount-effect";
+ import { useSearchParams } from "react-router";
+ import type { BoardColumn, ListRunsSortEnum } from "@qltysh/fabro-api-client";
+ 
+@@ -103,13 +102,14 @@ export function useRunsWorkspacePreferences() {
+     [updatePreferences],
+   );
+ 
+-  const hydratedFromStorage = useRef(false);
+-  useEffect(() => {
+-    if (hydratedFromStorage.current) return;
+-    hydratedFromStorage.current = true;
+-    if (searchParams === urlSearchParams) return;
+-    setSearchParams(searchParams, { replace: true });
+-  }, [searchParams, urlSearchParams, setSearchParams]);
++  // Apply any URL defaults that were resolved from localStorage on mount so
++  // queries fire with the correct params. Runs only once; mount-time values
++  // are stable for this initialization purpose.
++  useMountEffect(() => {
++    if (searchParams !== urlSearchParams) {
++      setSearchParams(searchParams, { replace: true });
++    }
++  });
+ 
+   return {
+     query,
+diff --git a/apps/fabro-web/app/routes/settings-live-events.tsx b/apps/fabro-web/app/routes/settings-live-events.tsx
+index 4300ed6d8..bcfa7bff0 100644
+--- a/apps/fabro-web/app/routes/settings-live-events.tsx
++++ b/apps/fabro-web/app/routes/settings-live-events.tsx
+@@ -1,4 +1,4 @@
+-import { useCallback, useEffect, useMemo, useState } from "react";
++import { useCallback, useMemo, useState } from "react";
+ import { Link } from "react-router";
+ 
+ import {
+@@ -18,7 +18,7 @@ import { Tooltip } from "../components/ui";
+ import { eventDedupeKey } from "../lib/cross-tab-sse";
+ import { formatAbsoluteTs } from "../lib/format";
+ import {
+-  subscribeToLiveEvents,
++  useLiveEvents,
+   type LiveEventPayload,
+ } from "../lib/live-events";
+ 
+@@ -49,11 +49,9 @@ export default function SettingsLiveEvents() {
+   const [selectedCategories, setSelectedCategories] = useState<DebugCategory[]>([]);
+   const [search, setSearch] = useState("");
+ 
+-  useEffect(() => {
+-    return subscribeToLiveEvents((payload) => {
+-      setEvents((prev) => appendLiveEvent(prev, payload));
+-    });
+-  }, []);
++  useLiveEvents((payload) => {
++    setEvents((prev) => appendLiveEvent(prev, payload));
++  });
+ 
+   const filtered = useMemo<LiveEventPayload[]>(() => {
+     const useCategoryFilter = selectedCategories.length > 0;
+diff --git a/apps/fabro-web/app/routes/settings-models.tsx b/apps/fabro-web/app/routes/settings-models.tsx
+index 6a3867275..487a2d192 100644
+--- a/apps/fabro-web/app/routes/settings-models.tsx
++++ b/apps/fabro-web/app/routes/settings-models.tsx
+@@ -1,4 +1,5 @@
+-import { useCallback, useEffect, useMemo, useState } from "react";
++import { useCallback, useMemo, useState } from "react";
++import { useDebouncedValue } from "../hooks/use-debounced-value";
+ import type { ReactNode } from "react";
+ import { Link } from "react-router";
+ import {
+@@ -610,11 +611,4 @@ function sortModels(
+   return sorted;
+ }
+ 
+-function useDebouncedValue<T>(value: T, delayMs: number): T {
+-  const [debounced, setDebounced] = useState(value);
+-  useEffect(() => {
+-    const id = setTimeout(() => setDebounced(value), delayMs);
+-    return () => clearTimeout(id);
+-  }, [value, delayMs]);
+-  return debounced;
+-}
++
+diff --git a/apps/fabro-web/app/routes/start.tsx b/apps/fabro-web/app/routes/start.tsx
+index 79769c6a9..5ec7761a4 100644
+--- a/apps/fabro-web/app/routes/start.tsx
++++ b/apps/fabro-web/app/routes/start.tsx
+@@ -1,4 +1,5 @@
+-import { useState, useRef, useEffect } from "react";
++import { useState, useRef } from "react";
++import { useMountEffect } from "../hooks/use-mount-effect";
+ import {
+   Listbox,
+   ListboxButton,
+@@ -50,9 +51,9 @@ export default function Start() {
+   const [openCategory, setOpenCategory] = useState<string | null>(null);
+   const textareaRef = useRef<HTMLTextAreaElement>(null);
+ 
+-  useEffect(() => {
++  useMountEffect(() => {
+     textareaRef.current?.focus();
+-  }, []);
++  });
+ 
+   function autoResize() {
+     const el = textareaRef.current;
