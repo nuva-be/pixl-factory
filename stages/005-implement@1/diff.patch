@@ -1,0 +1,2777 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 0986b55a6..7365db53d 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2388,7 +2388,6 @@ dependencies = [
+  "hmac",
+  "http-body-util",
+  "httpmock",
+- "ipnet",
+  "jsonwebtoken",
+  "mime_guess",
+  "multer",
+@@ -2590,7 +2589,6 @@ dependencies = [
+  "fabro-model",
+  "fabro-util",
+  "hex",
+- "ipnet",
+  "serde",
+  "serde_json",
+  "sha2",
+@@ -3854,9 +3852,6 @@ name = "ipnet"
+ version = "2.11.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
+-dependencies = [
+- "serde",
+-]
+ 
+ [[package]]
+ name = "iri-string"
+diff --git a/apps/fabro-web/app/routes/settings-security.tsx b/apps/fabro-web/app/routes/settings-security.tsx
+index 779f3f7a9..2075131c9 100644
+--- a/apps/fabro-web/app/routes/settings-security.tsx
++++ b/apps/fabro-web/app/routes/settings-security.tsx
+@@ -2,7 +2,6 @@ import type { ServerSettings } from "@qltysh/fabro-api-client";
+ import { useServerSettings } from "../lib/queries";
+ import {
+   Badge,
+-  Count,
+   Muted,
+   Panel,
+   PanelSkeleton,
+@@ -10,7 +9,6 @@ import {
+   SettingsPageIntro,
+   UsernameList,
+ } from "../components/settings-panel";
+-import { plural } from "../lib/plural";
+ 
+ export function meta() {
+   return [{ title: "Security — Fabro" }];
+@@ -18,7 +16,7 @@ export function meta() {
+ 
+ const DESCRIPTION = (
+   <>
+-    Authentication methods and network allowlist. Edit via{" "}
++    Authentication methods and permitted GitHub usernames. Edit via{" "}
+     <code className="font-mono text-fg-2">settings.toml</code>; changes take
+     effect on the next server restart.
+   </>
+@@ -37,7 +35,7 @@ export default function SettingsSecurity() {
+ }
+ 
+ function SecurityPanel({ settings }: { settings: ServerSettings }) {
+-  const { auth, ip_allowlist } = settings.server;
++  const { auth } = settings.server;
+   const githubUsers = auth.github.allowed_usernames;
+   return (
+     <Panel title="Security">
+@@ -62,18 +60,6 @@ function SecurityPanel({ settings }: { settings: ServerSettings }) {
+           <UsernameList names={githubUsers} />
+         )}
+       </Row>
+-      <Row title="IP allowlist" help="Network sources permitted to reach the API.">
+-        <Count
+-          n={ip_allowlist.entries.length}
+-          singular="entry"
+-          plural="entries"
+-          suffix={
+-            ip_allowlist.trusted_proxy_count > 0
+-              ? `· ${ip_allowlist.trusted_proxy_count} trusted ${plural(ip_allowlist.trusted_proxy_count, "proxy", "proxies")}`
+-              : undefined
+-          }
+-        />
+-      </Row>
+     </Panel>
+   );
+ }
+diff --git a/apps/fabro-web/app/routes/settings.tsx b/apps/fabro-web/app/routes/settings.tsx
+index 67e750c28..648edbd24 100644
+--- a/apps/fabro-web/app/routes/settings.tsx
++++ b/apps/fabro-web/app/routes/settings.tsx
+@@ -63,7 +63,7 @@ export const navSections: NavSection[] = [
+         name: "Security",
+         href: "/settings/security",
+         icon: ShieldCheckIcon,
+-        description: "Authentication and network allowlist.",
++        description: "Authentication methods and access.",
+         match: (p) => p.startsWith("/settings/security"),
+       },
+       {
+diff --git a/docs/public/administration/security.mdx b/docs/public/administration/security.mdx
+index ec1a30bdd..27e1aeea9 100644
+--- a/docs/public/administration/security.mdx
++++ b/docs/public/administration/security.mdx
+@@ -15,6 +15,7 @@ Fabro is single-tenant software designed for small, trusted teams. The following
+ |---|---|
+ | **Multi-tenancy** | Not supported. Fabro is single-tenant only — there is no organization or tenant isolation. |
+ | **Roles or ACLs** | Not supported. All authenticated users have identical, full access to every run, workflow, and API endpoint. |
++| **Inbound source-IP allowlisting** | Not implemented in Fabro. Restrict source networks with a reverse proxy, firewall, VPN, Tailscale, platform ingress policy, or another deployment-layer control. |
+ | **Rate limiting** | Not implemented. The API server does not throttle requests. |
+ | **Custom security header policy** | Not configurable. Fabro emits default security headers, including enforced `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Strict-Transport-Security` when HTTPS is detected. |
+ 
+@@ -24,6 +25,7 @@ Fabro is single-tenant software designed for small, trusted teams. The following
+ 
+ - **Deploy the web app on a private network.** Use a Tailscale tailnet, VPN, or internal network to keep the web UI off the public internet.
+ - **Deploy the API on a private network.** Only allow access from expected hosts (the web app, CI runners, developer machines). The API binds to `127.0.0.1` by default — do not expose it with `--host 0.0.0.0` unless it is behind a firewall or private network.
++- **Enforce source-IP restrictions upstream.** Fabro does not provide inbound source-IP allowlisting. Use your reverse proxy, firewall, VPN, Tailscale ACLs, cloud load balancer, Kubernetes ingress, or platform policy to limit who can connect.
+ - **Use Daytona sandboxes with network controls.** When running untrusted or generated code, use the Daytona sandbox provider with `network = "block"` or a CIDR-based allow list to restrict agent egress.
+ 
+ ### Authentication
+diff --git a/docs/public/api-reference/fabro-api.yaml b/docs/public/api-reference/fabro-api.yaml
+index aff64c205..103ab4cad 100644
+--- a/docs/public/api-reference/fabro-api.yaml
++++ b/docs/public/api-reference/fabro-api.yaml
+@@ -12280,7 +12280,6 @@ components:
+         - api
+         - web
+         - auth
+-        - ip_allowlist
+         - sandbox
+         - storage
+         - artifacts
+@@ -12297,8 +12296,6 @@ components:
+           $ref: "#/components/schemas/ServerWebSettings"
+         auth:
+           $ref: "#/components/schemas/ServerAuthSettings"
+-        ip_allowlist:
+-          $ref: "#/components/schemas/ServerIpAllowlistSettings"
+         sandbox:
+           $ref: "#/components/schemas/ServerSandboxSettings"
+         storage:
+@@ -12379,44 +12376,6 @@ components:
+           items:
+             type: string
+ 
+-    ServerIpAllowlistSettings:
+-      type: object
+-      required: [entries, trusted_proxy_count]
+-      properties:
+-        entries:
+-          type: array
+-          items:
+-            $ref: "#/components/schemas/IpAllowEntry"
+-        trusted_proxy_count:
+-          type: integer
+-
+-    ServerIpAllowlistOverrideSettings:
+-      type: object
+-      required: [entries, trusted_proxy_count]
+-      properties:
+-        entries:
+-          type: ["array", "null"]
+-          items:
+-            $ref: "#/components/schemas/IpAllowEntry"
+-        trusted_proxy_count:
+-          type: ["integer", "null"]
+-
+-    IpAllowEntry:
+-      oneOf:
+-        - $ref: "#/components/schemas/LiteralIpAllowEntry"
+-        - $ref: "#/components/schemas/GitHubMetaHooksEntry"
+-
+-    LiteralIpAllowEntry:
+-      type: object
+-      required: [Literal]
+-      properties:
+-        Literal:
+-          type: string
+-
+-    GitHubMetaHooksEntry:
+-      type: string
+-      enum: [GitHubMetaHooks]
+-
+     ServerSandboxSettings:
+       type: object
+       required: [providers]
+@@ -12571,16 +12530,12 @@ components:
+ 
+     IntegrationWebhooksSettings:
+       type: object
+-      required: [strategy, ip_allowlist]
++      required: [strategy]
+       properties:
+         strategy:
+           oneOf:
+             - $ref: "#/components/schemas/WebhookStrategy"
+             - type: "null"
+-        ip_allowlist:
+-          oneOf:
+-            - $ref: "#/components/schemas/ServerIpAllowlistOverrideSettings"
+-            - type: "null"
+ 
+     WebhookStrategy:
+       type: string
+diff --git a/docs/public/changelog/2026-04-19.mdx b/docs/public/changelog/2026-04-19.mdx
+index 93b138b11..750482f49 100644
+--- a/docs/public/changelog/2026-04-19.mdx
++++ b/docs/public/changelog/2026-04-19.mdx
+@@ -51,7 +51,7 @@ The install flow is also available in the embedded web app, so Docker and hosted
+ - New `GET /api/v1/runs/{id}/files` endpoint returns paginated run file data and diff metadata
+ - New `POST /api/v1/runs/{id}/archive` and `POST /api/v1/runs/{id}/unarchive` endpoints manage archived terminal runs
+ - `GET /api/v1/runs` accepts `include_archived=true` for listing archived runs
+-- GitHub webhook handling now supports explicit source IP allowlisting with GitHub webhook range refresh
++- GitHub webhook handling added explicit source IP allowlisting with GitHub webhook range refresh (removed on 2026-05-27)
+ </Accordion>
+ 
+ <Accordion title="CLI">
+diff --git a/docs/public/changelog/2026-05-27.mdx b/docs/public/changelog/2026-05-27.mdx
+new file mode 100644
+index 000000000..fb81d346a
+--- /dev/null
++++ b/docs/public/changelog/2026-05-27.mdx
+@@ -0,0 +1,23 @@
++---
++title: "Inbound IP allowlisting removed"
++date: "2026-05-27"
++---
++
++## Inbound IP allowlisting removed
++
++Fabro no longer includes an in-process inbound source-IP allowlist for the web UI, API, static assets, or GitHub webhook routes. The former `[server.ip_allowlist]` setting and GitHub webhook overlay at `[server.integrations.github.webhooks.ip_allowlist]` have been removed from server configuration and the settings API.
++
++This is a hard removal: existing `settings.toml` files that still contain those keys now fail as unknown fields. Move any source-IP restrictions to deployment-layer controls such as a reverse proxy, firewall, VPN, Tailscale ACLs, Kubernetes ingress policy, cloud load balancer, or platform ingress.
++
++GitHub webhook HMAC signature verification is unchanged. GitHub username allowlists and sandbox egress CIDR allow lists are also unchanged.
++
++## More
++
++<Accordion title="Breaking changes">
++- Removed `server.ip_allowlist` and GitHub webhook `ip_allowlist` from `GET /api/v1/settings` responses and generated API clients
++- Removed server config support for `[server.ip_allowlist]` and `[server.integrations.github.webhooks.ip_allowlist]`
++</Accordion>
++
++<Accordion title="Security">
++- Fabro no longer performs runtime source-IP filtering; enforce inbound network restrictions upstream
++</Accordion>
+diff --git a/lib/crates/fabro-api/build.rs b/lib/crates/fabro-api/build.rs
+index 185435b66..88d465128 100644
+--- a/lib/crates/fabro-api/build.rs
++++ b/lib/crates/fabro-api/build.rs
+@@ -244,21 +244,6 @@ fn main() {
+             "fabro_types::settings::server::ServerAuthGithubSettings",
+             &[],
+         ),
+-        (
+-            "ServerIpAllowlistSettings",
+-            "fabro_types::settings::server::ServerIpAllowlistSettings",
+-            &[],
+-        ),
+-        (
+-            "ServerIpAllowlistOverrideSettings",
+-            "fabro_types::settings::server::ServerIpAllowlistOverrideSettings",
+-            &[],
+-        ),
+-        (
+-            "IpAllowEntry",
+-            "fabro_types::settings::server::IpAllowEntry",
+-            &[],
+-        ),
+         (
+             "ServerSandboxSettings",
+             "fabro_types::settings::server::ServerSandboxSettings",
+diff --git a/lib/crates/fabro-api/src/lib.rs b/lib/crates/fabro-api/src/lib.rs
+index a3dcd6867..3837275f0 100644
+--- a/lib/crates/fabro-api/src/lib.rs
++++ b/lib/crates/fabro-api/src/lib.rs
+@@ -26,9 +26,8 @@ pub mod types {
+     pub use fabro_types::settings::ServerNamespace;
+     pub use fabro_types::settings::server::{
+         GithubIntegrationSettings, GithubIntegrationStrategy, IntegrationWebhooksSettings,
+-        IpAllowEntry, LogDestination, ObjectStoreSettings, ServerApiSettings,
+-        ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings,
+-        ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
++        LogDestination, ObjectStoreSettings, ServerApiSettings, ServerArtifactsSettings,
++        ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings, ServerIntegrationsSettings,
+         ServerListenSettings, ServerLoggingSettings, ServerSandboxProviderSettings,
+         ServerSandboxProvidersSettings, ServerSandboxSettings, ServerSchedulerSettings,
+         ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
+diff --git a/lib/crates/fabro-api/tests/server_settings_round_trip.rs b/lib/crates/fabro-api/tests/server_settings_round_trip.rs
+index a7421641b..d96002d8f 100644
+--- a/lib/crates/fabro-api/tests/server_settings_round_trip.rs
++++ b/lib/crates/fabro-api/tests/server_settings_round_trip.rs
+@@ -64,6 +64,9 @@ strategy = "app"
+ app_id = "12345"
+ client_id = "Iv1.abcdef"
+ slug = "fabro-dev"
++
++[server.integrations.github.webhooks]
++strategy = "tailscale_funnel"
+ "#,
+     )
+     .expect("settings should resolve");
+@@ -85,6 +88,16 @@ slug = "fabro-dev"
+         json["server"]["sandbox"]["providers"]["daytona"]["enabled"],
+         false
+     );
++    assert!(
++        json["server"].get("ip_allowlist").is_none(),
++        "server settings API should not expose removed IP allowlist settings"
++    );
++    assert!(
++        json["server"]["integrations"]["github"]["webhooks"]
++            .get("ip_allowlist")
++            .is_none(),
++        "github webhook settings API should not expose removed IP allowlist settings"
++    );
+     assert!(json.get("features").is_none());
+ 
+     let round_trip: ApiServerSettings =
+diff --git a/lib/crates/fabro-cli/tests/it/support/auth_harness.rs b/lib/crates/fabro-cli/tests/it/support/auth_harness.rs
+index e018ff988..cfaf06fd0 100644
+--- a/lib/crates/fabro-cli/tests/it/support/auth_harness.rs
++++ b/lib/crates/fabro-cli/tests/it/support/auth_harness.rs
+@@ -21,7 +21,6 @@ use chrono::{Duration as ChronoDuration, Utc};
+ use fabro_client::{AuthEntry, AuthStore, DevTokenEntry, ServerTarget};
+ use fabro_config::{RunLayer, ServerSettingsBuilder};
+ use fabro_server::auth::GithubEndpoints;
+-use fabro_server::ip_allowlist::IpAllowlistConfig;
+ use fabro_server::jwt_auth::resolve_auth_mode_with_lookup;
+ use fabro_server::server::{RouterOptions, build_router_with_options};
+ use fabro_server::test_support::TestAppStateBuilder;
+@@ -92,21 +91,15 @@ impl RealAuthHarness {
+             .vault_entries([("GITHUB_APP_CLIENT_SECRET", github_client_secret.as_str())])
+             .build();
+         let github_base = github_base_url(&twin.base_url);
+-        let router = build_router_with_options(
+-            state,
+-            &auth_mode,
+-            Arc::new(IpAllowlistConfig::default()),
+-            RouterOptions {
+-                web_enabled:                 true,
+-                github_endpoints:            Some(Arc::new(GithubEndpoints::with_bases(
+-                    github_base.clone(),
+-                    github_base,
+-                ))),
+-                github_webhook_ip_allowlist: None,
+-                static_asset_root:           None,
+-                watch_web:                   false,
+-            },
+-        );
++        let router = build_router_with_options(state, &auth_mode, RouterOptions {
++            web_enabled:       true,
++            github_endpoints:  Some(Arc::new(GithubEndpoints::with_bases(
++                github_base.clone(),
++                github_base,
++            ))),
++            static_asset_root: None,
++            watch_web:         false,
++        });
+ 
+         let api_requests = ListenerRequestLog::default();
+         let api_server = RunningHttpServer::start(api_listener, router, &api_requests);
+diff --git a/lib/crates/fabro-config/src/layers/mod.rs b/lib/crates/fabro-config/src/layers/mod.rs
+index 6c425c33d..b3aaac0ac 100644
+--- a/lib/crates/fabro-config/src/layers/mod.rs
++++ b/lib/crates/fabro-config/src/layers/mod.rs
+@@ -41,10 +41,10 @@ pub use run::{
+ pub use server::{
+     GithubIntegrationLayer, IntegrationWebhooksLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer,
+     ServerApiLayer, ServerArtifactsLayer, ServerAuthGithubLayer, ServerAuthLayer,
+-    ServerIntegrationsLayer, ServerIpAllowlistLayer, ServerIpAllowlistOverrideLayer, ServerLayer,
+-    ServerListenLayer, ServerLoggingLayer, ServerSandboxLayer, ServerSandboxProviderLayer,
+-    ServerSandboxProvidersLayer, ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer,
+-    ServerWebLayer, SlackIntegrationLayer,
++    ServerIntegrationsLayer, ServerLayer, ServerListenLayer, ServerLoggingLayer,
++    ServerSandboxLayer, ServerSandboxProviderLayer, ServerSandboxProvidersLayer,
++    ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer,
++    SlackIntegrationLayer,
+ };
+ pub use settings::SettingsLayer;
+ pub use workflow::WorkflowLayer;
+diff --git a/lib/crates/fabro-config/src/layers/server.rs b/lib/crates/fabro-config/src/layers/server.rs
+index 62939a0e3..b68277d9e 100644
+--- a/lib/crates/fabro-config/src/layers/server.rs
++++ b/lib/crates/fabro-config/src/layers/server.rs
+@@ -21,8 +21,6 @@ pub struct ServerLayer {
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub auth:         Option<ServerAuthLayer>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub ip_allowlist: Option<ServerIpAllowlistLayer>,
+-    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub sandbox:      Option<ServerSandboxLayer>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub storage:      Option<ServerStorageLayer>,
+@@ -93,24 +91,6 @@ pub struct ServerAuthGithubLayer {
+     pub allowed_usernames: Vec<String>,
+ }
+ 
+-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
+-#[serde(deny_unknown_fields)]
+-pub struct ServerIpAllowlistLayer {
+-    #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub entries:             Option<Vec<String>>,
+-    #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub trusted_proxy_count: Option<u32>,
+-}
+-
+-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
+-#[serde(deny_unknown_fields)]
+-pub struct ServerIpAllowlistOverrideLayer {
+-    #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub entries:             Option<Vec<String>>,
+-    #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub trusted_proxy_count: Option<u32>,
+-}
+-
+ /// `[server.sandbox]` — server-owned sandbox provider policy.
+ #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
+ #[serde(deny_unknown_fields)]
+@@ -261,7 +241,5 @@ pub struct SlackIntegrationLayer {
+ #[serde(deny_unknown_fields)]
+ pub struct IntegrationWebhooksLayer {
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub strategy:     Option<WebhookStrategy>,
+-    #[serde(default, skip_serializing_if = "Option::is_none")]
+-    pub ip_allowlist: Option<ServerIpAllowlistOverrideLayer>,
++    pub strategy: Option<WebhookStrategy>,
+ }
+diff --git a/lib/crates/fabro-config/src/lib.rs b/lib/crates/fabro-config/src/lib.rs
+index 9d53800b7..ccabacd0f 100644
+--- a/lib/crates/fabro-config/src/lib.rs
++++ b/lib/crates/fabro-config/src/lib.rs
+@@ -55,11 +55,10 @@ pub use layers::{
+     RunGitLayer, RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer, RunLayer,
+     RunMetaBranchLayer, RunModelControlsLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer,
+     RunRunBranchLayer, RunScmLayer, ScmGitHubLayer, ServerApiLayer, ServerArtifactsLayer,
+-    ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
+-    ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerLoggingLayer,
+-    ServerSandboxLayer, ServerSandboxProviderLayer, ServerSandboxProvidersLayer,
+-    ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer, SettingsLayer,
+-    SlackIntegrationLayer, StickyMap, StringOrSplice, WorkflowLayer,
++    ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerLayer,
++    ServerListenLayer, ServerLoggingLayer, ServerSandboxLayer, ServerSandboxProviderLayer,
++    ServerSandboxProvidersLayer, ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer,
++    ServerWebLayer, SettingsLayer, SlackIntegrationLayer, StickyMap, StringOrSplice, WorkflowLayer,
+ };
+ pub use logging::{resolve_log_destination, resolve_log_destination_with_env};
+ pub use parse::ParseError;
+diff --git a/lib/crates/fabro-config/src/resolve/server.rs b/lib/crates/fabro-config/src/resolve/server.rs
+index cfdf08c7a..9a2538295 100644
+--- a/lib/crates/fabro-config/src/resolve/server.rs
++++ b/lib/crates/fabro-config/src/resolve/server.rs
+@@ -1,9 +1,8 @@
+ use fabro_types::settings::InterpString;
+ use fabro_types::settings::server::{
+     GithubIntegrationSettings, GithubIntegrationStrategy, IntegrationWebhooksSettings,
+-    IpAllowEntry, ObjectStoreProvider, ObjectStoreSettings, ServerApiSettings,
+-    ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings,
+-    ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
++    ObjectStoreProvider, ObjectStoreSettings, ServerApiSettings, ServerArtifactsSettings,
++    ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings, ServerIntegrationsSettings,
+     ServerListenSettings, ServerLoggingSettings, ServerNamespace, ServerSandboxProviderSettings,
+     ServerSandboxProvidersSettings, ServerSandboxSettings, ServerSchedulerSettings,
+     ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
+@@ -15,9 +14,9 @@ use super::{ResolveError, default_interp, parse_socket_addr, require_interp};
+ use crate::user::default_storage_dir;
+ use crate::{
+     IntegrationWebhooksLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer, ServerApiLayer,
+-    ServerArtifactsLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
+-    ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerSandboxLayer,
+-    ServerSandboxProviderLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer,
++    ServerArtifactsLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerLayer, ServerListenLayer,
++    ServerSandboxLayer, ServerSandboxProviderLayer, ServerSlateDbLayer, ServerStorageLayer,
++    ServerWebLayer,
+ };
+ 
+ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> ServerNamespace {
+@@ -25,10 +24,7 @@ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> Se
+     let listen = resolve_listen(layer.listen.as_ref(), errors);
+     let web = resolve_web(layer.web.as_ref());
+     let auth = resolve_auth(layer.auth.as_ref(), errors);
+-    let ip_allowlist = resolve_ip_allowlist(layer.ip_allowlist.as_ref(), errors);
+-    let integrations = resolve_integrations(layer.integrations.as_ref(), errors);
+-    validate_ip_allowlist_for_listen(&listen, &ip_allowlist, errors);
+-    validate_github_webhook_ip_allowlist_for_listen(&listen, &ip_allowlist, &integrations, errors);
++    let integrations = resolve_integrations(layer.integrations.as_ref());
+     validate_github_webhook_strategy(&integrations, layer.api.as_ref(), errors);
+ 
+     ServerNamespace {
+@@ -38,7 +34,6 @@ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> Se
+         },
+         web,
+         auth,
+-        ip_allowlist,
+         sandbox: resolve_sandbox(layer.sandbox.as_ref()),
+         storage: storage.clone(),
+         artifacts: resolve_artifacts(layer.artifacts.as_ref(), &storage.root, errors),
+@@ -176,166 +171,6 @@ fn resolve_auth(
+     }
+ }
+ 
+-fn resolve_ip_allowlist(
+-    layer: Option<&ServerIpAllowlistLayer>,
+-    errors: &mut Vec<ResolveError>,
+-) -> ServerIpAllowlistSettings {
+-    let entries = layer
+-        .and_then(|allowlist| allowlist.entries.as_ref())
+-        .map(|entries| {
+-            resolve_ip_allow_entries(entries, "server.ip_allowlist.entries", false, errors)
+-        })
+-        .unwrap_or_default();
+-
+-    ServerIpAllowlistSettings {
+-        entries,
+-        trusted_proxy_count: layer
+-            .and_then(|allowlist| allowlist.trusted_proxy_count)
+-            .unwrap_or(0),
+-    }
+-}
+-
+-fn effective_ip_allowlist_settings(
+-    global: &ServerIpAllowlistSettings,
+-    overlay: Option<&ServerIpAllowlistOverrideSettings>,
+-) -> ServerIpAllowlistSettings {
+-    let Some(overlay) = overlay else {
+-        return global.clone();
+-    };
+-
+-    ServerIpAllowlistSettings {
+-        entries:             overlay
+-            .entries
+-            .clone()
+-            .unwrap_or_else(|| global.entries.clone()),
+-        trusted_proxy_count: overlay
+-            .trusted_proxy_count
+-            .unwrap_or(global.trusted_proxy_count),
+-    }
+-}
+-
+-fn resolve_ip_allowlist_override(
+-    layer: Option<&ServerIpAllowlistOverrideLayer>,
+-    path: &str,
+-    allow_github_meta_hooks: bool,
+-    errors: &mut Vec<ResolveError>,
+-) -> Option<ServerIpAllowlistOverrideSettings> {
+-    layer.map(|allowlist| ServerIpAllowlistOverrideSettings {
+-        entries:             allowlist.entries.as_ref().map(|entries| {
+-            resolve_ip_allow_entries(
+-                entries,
+-                &format!("{path}.entries"),
+-                allow_github_meta_hooks,
+-                errors,
+-            )
+-        }),
+-        trusted_proxy_count: allowlist.trusted_proxy_count,
+-    })
+-}
+-
+-fn resolve_ip_allow_entries(
+-    entries: &[String],
+-    path: &str,
+-    allow_github_meta_hooks: bool,
+-    errors: &mut Vec<ResolveError>,
+-) -> Vec<IpAllowEntry> {
+-    entries
+-        .iter()
+-        .enumerate()
+-        .filter_map(|(index, entry)| {
+-            resolve_ip_allow_entry(
+-                entry,
+-                &format!("{path}[{index}]"),
+-                allow_github_meta_hooks,
+-                errors,
+-            )
+-        })
+-        .collect()
+-}
+-
+-fn resolve_ip_allow_entry(
+-    entry: &str,
+-    path: &str,
+-    allow_github_meta_hooks: bool,
+-    errors: &mut Vec<ResolveError>,
+-) -> Option<IpAllowEntry> {
+-    if entry == IpAllowEntry::GITHUB_META_HOOKS_KEYWORD {
+-        if allow_github_meta_hooks {
+-            return Some(IpAllowEntry::GitHubMetaHooks);
+-        }
+-
+-        errors.push(ResolveError::Invalid {
+-            path:   path.to_string(),
+-            reason: format!(
+-                "`{}` is only valid in server.integrations.github.webhooks.ip_allowlist.entries",
+-                IpAllowEntry::GITHUB_META_HOOKS_KEYWORD
+-            ),
+-        });
+-        return None;
+-    }
+-
+-    match IpAllowEntry::parse_literal(entry) {
+-        Ok(parsed) => Some(parsed),
+-        Err(reason) => {
+-            errors.push(ResolveError::ParseFailure {
+-                path: path.to_string(),
+-                reason,
+-            });
+-            None
+-        }
+-    }
+-}
+-
+-fn validate_ip_allowlist_for_listen(
+-    listen: &ServerListenSettings,
+-    ip_allowlist: &ServerIpAllowlistSettings,
+-    errors: &mut Vec<ResolveError>,
+-) {
+-    if matches!(listen, ServerListenSettings::Unix { .. })
+-        && !ip_allowlist.entries.is_empty()
+-        && ip_allowlist.trusted_proxy_count == 0
+-    {
+-        errors.push(ResolveError::Invalid {
+-            path: "server.ip_allowlist.trusted_proxy_count".to_string(),
+-            reason: "must be greater than 0 when using a Unix socket listener with a non-empty IP allowlist".to_string(),
+-        });
+-    }
+-}
+-
+-fn validate_github_webhook_ip_allowlist_for_listen(
+-    listen: &ServerListenSettings,
+-    global_ip_allowlist: &ServerIpAllowlistSettings,
+-    integrations: &ServerIntegrationsSettings,
+-    errors: &mut Vec<ResolveError>,
+-) {
+-    let Some(overlay) = integrations
+-        .github
+-        .webhooks
+-        .as_ref()
+-        .and_then(|webhooks| webhooks.ip_allowlist.as_ref())
+-    else {
+-        return;
+-    };
+-
+-    let effective = effective_ip_allowlist_settings(global_ip_allowlist, Some(overlay));
+-    if effective == *global_ip_allowlist {
+-        return;
+-    }
+-
+-    if matches!(listen, ServerListenSettings::Unix { .. })
+-        && !effective.entries.is_empty()
+-        && effective.trusted_proxy_count == 0
+-    {
+-        errors.push(ResolveError::Invalid {
+-            path: "server.integrations.github.webhooks.ip_allowlist.trusted_proxy_count"
+-                .to_string(),
+-            reason:
+-                "must be greater than 0 when using a Unix socket listener with a non-empty GitHub webhook IP allowlist"
+-                    .to_string(),
+-        });
+-    }
+-}
+-
+ fn validate_github_webhook_strategy(
+     integrations: &ServerIntegrationsSettings,
+     api_layer: Option<&ServerApiLayer>,
+@@ -476,10 +311,7 @@ fn object_store_default_root(storage_root: &InterpString, domain: &str) -> Inter
+     InterpString::parse(&format!("{root}/objects/{domain}"))
+ }
+ 
+-fn resolve_integrations(
+-    layer: Option<&ServerIntegrationsLayer>,
+-    errors: &mut Vec<ResolveError>,
+-) -> ServerIntegrationsSettings {
++fn resolve_integrations(layer: Option<&ServerIntegrationsLayer>) -> ServerIntegrationsSettings {
+     ServerIntegrationsSettings {
+         github: layer
+             .and_then(|integrations| integrations.github.as_ref())
+@@ -489,9 +321,7 @@ fn resolve_integrations(
+                 app_id:    github.app_id.clone(),
+                 client_id: github.client_id.clone(),
+                 slug:      github.slug.clone(),
+-                webhooks:  github.webhooks.as_ref().map(|webhooks| {
+-                    resolve_github_webhooks(webhooks, "server.integrations.github.webhooks", errors)
+-                }),
++                webhooks:  github.webhooks.as_ref().map(resolve_github_webhooks),
+             })
+             .unwrap_or_default(),
+         slack:  layer
+@@ -504,18 +334,8 @@ fn resolve_integrations(
+     }
+ }
+ 
+-fn resolve_github_webhooks(
+-    layer: &IntegrationWebhooksLayer,
+-    path: &str,
+-    errors: &mut Vec<ResolveError>,
+-) -> IntegrationWebhooksSettings {
++fn resolve_github_webhooks(layer: &IntegrationWebhooksLayer) -> IntegrationWebhooksSettings {
+     IntegrationWebhooksSettings {
+-        strategy:     layer.strategy,
+-        ip_allowlist: resolve_ip_allowlist_override(
+-            layer.ip_allowlist.as_ref(),
+-            &format!("{path}.ip_allowlist"),
+-            true,
+-            errors,
+-        ),
++        strategy: layer.strategy,
+     }
+ }
+diff --git a/lib/crates/fabro-config/src/tests/resolve_server.rs b/lib/crates/fabro-config/src/tests/resolve_server.rs
+index 5a8d38c35..be646e73c 100644
+--- a/lib/crates/fabro-config/src/tests/resolve_server.rs
++++ b/lib/crates/fabro-config/src/tests/resolve_server.rs
+@@ -5,7 +5,7 @@
+ 
+ use fabro_types::settings::InterpString;
+ use fabro_types::settings::server::{
+-    GithubIntegrationStrategy, IpAllowEntry, LogDestination, ObjectStoreSettings, ServerAuthMethod,
++    GithubIntegrationStrategy, LogDestination, ObjectStoreSettings, ServerAuthMethod,
+     ServerListenSettings, ServerNamespace,
+ };
+ use fabro_util::Home;
+@@ -427,92 +427,37 @@ disk_cache = true
+ }
+ 
+ #[test]
+-fn resolves_empty_ip_allowlist_by_default() {
+-    let settings = resolve_server(&empty_settings_with_auth_methods());
+-
+-    assert!(settings.ip_allowlist.entries.is_empty());
+-    assert_eq!(settings.ip_allowlist.trusted_proxy_count, 0);
+-}
+-
+-#[test]
+-fn resolves_global_ip_allowlist_entries_and_proxy_count() {
+-    let file = parse(
+-        r#"
+-_version = 1
+-
+-[server.ip_allowlist]
+-entries = ["10.0.0.0/8", "2001:db8::/32", "192.0.2.42"]
+-trusted_proxy_count = 2
+-"#,
+-    );
+-
+-    let settings = resolve_server(&file);
+-
+-    assert_eq!(settings.ip_allowlist.entries, vec![
+-        IpAllowEntry::parse_literal("10.0.0.0/8").unwrap(),
+-        IpAllowEntry::parse_literal("2001:db8::/32").unwrap(),
+-        IpAllowEntry::parse_literal("192.0.2.42").unwrap(),
+-    ]);
+-    assert_eq!(settings.ip_allowlist.trusted_proxy_count, 2);
+-}
+-
+-#[test]
+-fn resolves_github_webhook_ip_allowlist_overlay_with_inheritance() {
+-    let file = parse(
+-        r#"
++fn parsing_rejects_removed_server_ip_allowlist() {
++    let err = r#"
+ _version = 1
+ 
+ [server.ip_allowlist]
+ entries = ["10.0.0.0/8"]
+-trusted_proxy_count = 2
+-
+-[server.integrations.github.webhooks.ip_allowlist]
+-entries = ["github_meta_hooks"]
+-"#,
+-    );
+-
+-    let settings = resolve_server(&file);
+-    let webhook_allowlist = settings
+-        .integrations
+-        .github
+-        .webhooks
+-        .expect("github webhooks settings should resolve")
+-        .ip_allowlist
+-        .expect("github webhook ip allowlist overlay should resolve");
++"#
++    .parse::<SettingsLayer>()
++    .expect_err("removed server IP allowlist setting should be rejected");
+ 
+-    assert_eq!(
+-        webhook_allowlist.entries,
+-        Some(vec![IpAllowEntry::GitHubMetaHooks])
++    assert!(
++        err.to_string().contains("ip_allowlist"),
++        "unexpected error: {err}"
+     );
+-    assert_eq!(webhook_allowlist.trusted_proxy_count, None);
+ }
+ 
+ #[test]
+-fn resolves_github_webhook_ip_allowlist_override_proxy_count() {
+-    let file = parse(
+-        r#"
++fn parsing_rejects_removed_github_webhook_ip_allowlist() {
++    let err = r#"
+ _version = 1
+ 
+-[server.ip_allowlist]
+-entries = ["10.0.0.0/8"]
+-trusted_proxy_count = 2
+-
+ [server.integrations.github.webhooks.ip_allowlist]
+-trusted_proxy_count = 3
+-"#,
+-    );
++entries = ["github_meta_hooks"]
++"#
++    .parse::<SettingsLayer>()
++    .expect_err("removed github webhook IP allowlist setting should be rejected");
+ 
+-    let settings = resolve_server(&file);
+-    let webhook_allowlist = settings
+-        .integrations
+-        .github
+-        .webhooks
+-        .expect("github webhooks settings should resolve")
+-        .ip_allowlist
+-        .expect("github webhook ip allowlist overlay should resolve");
+-
+-    assert_eq!(webhook_allowlist.entries, None);
+-    assert_eq!(webhook_allowlist.trusted_proxy_count, Some(3));
++    assert!(
++        err.to_string().contains("ip_allowlist"),
++        "unexpected error: {err}"
++    );
+ }
+ 
+ #[test]
+@@ -558,91 +503,6 @@ strategy = "tailscale_funnel"
+     assert!(rendered.contains("server.integrations.github.app_id"));
+ }
+ 
+-#[test]
+-fn rejects_invalid_ip_allowlist_entry() {
+-    let file = parse(
+-        r#"
+-_version = 1
+-
+-[server.ip_allowlist]
+-entries = ["10.0.0.0/33"]
+-"#,
+-    );
+-
+-    let rendered = render_resolve_error_lines(
+-        ServerSettingsBuilder::from_layer(&file).expect_err("invalid CIDR should fail"),
+-    );
+-
+-    assert!(rendered.contains("server.ip_allowlist.entries[0]"));
+-}
+-
+-#[test]
+-fn rejects_github_meta_hooks_in_global_scope() {
+-    let file = parse(
+-        r#"
+-_version = 1
+-
+-[server.ip_allowlist]
+-entries = ["github_meta_hooks"]
+-"#,
+-    );
+-
+-    let rendered = render_resolve_error_lines(
+-        ServerSettingsBuilder::from_layer(&file)
+-            .expect_err("github_meta_hooks should be rejected outside github webhooks"),
+-    );
+-
+-    assert!(rendered.contains("server.ip_allowlist.entries[0]"));
+-}
+-
+-#[test]
+-fn rejects_unix_socket_allowlist_without_trusted_proxy() {
+-    let file = parse(
+-        r#"
+-_version = 1
+-
+-[server.listen]
+-type = "unix"
+-path = "/tmp/fabro.sock"
+-
+-[server.ip_allowlist]
+-entries = ["10.0.0.0/8"]
+-"#,
+-    );
+-
+-    let rendered = render_resolve_error_lines(
+-        ServerSettingsBuilder::from_layer(&file)
+-            .expect_err("unix allowlist without trusted proxies should fail"),
+-    );
+-
+-    assert!(rendered.contains("server.ip_allowlist.trusted_proxy_count"));
+-}
+-
+-#[test]
+-fn rejects_unix_socket_github_webhook_allowlist_without_trusted_proxy() {
+-    let file = parse(
+-        r#"
+-_version = 1
+-
+-[server.listen]
+-type = "unix"
+-path = "/tmp/fabro.sock"
+-
+-[server.integrations.github.webhooks.ip_allowlist]
+-entries = ["github_meta_hooks"]
+-"#,
+-    );
+-
+-    let rendered = render_resolve_error_lines(
+-        ServerSettingsBuilder::from_layer(&file)
+-            .expect_err("unix github webhook allowlist without trusted proxies should fail"),
+-    );
+-
+-    assert!(
+-        rendered.contains("server.integrations.github.webhooks.ip_allowlist.trusted_proxy_count")
+-    );
+-}
+-
+ #[test]
+ fn resolve_storage_root_defaults_with_minimal_server_auth_methods() {
+     let settings = ServerSettingsBuilder::from_layer(&empty_settings_with_auth_methods())
+diff --git a/lib/crates/fabro-server/Cargo.toml b/lib/crates/fabro-server/Cargo.toml
+index 89611b971..c36eee94a 100644
+--- a/lib/crates/fabro-server/Cargo.toml
++++ b/lib/crates/fabro-server/Cargo.toml
+@@ -92,7 +92,6 @@ semver.workspace = true
+ walkdir.workspace = true
+ multer = "3"
+ thiserror.workspace = true
+-ipnet = "2.11.0"
+ percent-encoding.workspace = true
+ url = "2"
+ zeroize.workspace = true
+diff --git a/lib/crates/fabro-server/src/auth/translate.rs b/lib/crates/fabro-server/src/auth/translate.rs
+index b1b8d8292..8d0f57cf5 100644
+--- a/lib/crates/fabro-server/src/auth/translate.rs
++++ b/lib/crates/fabro-server/src/auth/translate.rs
+@@ -546,12 +546,7 @@ methods = ["dev-token"]
+     #[tokio::test]
+     async fn full_router_rejects_demo_cookie_without_credentials() {
+         let state = test_state();
+-        let app = server::build_router_with_options(
+-            state,
+-            &auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+-            RouterOptions::default(),
+-        );
++        let app = server::build_router_with_options(state, &auth_mode(), RouterOptions::default());
+ 
+         let response = app
+             .oneshot(
+@@ -575,7 +570,6 @@ methods = ["dev-token"]
+         let app = server::build_router_with_options(
+             Arc::clone(&state),
+             &auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+             RouterOptions::default(),
+         );
+ 
+@@ -601,12 +595,7 @@ methods = ["dev-token"]
+     #[tokio::test]
+     async fn full_router_does_not_demo_dispatch_auth_routes() {
+         let state = test_state();
+-        let app = server::build_router_with_options(
+-            state,
+-            &auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+-            RouterOptions::default(),
+-        );
++        let app = server::build_router_with_options(state, &auth_mode(), RouterOptions::default());
+ 
+         let response = app
+             .oneshot(
+@@ -630,18 +619,12 @@ methods = ["dev-token"]
+     #[tokio::test]
+     async fn full_router_accepts_dev_token_bearer_when_web_is_disabled() {
+         let state = test_state();
+-        let app = server::build_router_with_options(
+-            state,
+-            &auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+-            RouterOptions {
+-                web_enabled:                 false,
+-                github_endpoints:            None,
+-                github_webhook_ip_allowlist: None,
+-                static_asset_root:           None,
+-                watch_web:                   false,
+-            },
+-        );
++        let app = server::build_router_with_options(state, &auth_mode(), RouterOptions {
++            web_enabled:       false,
++            github_endpoints:  None,
++            static_asset_root: None,
++            watch_web:         false,
++        });
+ 
+         let response = app
+             .oneshot(
+diff --git a/lib/crates/fabro-server/src/ip_allowlist.rs b/lib/crates/fabro-server/src/ip_allowlist.rs
+deleted file mode 100644
+index 2fe3fc6ec..000000000
+--- a/lib/crates/fabro-server/src/ip_allowlist.rs
++++ /dev/null
+@@ -1,609 +0,0 @@
+-use std::net::{IpAddr, SocketAddr};
+-use std::path::{Path, PathBuf};
+-use std::sync::Arc;
+-
+-use anyhow::{Context, Result, anyhow};
+-use axum::extract::{ConnectInfo, Request, State};
+-use axum::http::Request as HttpRequest;
+-use axum::middleware::Next;
+-use axum::response::{IntoResponse, Response};
+-use fabro_types::settings::server::{
+-    IpAllowEntry, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
+-};
+-use ipnet::IpNet;
+-use serde::{Deserialize, Serialize};
+-use tokio::fs;
+-use tracing::warn;
+-
+-use crate::ApiError;
+-
+-const GITHUB_META_URL: &str = "https://api.github.com/meta";
+-
+-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+-pub struct IpAllowlist {
+-    entries: Vec<IpNet>,
+-}
+-
+-impl IpAllowlist {
+-    pub fn new(entries: Vec<IpNet>) -> Self {
+-        Self { entries }
+-    }
+-
+-    pub fn is_empty(&self) -> bool {
+-        self.entries.is_empty()
+-    }
+-
+-    pub fn contains(&self, ip: &IpAddr) -> bool {
+-        let ip = normalize_ip(*ip);
+-        self.entries.iter().any(|entry| entry.contains(&ip))
+-    }
+-}
+-
+-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+-pub struct IpAllowlistConfig {
+-    pub allowlist:           IpAllowlist,
+-    pub trusted_proxy_count: u32,
+-}
+-
+-#[derive(Clone)]
+-pub struct GitHubMetaResolver {
+-    client:     HttpClient,
+-    meta_url:   String,
+-    cache_path: PathBuf,
+-}
+-
+-impl GitHubMetaResolver {
+-    pub fn new(client: HttpClient, meta_url: String, cache_path: PathBuf) -> Self {
+-        Self {
+-            client,
+-            meta_url,
+-            cache_path,
+-        }
+-    }
+-
+-    pub fn from_cache_dir(cache_dir: &Path) -> Result<Self> {
+-        Ok(Self::new(
+-            fabro_http::http_client().context("building GitHub meta HTTP client")?,
+-            GITHUB_META_URL.to_string(),
+-            github_meta_cache_path(cache_dir),
+-        ))
+-    }
+-
+-    async fn resolve_hooks(&self) -> Result<Vec<IpNet>> {
+-        let cached = self.load_cache().await?;
+-        let mut request = self
+-            .client
+-            .get(&self.meta_url)
+-            .header("Accept", "application/vnd.github+json")
+-            .header("User-Agent", "fabro");
+-
+-        if let Some(etag) = cached.as_ref().and_then(|cache| cache.etag.as_deref()) {
+-            request = request.header("If-None-Match", etag);
+-        }
+-
+-        let response = match request.send().await {
+-            Ok(response) => response,
+-            Err(error) => {
+-                return self.cached_hooks_or_error(
+-                    cached.as_ref(),
+-                    anyhow::Error::new(error).context("fetching GitHub /meta"),
+-                );
+-            }
+-        };
+-        if response.status() == fabro_http::StatusCode::NOT_MODIFIED {
+-            let cached = cached.ok_or_else(|| {
+-                anyhow!("GitHub /meta returned 304 Not Modified but no usable cache was present")
+-            })?;
+-            return parse_ip_nets(&cached.hooks);
+-        }
+-
+-        if !response.status().is_success() {
+-            return self.cached_hooks_or_error(
+-                cached.as_ref(),
+-                anyhow!("GitHub /meta returned {}", response.status()),
+-            );
+-        }
+-
+-        let etag = response
+-            .headers()
+-            .get("etag")
+-            .and_then(|value| value.to_str().ok())
+-            .map(ToOwned::to_owned);
+-        let payload: GitHubMetaResponse = match response.json().await {
+-            Ok(payload) => payload,
+-            Err(error) => {
+-                return self.cached_hooks_or_error(
+-                    cached.as_ref(),
+-                    anyhow::Error::new(error).context("parsing GitHub /meta response"),
+-                );
+-            }
+-        };
+-        let hooks = match parse_ip_nets(&payload.hooks) {
+-            Ok(hooks) => hooks,
+-            Err(error) => return self.cached_hooks_or_error(cached.as_ref(), error),
+-        };
+-        self.store_cache(&GitHubMetaCache {
+-            etag,
+-            hooks: payload.hooks,
+-        })
+-        .await?;
+-        Ok(hooks)
+-    }
+-
+-    async fn load_cache(&self) -> Result<Option<GitHubMetaCache>> {
+-        match fs::read(&self.cache_path).await {
+-            Ok(contents) => match serde_json::from_slice(&contents) {
+-                Ok(cache) => Ok(Some(cache)),
+-                Err(error) => {
+-                    warn!(
+-                        path = %self.cache_path.display(),
+-                        error = %error,
+-                        "Ignoring invalid GitHub meta cache"
+-                    );
+-                    Ok(None)
+-                }
+-            },
+-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+-            Err(error) => {
+-                Err(error).with_context(|| format!("reading {}", self.cache_path.display()))
+-            }
+-        }
+-    }
+-
+-    async fn store_cache(&self, cache: &GitHubMetaCache) -> Result<()> {
+-        if let Some(parent) = self.cache_path.parent() {
+-            fs::create_dir_all(parent)
+-                .await
+-                .with_context(|| format!("creating {}", parent.display()))?;
+-        }
+-
+-        let contents = serde_json::to_vec(cache).context("serializing GitHub meta cache")?;
+-        fs::write(&self.cache_path, contents)
+-            .await
+-            .with_context(|| format!("writing {}", self.cache_path.display()))?;
+-        Ok(())
+-    }
+-
+-    fn cached_hooks_or_error(
+-        &self,
+-        cached: Option<&GitHubMetaCache>,
+-        error: anyhow::Error,
+-    ) -> Result<Vec<IpNet>> {
+-        let Some(cached) = cached else {
+-            return Err(error);
+-        };
+-
+-        warn!(
+-            path = %self.cache_path.display(),
+-            error = %error,
+-            "Using cached GitHub meta hooks after refresh failed"
+-        );
+-        parse_ip_nets(&cached.hooks)
+-    }
+-}
+-
+-type HttpClient = fabro_http::HttpClient;
+-
+-#[derive(Debug, Deserialize)]
+-struct GitHubMetaResponse {
+-    hooks: Vec<String>,
+-}
+-
+-#[derive(Debug, Serialize, Deserialize)]
+-struct GitHubMetaCache {
+-    etag:  Option<String>,
+-    hooks: Vec<String>,
+-}
+-
+-pub fn effective_ip_allowlist_settings(
+-    global: &ServerIpAllowlistSettings,
+-    overlay: Option<&ServerIpAllowlistOverrideSettings>,
+-) -> ServerIpAllowlistSettings {
+-    let Some(overlay) = overlay else {
+-        return global.clone();
+-    };
+-
+-    ServerIpAllowlistSettings {
+-        entries:             overlay
+-            .entries
+-            .clone()
+-            .unwrap_or_else(|| global.entries.clone()),
+-        trusted_proxy_count: overlay
+-            .trusted_proxy_count
+-            .unwrap_or(global.trusted_proxy_count),
+-    }
+-}
+-
+-pub async fn resolve_ip_allowlist_config(
+-    global: &ServerIpAllowlistSettings,
+-    overlay: Option<&ServerIpAllowlistOverrideSettings>,
+-    github_meta_resolver: &GitHubMetaResolver,
+-) -> Result<IpAllowlistConfig> {
+-    let effective = effective_ip_allowlist_settings(global, overlay);
+-    let allowlist = expand_ip_allow_entries(&effective.entries, github_meta_resolver).await?;
+-
+-    Ok(IpAllowlistConfig {
+-        allowlist:           IpAllowlist::new(allowlist),
+-        trusted_proxy_count: effective.trusted_proxy_count,
+-    })
+-}
+-
+-pub fn extract_client_ip<B>(request: &HttpRequest<B>, trusted_proxy_count: u32) -> Option<IpAddr> {
+-    if trusted_proxy_count == 0 {
+-        return request
+-            .extensions()
+-            .get::<ConnectInfo<SocketAddr>>()
+-            .map(|connect_info| normalize_ip(connect_info.0.ip()));
+-    }
+-
+-    let header = request.headers().get("x-forwarded-for")?.to_str().ok()?;
+-    let entries = header
+-        .split(',')
+-        .map(str::trim)
+-        .filter(|entry| !entry.is_empty())
+-        .collect::<Vec<_>>();
+-    let trusted_proxy_count = trusted_proxy_count as usize;
+-    let client_index = entries.len().checked_sub(trusted_proxy_count + 1)?;
+-
+-    entries[client_index]
+-        .parse::<IpAddr>()
+-        .ok()
+-        .map(normalize_ip)
+-}
+-
+-pub async fn ip_allowlist_middleware(
+-    State(config): State<Arc<IpAllowlistConfig>>,
+-    request: Request,
+-    next: Next,
+-) -> Response {
+-    if config.allowlist.is_empty() || request.uri().path() == "/health" {
+-        return next.run(request).await;
+-    }
+-
+-    let path = request.uri().path().to_string();
+-    match extract_client_ip(&request, config.trusted_proxy_count) {
+-        Some(client_ip) if config.allowlist.contains(&client_ip) => next.run(request).await,
+-        Some(client_ip) => {
+-            warn!(client_ip = %client_ip, path = %path, "request rejected: IP not in allowlist");
+-            ApiError::forbidden().into_response()
+-        }
+-        None => {
+-            warn!(path = %path, "request rejected: IP not in allowlist");
+-            ApiError::forbidden().into_response()
+-        }
+-    }
+-}
+-
+-async fn expand_ip_allow_entries(
+-    entries: &[IpAllowEntry],
+-    github_meta_resolver: &GitHubMetaResolver,
+-) -> Result<Vec<IpNet>> {
+-    let github_hooks = if entries
+-        .iter()
+-        .any(|entry| matches!(entry, IpAllowEntry::GitHubMetaHooks))
+-    {
+-        github_meta_resolver.resolve_hooks().await?
+-    } else {
+-        Vec::new()
+-    };
+-
+-    let mut expanded = Vec::new();
+-    for entry in entries {
+-        match entry {
+-            IpAllowEntry::Literal(net) => expanded.push(*net),
+-            IpAllowEntry::GitHubMetaHooks => expanded.extend(github_hooks.iter().copied()),
+-        }
+-    }
+-
+-    Ok(expanded)
+-}
+-
+-fn parse_ip_nets(values: &[String]) -> Result<Vec<IpNet>> {
+-    values
+-        .iter()
+-        .map(|value| {
+-            value
+-                .parse::<IpNet>()
+-                .with_context(|| format!("invalid IP range `{value}` in GitHub /meta hooks"))
+-        })
+-        .collect()
+-}
+-
+-fn normalize_ip(ip: IpAddr) -> IpAddr {
+-    match ip {
+-        IpAddr::V4(_) => ip,
+-        IpAddr::V6(address) => address
+-            .to_ipv4_mapped()
+-            .map_or(IpAddr::V6(address), IpAddr::V4),
+-    }
+-}
+-
+-pub fn github_meta_cache_path(cache_dir: &Path) -> PathBuf {
+-    cache_dir.join("github-meta-hooks.json")
+-}
+-
+-#[cfg(test)]
+-#[expect(
+-    clippy::disallowed_methods,
+-    reason = "tests stage IP allowlist fixtures with sync std::fs::write"
+-)]
+-mod tests {
+-    use std::net::Ipv4Addr;
+-
+-    use axum::body::Body;
+-    use axum::http::{Request, StatusCode};
+-    use axum::routing::get;
+-    use axum::{Router, middleware};
+-    use httpmock::MockServer;
+-    use tower::ServiceExt;
+-
+-    use super::*;
+-
+-    fn literal(value: &str) -> IpAllowEntry {
+-        IpAllowEntry::parse_literal(value).unwrap()
+-    }
+-
+-    macro_rules! assert_status {
+-        ($response:expr, $expected:expr) => {
+-            fabro_test::assert_axum_status($response, $expected, concat!(file!(), ":", line!()))
+-        };
+-    }
+-
+-    #[test]
+-    fn effective_scope_inherits_global_fields_and_prefers_override_values() {
+-        let global = ServerIpAllowlistSettings {
+-            entries:             vec![literal("10.0.0.0/8")],
+-            trusted_proxy_count: 1,
+-        };
+-        let overlay = ServerIpAllowlistOverrideSettings {
+-            entries:             Some(vec![IpAllowEntry::GitHubMetaHooks]),
+-            trusted_proxy_count: None,
+-        };
+-
+-        let effective = effective_ip_allowlist_settings(&global, Some(&overlay));
+-
+-        assert_eq!(effective.entries, vec![IpAllowEntry::GitHubMetaHooks]);
+-        assert_eq!(effective.trusted_proxy_count, 1);
+-    }
+-
+-    #[test]
+-    fn extract_client_ip_uses_connect_info_without_trusted_proxies() {
+-        let request = Request::builder()
+-            .uri("/api/v1/runs")
+-            .body(Body::empty())
+-            .unwrap();
+-        let mut request = request;
+-        request
+-            .extensions_mut()
+-            .insert(ConnectInfo(SocketAddr::from((
+-                Ipv4Addr::new(192, 0, 2, 42),
+-                8080,
+-            ))));
+-
+-        assert_eq!(
+-            extract_client_ip(&request, 0),
+-            Some(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 42)))
+-        );
+-    }
+-
+-    #[test]
+-    fn extract_client_ip_uses_rightmost_minus_trusted_proxy_count_from_x_forwarded_for() {
+-        let request = Request::builder()
+-            .uri("/api/v1/runs")
+-            .header(
+-                "x-forwarded-for",
+-                "198.51.100.10, 203.0.113.20, 203.0.113.30",
+-            )
+-            .body(Body::empty())
+-            .unwrap();
+-
+-        assert_eq!(
+-            extract_client_ip(&request, 2),
+-            Some(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 10)))
+-        );
+-    }
+-
+-    #[test]
+-    fn extract_client_ip_fails_closed_when_x_forwarded_for_chain_is_too_short() {
+-        let request = Request::builder()
+-            .uri("/api/v1/runs")
+-            .header("x-forwarded-for", "198.51.100.10")
+-            .body(Body::empty())
+-            .unwrap();
+-
+-        assert_eq!(extract_client_ip(&request, 1), None);
+-    }
+-
+-    #[test]
+-    fn ip_allowlist_matches_ipv4_mapped_ipv6_addresses_against_ipv4_ranges() {
+-        let allowlist = IpAllowlist::new(vec!["10.0.0.0/8".parse().unwrap()]);
+-
+-        assert!(allowlist.contains(&"::ffff:10.1.2.3".parse().unwrap()));
+-    }
+-
+-    #[test]
+-    fn github_meta_resolver_uses_storage_cache_dir() {
+-        let cache_dir = tempfile::tempdir().unwrap();
+-        let resolver = GitHubMetaResolver::from_cache_dir(cache_dir.path()).unwrap();
+-
+-        assert_eq!(
+-            resolver.cache_path,
+-            cache_dir.path().join("github-meta-hooks.json")
+-        );
+-    }
+-
+-    #[tokio::test]
+-    async fn resolve_ip_allowlist_config_expands_github_meta_hooks() {
+-        let mock_server = MockServer::start_async().await;
+-        mock_server
+-            .mock_async(|when, then| {
+-                when.method("GET").path("/meta");
+-                then.status(200)
+-                    .header("content-type", "application/json")
+-                    .header("etag", "\"meta-v1\"")
+-                    .body(r#"{"hooks":["192.30.252.0/22","185.199.108.0/22"]}"#);
+-            })
+-            .await;
+-
+-        let resolver = GitHubMetaResolver::new(
+-            fabro_http::test_http_client().unwrap(),
+-            format!("{}/meta", mock_server.url("")),
+-            tempfile::tempdir().unwrap().path().join("github-meta.json"),
+-        );
+-        let global = ServerIpAllowlistSettings {
+-            entries:             vec![IpAllowEntry::GitHubMetaHooks],
+-            trusted_proxy_count: 1,
+-        };
+-
+-        let config = resolve_ip_allowlist_config(&global, None, &resolver)
+-            .await
+-            .unwrap();
+-
+-        assert!(config.allowlist.contains(&"192.30.252.45".parse().unwrap()));
+-        assert!(config.allowlist.contains(&"185.199.109.1".parse().unwrap()));
+-        assert_eq!(config.trusted_proxy_count, 1);
+-    }
+-
+-    #[tokio::test]
+-    async fn resolve_ip_allowlist_config_reuses_cached_github_meta_on_not_modified() {
+-        let mock_server = MockServer::start_async().await;
+-        mock_server
+-            .mock_async(|when, then| {
+-                when.method("GET")
+-                    .path("/meta")
+-                    .header("if-none-match", "\"meta-v1\"");
+-                then.status(304);
+-            })
+-            .await;
+-
+-        let cache_dir = tempfile::tempdir().unwrap();
+-        std::fs::write(
+-            cache_dir.path().join("github-meta.json"),
+-            r#"{"etag":"\"meta-v1\"","hooks":["192.30.252.0/22"]}"#,
+-        )
+-        .unwrap();
+-
+-        let resolver = GitHubMetaResolver::new(
+-            fabro_http::test_http_client().unwrap(),
+-            format!("{}/meta", mock_server.url("")),
+-            cache_dir.path().join("github-meta.json"),
+-        );
+-        let global = ServerIpAllowlistSettings {
+-            entries:             vec![IpAllowEntry::GitHubMetaHooks],
+-            trusted_proxy_count: 0,
+-        };
+-
+-        let config = resolve_ip_allowlist_config(&global, None, &resolver)
+-            .await
+-            .unwrap();
+-
+-        assert!(config.allowlist.contains(&"192.30.252.42".parse().unwrap()));
+-    }
+-
+-    #[tokio::test]
+-    async fn resolve_ip_allowlist_config_uses_cached_github_meta_when_github_is_unavailable() {
+-        let mock_server = MockServer::start_async().await;
+-        mock_server
+-            .mock_async(|when, then| {
+-                when.method("GET").path("/meta");
+-                then.status(503);
+-            })
+-            .await;
+-
+-        let cache_dir = tempfile::tempdir().unwrap();
+-        std::fs::write(
+-            cache_dir.path().join("github-meta.json"),
+-            r#"{"etag":"\"meta-v1\"","hooks":["192.30.252.0/22"]}"#,
+-        )
+-        .unwrap();
+-
+-        let resolver = GitHubMetaResolver::new(
+-            fabro_http::test_http_client().unwrap(),
+-            format!("{}/meta", mock_server.url("")),
+-            cache_dir.path().join("github-meta.json"),
+-        );
+-        let global = ServerIpAllowlistSettings {
+-            entries:             vec![IpAllowEntry::GitHubMetaHooks],
+-            trusted_proxy_count: 0,
+-        };
+-
+-        let config = resolve_ip_allowlist_config(&global, None, &resolver)
+-            .await
+-            .expect("cached GitHub meta hooks should be reused");
+-
+-        assert!(config.allowlist.contains(&"192.30.252.42".parse().unwrap()));
+-    }
+-
+-    #[tokio::test]
+-    async fn middleware_reads_client_ip_from_x_forwarded_for_when_trusted_proxy_count_is_set() {
+-        let config = Arc::new(IpAllowlistConfig {
+-            allowlist:           IpAllowlist::new(vec!["10.0.0.0/8".parse().unwrap()]),
+-            trusted_proxy_count: 1,
+-        });
+-        let app = Router::new()
+-            .route("/api/v1/runs", get(|| async { StatusCode::OK }))
+-            .layer(middleware::from_fn_with_state(
+-                Arc::clone(&config),
+-                ip_allowlist_middleware,
+-            ));
+-
+-        let allowed_request = Request::builder()
+-            .uri("/api/v1/runs")
+-            .header("x-forwarded-for", "10.0.0.1, 198.51.100.1")
+-            .body(Body::empty())
+-            .unwrap();
+-        let allowed_response = app.clone().oneshot(allowed_request).await.unwrap();
+-        assert_status!(allowed_response, StatusCode::OK).await;
+-
+-        let blocked_request = Request::builder()
+-            .uri("/api/v1/runs")
+-            .header("x-forwarded-for", "203.0.113.1, 198.51.100.1")
+-            .body(Body::empty())
+-            .unwrap();
+-        let blocked_response = app.oneshot(blocked_request).await.unwrap();
+-        assert_status!(blocked_response, StatusCode::FORBIDDEN).await;
+-    }
+-
+-    #[tokio::test]
+-    async fn middleware_allows_health_and_blocks_non_allowlisted_requests() {
+-        let config = Arc::new(IpAllowlistConfig {
+-            allowlist:           IpAllowlist::new(vec!["10.0.0.0/8".parse().unwrap()]),
+-            trusted_proxy_count: 0,
+-        });
+-        let app = Router::new()
+-            .route("/health", get(|| async { StatusCode::OK }))
+-            .route("/api/v1/runs", get(|| async { StatusCode::OK }))
+-            .layer(middleware::from_fn_with_state(
+-                Arc::clone(&config),
+-                ip_allowlist_middleware,
+-            ));
+-
+-        let health_response = app
+-            .clone()
+-            .oneshot(request_with_connect_info(
+-                "/health",
+-                IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)),
+-            ))
+-            .await
+-            .unwrap();
+-        assert_status!(health_response, StatusCode::OK).await;
+-
+-        let blocked_response = app
+-            .oneshot(request_with_connect_info(
+-                "/api/v1/runs",
+-                IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)),
+-            ))
+-            .await
+-            .unwrap();
+-        assert_status!(blocked_response, StatusCode::FORBIDDEN).await;
+-    }
+-
+-    fn request_with_connect_info(path: &str, ip: IpAddr) -> Request<Body> {
+-        let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+-        let mut request = request;
+-        request
+-            .extensions_mut()
+-            .insert(ConnectInfo(SocketAddr::new(ip, 8080)));
+-        request
+-    }
+-}
+diff --git a/lib/crates/fabro-server/src/lib.rs b/lib/crates/fabro-server/src/lib.rs
+index d6b5ffeb4..443300c09 100644
+--- a/lib/crates/fabro-server/src/lib.rs
++++ b/lib/crates/fabro-server/src/lib.rs
+@@ -22,7 +22,6 @@ pub mod diagnostics;
+ pub mod error;
+ pub mod github_webhooks;
+ pub mod install;
+-pub mod ip_allowlist;
+ pub mod jwt_auth;
+ pub mod manifest_validation;
+ mod migrations;
+diff --git a/lib/crates/fabro-server/src/serve.rs b/lib/crates/fabro-server/src/serve.rs
+index b2ff5c7ce..f4a3c5089 100644
+--- a/lib/crates/fabro-server/src/serve.rs
++++ b/lib/crates/fabro-server/src/serve.rs
+@@ -1,5 +1,4 @@
+ use std::future::{Future, IntoFuture};
+-use std::net::SocketAddr;
+ use std::path::{Path, PathBuf};
+ use std::sync::{Arc, RwLock};
+ use std::time::Duration;
+@@ -34,7 +33,6 @@ use tracing::{error, info, warn};
+ 
+ use crate::canonical_origin::resolve_canonical_origin;
+ use crate::github_webhooks::{TailscaleFunnelManager, WEBHOOK_ROUTE, WEBHOOK_SECRET_ENV};
+-use crate::ip_allowlist::{GitHubMetaResolver, IpAllowlistConfig, resolve_ip_allowlist_config};
+ use crate::server::{
+     AppState, AppStateConfig, ResolvedAppStateSettings, RouterOptions, build_app_state,
+     build_router_with_options, reconcile_incomplete_runs_on_startup, shutdown_active_workers,
+@@ -251,40 +249,6 @@ fn serve_overrides(args: &ServeArgs) -> (Option<RunLayer>, Option<ServerLayer>)
+     )
+ }
+ 
+-async fn resolve_github_webhook_ip_allowlist(
+-    resolved_server_settings: &ServerNamespace,
+-    github_meta_resolver: &GitHubMetaResolver,
+-) -> anyhow::Result<Arc<IpAllowlistConfig>> {
+-    let config = resolve_ip_allowlist_config(
+-        &resolved_server_settings.ip_allowlist,
+-        resolved_server_settings
+-            .integrations
+-            .github
+-            .webhooks
+-            .as_ref()
+-            .and_then(|webhooks| webhooks.ip_allowlist.as_ref()),
+-        github_meta_resolver,
+-    )
+-    .await
+-    .context("resolving GitHub webhook IP allowlist")?;
+-
+-    Ok(Arc::new(config))
+-}
+-
+-async fn resolve_startup_github_webhook_ip_allowlist(
+-    resolved_server_settings: &ServerNamespace,
+-    github_meta_resolver: &GitHubMetaResolver,
+-    webhook_secret_present: bool,
+-) -> anyhow::Result<Option<Arc<IpAllowlistConfig>>> {
+-    if !webhook_secret_present {
+-        return Ok(None);
+-    }
+-
+-    resolve_github_webhook_ip_allowlist(resolved_server_settings, github_meta_resolver)
+-        .await
+-        .map(Some)
+-}
+-
+ enum WebhookPreconditions {
+     Ready {
+         app_id:          String,
+@@ -769,8 +733,6 @@ where
+     } else {
+         false
+     };
+-    let github_meta_resolver = GitHubMetaResolver::from_cache_dir(&storage.cache_dir())?;
+-
+     let (object_store, slatedb_prefix, flush_interval, disk_cache) =
+         build_slatedb_store_with_server_secrets(&resolved_server_settings, &server_secrets)?;
+     let cache_path = if disk_cache {
+@@ -823,33 +785,12 @@ where
+         );
+     }
+     spawn_scheduler(Arc::clone(&state));
+-    let default_ip_allowlist = Arc::new(
+-        resolve_ip_allowlist_config(
+-            &resolved_server_settings.ip_allowlist,
+-            None,
+-            &github_meta_resolver,
+-        )
+-        .await
+-        .context("resolving server IP allowlist")?,
+-    );
+-    let github_webhook_ip_allowlist = resolve_startup_github_webhook_ip_allowlist(
+-        &resolved_server_settings,
+-        &github_meta_resolver,
+-        webhook_secret_present,
+-    )
+-    .await?;
+-    let router = build_router_with_options(
+-        Arc::clone(&state),
+-        &auth_mode,
+-        Arc::clone(&default_ip_allowlist),
+-        RouterOptions {
+-            web_enabled,
+-            github_webhook_ip_allowlist,
+-            #[cfg(debug_assertions)]
+-            watch_web,
+-            ..RouterOptions::default()
+-        },
+-    );
++    let router = build_router_with_options(Arc::clone(&state), &auth_mode, RouterOptions {
++        web_enabled,
++        #[cfg(debug_assertions)]
++        watch_web,
++        ..RouterOptions::default()
++    });
+     let bound_listener = bind_listener(&bind_request).await?;
+     let bind_addr = bound_listener.bind.clone();
+ 
+@@ -993,11 +934,7 @@ where
+         BoundListener::Tcp(listener) => {
+             announce_server_ready(&bind_addr, styles);
+             serve_until_shutdown(
+-                axum::serve(
+-                    listener,
+-                    router.into_make_service_with_connect_info::<SocketAddr>(),
+-                )
+-                .with_graceful_shutdown({
++                axum::serve(listener, router).with_graceful_shutdown({
+                     let token = shutdown.clone();
+                     async move { token.cancelled().await }
+                 }),
+@@ -1247,13 +1184,12 @@ mod tests {
+     use tokio_util::sync::CancellationToken;
+ 
+     use super::{
+-        GitHubMetaResolver, SHUTDOWN_GRACE_PERIOD, ServeArgs, ServerTitlePhase,
+-        apply_effective_log_destination, bind_tcp_host_with_fallback,
+-        build_local_object_store_with_preference, build_object_store_from_settings_with_lookup,
+-        build_slatedb_store, force_exit_after_shutdown, resolve_bind_request_from_server_settings,
+-        resolve_github_webhook_ip_allowlist, resolve_interp,
+-        resolve_startup_github_webhook_ip_allowlist, serve_overrides, serve_until_shutdown,
+-        server_bind_title, server_title, spawn_shutdown_orchestrator_inner,
++        SHUTDOWN_GRACE_PERIOD, ServeArgs, ServerTitlePhase, apply_effective_log_destination,
++        bind_tcp_host_with_fallback, build_local_object_store_with_preference,
++        build_object_store_from_settings_with_lookup, build_slatedb_store,
++        force_exit_after_shutdown, resolve_bind_request_from_server_settings, resolve_interp,
++        serve_overrides, serve_until_shutdown, server_bind_title, server_title,
++        spawn_shutdown_orchestrator_inner,
+     };
+     use crate::server::ResolvedAppStateSettings;
+ 
+@@ -1816,78 +1752,4 @@ disk_cache = true
+         assert_ne!(resolved.port(), occupied_port);
+         assert!(bound.used_random_port_fallback);
+     }
+-
+-    #[tokio::test]
+-    async fn resolve_github_webhook_ip_allowlist_propagates_resolution_errors() {
+-        let settings = server_settings(
+-            r#"
+-_version = 1
+-
+-[server.listen]
+-type = "tcp"
+-address = "127.0.0.1:0"
+-
+-[server.integrations.github]
+-strategy = "app"
+-app_id = "123"
+-
+-[server.integrations.github.webhooks.ip_allowlist]
+-entries = ["github_meta_hooks"]
+-"#,
+-        )
+-        .server;
+-
+-        let cache_dir = tempfile::tempdir().unwrap();
+-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+-        let port = listener.local_addr().unwrap().port();
+-        drop(listener);
+-        let resolver = GitHubMetaResolver::new(
+-            fabro_http::test_http_client().unwrap(),
+-            format!("http://127.0.0.1:{port}/meta"),
+-            cache_dir.path().join("github-meta.json"),
+-        );
+-
+-        let error = resolve_github_webhook_ip_allowlist(&settings, &resolver)
+-            .await
+-            .expect_err("github webhook allowlist resolution should fail closed");
+-
+-        assert!(error.to_string().contains("GitHub webhook IP allowlist"));
+-    }
+-
+-    #[tokio::test]
+-    async fn resolve_startup_github_webhook_ip_allowlist_skips_resolution_without_webhook_secret() {
+-        let settings = server_settings(
+-            r#"
+-_version = 1
+-
+-[server.listen]
+-type = "tcp"
+-address = "127.0.0.1:0"
+-
+-[server.integrations.github]
+-strategy = "app"
+-app_id = "123"
+-
+-[server.integrations.github.webhooks.ip_allowlist]
+-entries = ["github_meta_hooks"]
+-"#,
+-        )
+-        .server;
+-
+-        let cache_dir = tempfile::tempdir().unwrap();
+-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+-        let port = listener.local_addr().unwrap().port();
+-        drop(listener);
+-        let resolver = GitHubMetaResolver::new(
+-            fabro_http::test_http_client().unwrap(),
+-            format!("http://127.0.0.1:{port}/meta"),
+-            cache_dir.path().join("github-meta.json"),
+-        );
+-
+-        let allowlist = resolve_startup_github_webhook_ip_allowlist(&settings, &resolver, false)
+-            .await
+-            .expect("inactive webhook route should skip GitHub meta resolution");
+-
+-        assert!(allowlist.is_none());
+-    }
+ }
+diff --git a/lib/crates/fabro-server/src/server.rs b/lib/crates/fabro-server/src/server.rs
+index 44357b2a4..529a374dd 100644
+--- a/lib/crates/fabro-server/src/server.rs
++++ b/lib/crates/fabro-server/src/server.rs
+@@ -145,7 +145,6 @@ use crate::error::ApiError;
+ use crate::github_webhooks::{
+     WEBHOOK_ROUTE, WEBHOOK_SECRET_ENV, parse_event_metadata, verify_signature,
+ };
+-use crate::ip_allowlist::{IpAllowlistConfig, ip_allowlist_middleware};
+ use crate::jwt_auth::{self, AuthMode};
+ use crate::principal_middleware::{
+     AuthContextSlot, RequestAuth, RequestAuthContext, RequireRunBlob, RequireRunManagementTarget,
+@@ -1589,35 +1588,28 @@ fn start_optional_slack_service(state: &Arc<AppState>) {
+     reason = "Public router helper keeps the existing ergonomic API and forwards by reference."
+ )]
+ pub fn build_router(state: Arc<AppState>, auth_mode: AuthMode) -> Router {
+-    build_router_with_options(
+-        state,
+-        &auth_mode,
+-        Arc::new(IpAllowlistConfig::default()),
+-        RouterOptions::default(),
+-    )
++    build_router_with_options(state, &auth_mode, RouterOptions::default())
+ }
+ 
+ #[derive(Clone, Debug)]
+ pub struct RouterOptions {
+-    pub web_enabled:                 bool,
+-    pub static_asset_root:           Option<PathBuf>,
+-    pub github_endpoints:            Option<Arc<GithubEndpoints>>,
+-    pub github_webhook_ip_allowlist: Option<Arc<IpAllowlistConfig>>,
++    pub web_enabled:       bool,
++    pub static_asset_root: Option<PathBuf>,
++    pub github_endpoints:  Option<Arc<GithubEndpoints>>,
+     /// Set when serving with the `--watch-web` dev flag. The static-file
+     /// handler then refuses to fall back to the embedded SPA snapshot and
+     /// returns a 503 "build in progress" page on miss, so developers see
+     /// their edits or a clear signal — never stale embedded bytes.
+-    pub watch_web:                   bool,
++    pub watch_web:         bool,
+ }
+ 
+ impl Default for RouterOptions {
+     fn default() -> Self {
+         Self {
+-            web_enabled:                 true,
+-            static_asset_root:           None,
+-            github_endpoints:            None,
+-            github_webhook_ip_allowlist: None,
+-            watch_web:                   false,
++            web_enabled:       true,
++            static_asset_root: None,
++            github_endpoints:  None,
++            watch_web:         false,
+         }
+     }
+ }
+@@ -1630,20 +1622,19 @@ fn removed_web_route(path: &str) -> bool {
+ pub fn build_router_with_options(
+     state: Arc<AppState>,
+     auth_mode: &AuthMode,
+-    ip_allowlist_config: Arc<IpAllowlistConfig>,
+     options: RouterOptions,
+ ) -> Router {
+     start_optional_slack_service(&state);
+-    let web_enabled = options.web_enabled;
+-    let static_asset_root = options.static_asset_root.clone();
+-    let watch_web = options.watch_web;
+-    let webhook_ip_allowlist = options.github_webhook_ip_allowlist;
++    let RouterOptions {
++        web_enabled,
++        static_asset_root,
++        github_endpoints,
++        watch_web,
++    } = options;
+     let translation_state = Arc::clone(&state);
+     let state_for_canonical_host = Arc::clone(&state);
+-    let github_endpoints = options
+-        .github_endpoints
+-        .clone()
+-        .unwrap_or_else(|| Arc::new(GithubEndpoints::production_defaults()));
++    let github_endpoints =
++        github_endpoints.unwrap_or_else(|| Arc::new(GithubEndpoints::production_defaults()));
+     let webhook_secret = state.vault_secret(WEBHOOK_SECRET_ENV);
+     let principal_layer = middleware::from_fn_with_state(Arc::clone(&state), principal_middleware);
+     let api_common = if web_enabled {
+@@ -1725,10 +1716,6 @@ pub fn build_router_with_options(
+             }
+         }));
+ 
+-    app_router = app_router.layer(middleware::from_fn_with_state(
+-        Arc::clone(&ip_allowlist_config),
+-        ip_allowlist_middleware,
+-    ));
+     app_router = app_router.layer(middleware::from_fn_with_state(
+         translation_state,
+         auth_translation_middleware,
+@@ -1738,9 +1725,8 @@ pub fn build_router_with_options(
+ 
+     let mut router = app_router;
+     if let Some(secret) = webhook_secret {
+-        let allowlist = webhook_ip_allowlist.unwrap_or(ip_allowlist_config);
+         let secret: Arc<[u8]> = Arc::from(secret.into_bytes().into_boxed_slice());
+-        router = github_webhook_routes(secret, allowlist).merge(router);
++        router = github_webhook_routes(secret).merge(router);
+     }
+ 
+     router
+@@ -1849,14 +1835,10 @@ async fn http_log_middleware(mut req: axum_extract::Request, next: Next) -> Resp
+     response
+ }
+ 
+-fn github_webhook_routes(secret: Arc<[u8]>, ip_allowlist_config: Arc<IpAllowlistConfig>) -> Router {
++fn github_webhook_routes(secret: Arc<[u8]>) -> Router {
+     Router::new()
+         .route(WEBHOOK_ROUTE, post(github_webhook))
+         .with_state(secret)
+-        .layer(middleware::from_fn_with_state(
+-            ip_allowlist_config,
+-            ip_allowlist_middleware,
+-        ))
+ }
+ 
+ async fn github_webhook(
+diff --git a/lib/crates/fabro-server/src/server/tests.rs b/lib/crates/fabro-server/src/server/tests.rs
+index e53312627..df5d26152 100644
+--- a/lib/crates/fabro-server/src/server/tests.rs
++++ b/lib/crates/fabro-server/src/server/tests.rs
+@@ -82,14 +82,10 @@ fn resolved_runtime_settings_from_toml(source: &str) -> ResolvedAppStateSettings
+ 
+ fn test_app_with() -> Router {
+     let state = test_app_state();
+-    crate::test_support::build_test_router_with_options(
+-        state,
+-        Arc::new(IpAllowlistConfig::default()),
+-        RouterOptions {
+-            static_asset_root: Some(spa_fixture_root()),
+-            ..RouterOptions::default()
+-        },
+-    )
++    crate::test_support::build_test_router_with_options(state, RouterOptions {
++        static_asset_root: Some(spa_fixture_root()),
++        ..RouterOptions::default()
++    })
+ }
+ 
+ fn spa_fixture_root() -> PathBuf {
+@@ -491,15 +487,10 @@ fn webhook_test_app(auth_mode: AuthMode) -> Router {
+         .expect("test vault should not be locked")
+         .set(WEBHOOK_SECRET_ENV, &secret, SecretType::Token, None)
+         .unwrap();
+-    build_router_with_options(
+-        state,
+-        &auth_mode,
+-        Arc::new(IpAllowlistConfig::default()),
+-        RouterOptions {
+-            web_enabled: false,
+-            ..RouterOptions::default()
+-        },
+-    )
++    build_router_with_options(state, &auth_mode, RouterOptions {
++        web_enabled: false,
++        ..RouterOptions::default()
++    })
+ }
+ 
+ fn webhook_request(
+@@ -711,11 +702,7 @@ fn canonical_host_test_app() -> Router {
+         RunLayer::default(),
+         5,
+     );
+-    crate::test_support::build_test_router_with_options(
+-        state,
+-        Arc::new(IpAllowlistConfig::default()),
+-        RouterOptions::default(),
+-    )
++    crate::test_support::build_test_router_with_options(state, RouterOptions::default())
+ }
+ 
+ #[tokio::test]
+diff --git a/lib/crates/fabro-server/src/test_support.rs b/lib/crates/fabro-server/src/test_support.rs
+index 54b0972c1..afd26f624 100644
+--- a/lib/crates/fabro-server/src/test_support.rs
++++ b/lib/crates/fabro-server/src/test_support.rs
+@@ -29,7 +29,6 @@ use tokio_util::sync::CancellationToken;
+ use ulid::Ulid;
+ 
+ use crate::auth;
+-use crate::ip_allowlist::IpAllowlistConfig;
+ use crate::jwt_auth::{AuthMode, ConfiguredAuth};
+ #[cfg(test)]
+ use crate::principal_middleware::{AuthContextSlot, RequestAuthContext};
+@@ -521,15 +520,10 @@ pub fn build_test_router(state: Arc<AppState>) -> Router {
+     with_test_user(server::build_router(state, test_auth_mode()))
+ }
+ 
+-pub fn build_test_router_with_options(
+-    state: Arc<AppState>,
+-    ip_allowlist_config: Arc<IpAllowlistConfig>,
+-    options: RouterOptions,
+-) -> Router {
++pub fn build_test_router_with_options(state: Arc<AppState>, options: RouterOptions) -> Router {
+     with_test_user(server::build_router_with_options(
+         state,
+         &test_auth_mode(),
+-        ip_allowlist_config,
+         options,
+     ))
+ }
+diff --git a/lib/crates/fabro-server/src/web_auth.rs b/lib/crates/fabro-server/src/web_auth.rs
+index 5f10aba10..033e46db6 100644
+--- a/lib/crates/fabro-server/src/web_auth.rs
++++ b/lib/crates/fabro-server/src/web_auth.rs
+@@ -1401,7 +1401,6 @@ client_id = "github-client-id"
+         let app = server::build_router_with_options(
+             state,
+             &github_auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+             server::RouterOptions::default(),
+         );
+ 
+@@ -1494,10 +1493,9 @@ client_id = "github-client-id"
+         let app = crate::server::build_router_with_options(
+             state,
+             &github_auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+             crate::server::RouterOptions {
+-                web_enabled:                 true,
+-                github_endpoints:            Some(Arc::new(GithubEndpoints::with_bases(
++                web_enabled:       true,
++                github_endpoints:  Some(Arc::new(GithubEndpoints::with_bases(
+                     "http://127.0.0.1:12345/"
+                         .parse()
+                         .expect("oauth base should parse"),
+@@ -1505,9 +1503,8 @@ client_id = "github-client-id"
+                         .parse()
+                         .expect("api base should parse"),
+                 ))),
+-                github_webhook_ip_allowlist: None,
+-                static_asset_root:           None,
+-                watch_web:                   false,
++                static_asset_root: None,
++                watch_web:         false,
+             },
+         );
+ 
+@@ -1700,19 +1697,15 @@ client_id = "github-client-id"
+                 None,
+             )
+             .unwrap();
+-        let app = server::build_router_with_options(
+-            state,
+-            &github_auth_mode(),
+-            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+-            server::RouterOptions {
++        let app =
++            server::build_router_with_options(state, &github_auth_mode(), server::RouterOptions {
+                 web_enabled: true,
+                 github_endpoints: Some(Arc::new(GithubEndpoints::with_bases(
+                     github.url("/").parse().expect("oauth base should parse"),
+                     github.url("/api/").parse().expect("api base should parse"),
+                 ))),
+                 ..server::RouterOptions::default()
+-            },
+-        );
++            });
+         let key = test_cookie_key();
+         let mut jar = cookie::CookieJar::new();
+         super::add_oauth_state_cookie(
+diff --git a/lib/crates/fabro-server/tests/it/api/auth_sessions.rs b/lib/crates/fabro-server/tests/it/api/auth_sessions.rs
+index 0fcd2e521..0ba7d71d8 100644
+--- a/lib/crates/fabro-server/tests/it/api/auth_sessions.rs
++++ b/lib/crates/fabro-server/tests/it/api/auth_sessions.rs
+@@ -5,7 +5,6 @@ use std::time::Duration;
+ use axum::body::Body;
+ use axum::http::{Request, StatusCode, header};
+ use cookie::{Cookie, CookieJar, Key};
+-use fabro_server::ip_allowlist::IpAllowlistConfig;
+ use fabro_server::jwt_auth::resolve_auth_mode_with_lookup;
+ use fabro_server::server::{RouterOptions, build_router_with_options};
+ use fabro_server::test_support::{TEST_SESSION_SECRET, TestAppStateBuilder};
+@@ -45,12 +44,7 @@ fn test_app(source: &str) -> (axum::Router, Arc<Database>) {
+             TEST_SESSION_SECRET.to_string(),
+         )]))
+         .build();
+-    let app = build_router_with_options(
+-        state,
+-        &auth_mode,
+-        Arc::new(IpAllowlistConfig::default()),
+-        RouterOptions::default(),
+-    );
++    let app = build_router_with_options(state, &auth_mode, RouterOptions::default());
+     (app, store)
+ }
+ 
+diff --git a/lib/crates/fabro-server/tests/it/api/cli_auth_token.rs b/lib/crates/fabro-server/tests/it/api/cli_auth_token.rs
+index 6694501e6..2d0b743cb 100644
+--- a/lib/crates/fabro-server/tests/it/api/cli_auth_token.rs
++++ b/lib/crates/fabro-server/tests/it/api/cli_auth_token.rs
+@@ -4,7 +4,6 @@ use std::time::Duration;
+ use axum::body::Body;
+ use axum::http::{Request, StatusCode, header};
+ use base64::Engine;
+-use fabro_server::ip_allowlist::IpAllowlistConfig;
+ use fabro_server::jwt_auth::resolve_auth_mode_with_lookup;
+ use fabro_server::server::{RouterOptions, build_router_with_options};
+ use fabro_server::test_support::test_app_state_with_store_and_runtime_settings;
+@@ -42,7 +41,6 @@ fn test_app(source: &str) -> (axum::Router, Arc<Database>) {
+             artifact_store,
+         ),
+         &auth_mode,
+-        Arc::new(IpAllowlistConfig::default()),
+         RouterOptions::default(),
+     );
+     (app, store)
+diff --git a/lib/crates/fabro-server/tests/it/api/routing.rs b/lib/crates/fabro-server/tests/it/api/routing.rs
+index d63b5c4e7..5a4d945f5 100644
+--- a/lib/crates/fabro-server/tests/it/api/routing.rs
++++ b/lib/crates/fabro-server/tests/it/api/routing.rs
+@@ -1,12 +1,8 @@
+-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+ use std::path::PathBuf;
+-use std::sync::Arc;
+ 
+ use axum::body::Body;
+-use axum::extract::ConnectInfo;
+ use axum::http::{Method, Request, StatusCode};
+ use fabro_config::ServerSettingsBuilder;
+-use fabro_server::ip_allowlist::{IpAllowlist, IpAllowlistConfig};
+ use fabro_server::jwt_auth::{AuthMode, resolve_auth_mode_with_lookup};
+ use fabro_server::server::RouterOptions;
+ use fabro_server::test_support::{
+@@ -63,7 +59,6 @@ async fn old_unversioned_routes_return_404() {
+ async fn root_and_health_stay_at_root() {
+     let app = fabro_server::test_support::build_test_router_with_options(
+         test_app_state(),
+-        Arc::new(IpAllowlistConfig::default()),
+         RouterOptions {
+             static_asset_root: Some(spa_fixture_root()),
+             ..RouterOptions::default()
+@@ -163,7 +158,6 @@ async fn web_enabled_serves_web_only_routes() {
+     let app = fabro_server::server::build_router_with_options(
+         test_app_state(),
+         &auth_mode,
+-        Arc::new(IpAllowlistConfig::default()),
+         RouterOptions {
+             static_asset_root: Some(spa_fixture_root()),
+             ..RouterOptions::default()
+@@ -256,7 +250,6 @@ async fn web_enabled_serves_web_only_routes() {
+ async fn security_headers_are_applied_to_all_responses() {
+     let app = fabro_server::test_support::build_test_router_with_options(
+         test_app_state(),
+-        Arc::new(IpAllowlistConfig::default()),
+         RouterOptions {
+             static_asset_root: Some(spa_fixture_root()),
+             ..RouterOptions::default()
+@@ -404,7 +397,6 @@ enabled = false
+             settings.manifest_run_defaults,
+             5,
+         ),
+-        Arc::new(IpAllowlistConfig::default()),
+         RouterOptions {
+             web_enabled: false,
+             ..RouterOptions::default()
+@@ -463,7 +455,6 @@ enabled = false
+             settings.manifest_run_defaults,
+             5,
+         ),
+-        Arc::new(IpAllowlistConfig::default()),
+         RouterOptions {
+             web_enabled: false,
+             ..RouterOptions::default()
+@@ -481,60 +472,3 @@ enabled = false
+     let response = app.oneshot(request).await.unwrap();
+     response_status(response, StatusCode::NOT_FOUND, "GET /api/v1/runs/{id}").await;
+ }
+-
+-#[tokio::test]
+-async fn allowlist_blocks_non_allowlisted_api_requests() {
+-    let app = fabro_server::test_support::build_test_router_with_options(
+-        test_app_state(),
+-        Arc::new(IpAllowlistConfig {
+-            allowlist:           IpAllowlist::new(vec!["10.0.0.0/8".parse().unwrap()]),
+-            trusted_proxy_count: 0,
+-        }),
+-        RouterOptions::default(),
+-    );
+-
+-    let response = app
+-        .oneshot(request_with_connect_info(
+-            "/api/v1/runs",
+-            IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)),
+-        ))
+-        .await
+-        .unwrap();
+-
+-    response_status(response, StatusCode::FORBIDDEN, "GET /api/v1/runs").await;
+-}
+-
+-#[tokio::test]
+-async fn allowlist_exempts_health_checks() {
+-    let app = fabro_server::test_support::build_test_router_with_options(
+-        test_app_state(),
+-        Arc::new(IpAllowlistConfig {
+-            allowlist:           IpAllowlist::new(vec!["10.0.0.0/8".parse().unwrap()]),
+-            trusted_proxy_count: 0,
+-        }),
+-        RouterOptions::default(),
+-    );
+-
+-    let response = app
+-        .oneshot(request_with_connect_info(
+-            "/health",
+-            IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)),
+-        ))
+-        .await
+-        .unwrap();
+-
+-    response_status(response, StatusCode::OK, "GET /health").await;
+-}
+-
+-fn request_with_connect_info(path: &str, ip: IpAddr) -> Request<Body> {
+-    let request = Request::builder()
+-        .method("GET")
+-        .uri(path)
+-        .body(Body::empty())
+-        .expect("routing test request should build");
+-    let mut request = request;
+-    request
+-        .extensions_mut()
+-        .insert(ConnectInfo(SocketAddr::new(ip, 8080)));
+-    request
+-}
+diff --git a/lib/crates/fabro-server/tests/it/api/settings.rs b/lib/crates/fabro-server/tests/it/api/settings.rs
+index f40a6ec39..458e9d6b5 100644
+--- a/lib/crates/fabro-server/tests/it/api/settings.rs
++++ b/lib/crates/fabro-server/tests/it/api/settings.rs
+@@ -28,7 +28,12 @@ methods = ["dev-token", "github"]
+ allowed_usernames = ["alice"]
+ 
+ [server.integrations.github]
++strategy = "app"
++app_id = "12345"
+ client_id = "Iv1.abcdef"
++
++[server.integrations.github.webhooks]
++strategy = "tailscale_funnel"
+ "#,
+     );
+     let app = fabro_server::test_support::build_test_router(
+@@ -66,6 +71,16 @@ client_id = "Iv1.abcdef"
+         body["server"]["integrations"]["github"]["client_id"],
+         "Iv1.abcdef"
+     );
++    assert!(
++        body["server"].get("ip_allowlist").is_none(),
++        "settings response should not expose removed server IP allowlist"
++    );
++    assert!(
++        body["server"]["integrations"]["github"]["webhooks"]
++            .get("ip_allowlist")
++            .is_none(),
++        "settings response should not expose removed GitHub webhook IP allowlist"
++    );
+     assert!(body.get("features").is_none());
+     assert!(body.get("cli").is_none());
+     assert!(body.get("run").is_none());
+diff --git a/lib/crates/fabro-server/tests/it/api/tcp.rs b/lib/crates/fabro-server/tests/it/api/tcp.rs
+index 906c16be4..d9ea549e6 100644
+--- a/lib/crates/fabro-server/tests/it/api/tcp.rs
++++ b/lib/crates/fabro-server/tests/it/api/tcp.rs
+@@ -5,13 +5,11 @@
+ 
+ use std::net::SocketAddr;
+ use std::path::{Path, PathBuf};
+-use std::sync::Arc;
+ use std::time::Duration;
+ 
+ use axum::http::StatusCode;
+ use fabro_config::bind::Bind;
+ use fabro_config::{RuntimeDirectory, ServerSettingsBuilder};
+-use fabro_server::ip_allowlist::{IpAllowlist, IpAllowlistConfig};
+ use fabro_server::jwt_auth::{AuthMode, resolve_auth_mode_with_lookup};
+ use fabro_server::serve::{ServeArgs, serve_command};
+ use fabro_server::server::{RouterOptions, build_router_with_options};
+@@ -24,7 +22,7 @@ use tokio::time::sleep;
+ 
+ use crate::helpers::{api, reqwest_status};
+ 
+-async fn start_tcp_server(auth_mode: AuthMode, ip_allowlist: Arc<IpAllowlistConfig>) -> SocketAddr {
++async fn start_tcp_server(auth_mode: AuthMode) -> SocketAddr {
+     let listener = TcpListener::bind("127.0.0.1:0")
+         .await
+         .expect("test TCP listener should bind");
+@@ -33,15 +31,10 @@ async fn start_tcp_server(auth_mode: AuthMode, ip_allowlist: Arc<IpAllowlistConf
+         .expect("test TCP listener should have a local address");
+ 
+     let state = test_app_state();
+-    let router =
+-        build_router_with_options(state, &auth_mode, ip_allowlist, RouterOptions::default());
++    let router = build_router_with_options(state, &auth_mode, RouterOptions::default());
+ 
+     tokio::spawn(async move {
+-        let _ = axum::serve(
+-            listener,
+-            router.into_make_service_with_connect_info::<SocketAddr>(),
+-        )
+-        .await;
++        let _ = axum::serve(listener, router).await;
+     });
+ 
+     addr
+@@ -177,7 +170,7 @@ methods = ["dev-token"]
+         _ => None,
+     })
+     .expect("auth mode should resolve");
+-    let addr = start_tcp_server(auth_mode, Arc::new(IpAllowlistConfig::default())).await;
++    let addr = start_tcp_server(auth_mode).await;
+     let client = fabro_http::test_http_client().unwrap();
+     let url = format!("http://127.0.0.1:{}{}", addr.port(), api("/runs"));
+ 
+@@ -229,24 +222,3 @@ methods = ["dev-token"]
+     reqwest_status(response, StatusCode::OK, "GET /api/v1/runs").await;
+     handle.abort();
+ }
+-
+-#[tokio::test]
+-async fn tcp_ip_allowlist_uses_connect_info() {
+-    let addr = start_tcp_server(
+-        fabro_server::test_support::test_auth_mode(),
+-        Arc::new(IpAllowlistConfig {
+-            allowlist:           IpAllowlist::new(vec!["10.0.0.0/8".parse().unwrap()]),
+-            trusted_proxy_count: 0,
+-        }),
+-    )
+-    .await;
+-    let client = fabro_http::test_http_client().unwrap();
+-
+-    let response = client
+-        .get(format!("http://127.0.0.1:{}{}", addr.port(), api("/runs")))
+-        .send()
+-        .await
+-        .unwrap();
+-
+-    reqwest_status(response, StatusCode::FORBIDDEN, "GET /api/v1/runs").await;
+-}
+diff --git a/lib/crates/fabro-types/Cargo.toml b/lib/crates/fabro-types/Cargo.toml
+index c0a6dfc1b..03631959a 100644
+--- a/lib/crates/fabro-types/Cargo.toml
++++ b/lib/crates/fabro-types/Cargo.toml
+@@ -24,7 +24,6 @@ dirs.workspace = true
+ fabro-model = { path = "../fabro-model" }
+ fabro-util = { path = "../fabro-util" }
+ hex.workspace = true
+-ipnet = { version = "2.11.0", features = ["serde"] }
+ serde.workspace = true
+ serde_json.workspace = true
+ sha2.workspace = true
+diff --git a/lib/crates/fabro-types/src/settings/mod.rs b/lib/crates/fabro-types/src/settings/mod.rs
+index 4ad60b494..2e087844a 100644
+--- a/lib/crates/fabro-types/src/settings/mod.rs
++++ b/lib/crates/fabro-types/src/settings/mod.rs
+@@ -45,12 +45,11 @@ pub use run::{
+     RunScmSettings, ScmGitHubSettings, TlsMode,
+ };
+ pub use server::{
+-    GithubIntegrationSettings, IntegrationWebhooksSettings, IpAllowEntry, LogDestination,
+-    ObjectStoreSettings, ServerApiSettings, ServerArtifactsSettings, ServerAuthGithubSettings,
+-    ServerAuthMethod, ServerAuthSettings, ServerIntegrationsSettings,
+-    ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings, ServerListenSettings,
+-    ServerLoggingSettings, ServerNamespace, ServerSchedulerSettings, ServerSlateDbSettings,
+-    ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
++    GithubIntegrationSettings, IntegrationWebhooksSettings, LogDestination, ObjectStoreSettings,
++    ServerApiSettings, ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod,
++    ServerAuthSettings, ServerIntegrationsSettings, ServerListenSettings, ServerLoggingSettings,
++    ServerNamespace, ServerSchedulerSettings, ServerSlateDbSettings, ServerStorageSettings,
++    ServerWebSettings, SlackIntegrationSettings,
+ };
+ pub use size::{ParseSizeError, Size};
+ pub use workflow::WorkflowNamespace;
+diff --git a/lib/crates/fabro-types/src/settings/server.rs b/lib/crates/fabro-types/src/settings/server.rs
+index bf540dfbe..806788d37 100644
+--- a/lib/crates/fabro-types/src/settings/server.rs
++++ b/lib/crates/fabro-types/src/settings/server.rs
+@@ -8,7 +8,6 @@
+ use std::net::SocketAddr;
+ use std::time::Duration as StdDuration;
+ 
+-use ipnet::IpNet;
+ use serde::de::Error as _;
+ use serde::{Deserialize, Deserializer, Serialize, Serializer};
+ 
+@@ -28,7 +27,6 @@ pub struct ServerNamespace {
+     pub api:          ServerApiSettings,
+     pub web:          ServerWebSettings,
+     pub auth:         ServerAuthSettings,
+-    pub ip_allowlist: ServerIpAllowlistSettings,
+     pub sandbox:      ServerSandboxSettings,
+     pub storage:      ServerStorageSettings,
+     pub artifacts:    ServerArtifactsSettings,
+@@ -50,7 +48,6 @@ impl ServerNamespace {
+             api:          ServerApiSettings::default(),
+             web:          ServerWebSettings::default(),
+             auth:         ServerAuthSettings::default(),
+-            ip_allowlist: ServerIpAllowlistSettings::default(),
+             sandbox:      ServerSandboxSettings::default(),
+             storage:      ServerStorageSettings::default(),
+             artifacts:    ServerArtifactsSettings::default(),
+@@ -123,18 +120,6 @@ pub struct ServerAuthGithubSettings {
+     pub allowed_usernames: Vec<String>,
+ }
+ 
+-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+-pub struct ServerIpAllowlistSettings {
+-    pub entries:             Vec<IpAllowEntry>,
+-    pub trusted_proxy_count: u32,
+-}
+-
+-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+-pub struct ServerIpAllowlistOverrideSettings {
+-    pub entries:             Option<Vec<IpAllowEntry>>,
+-    pub trusted_proxy_count: Option<u32>,
+-}
+-
+ #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct ServerSandboxSettings {
+     pub providers: ServerSandboxProvidersSettings,
+@@ -175,24 +160,6 @@ impl Default for ServerSandboxProviderSettings {
+     }
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+-pub enum IpAllowEntry {
+-    Literal(IpNet),
+-    GitHubMetaHooks,
+-}
+-
+-impl IpAllowEntry {
+-    pub const GITHUB_META_HOOKS_KEYWORD: &str = "github_meta_hooks";
+-
+-    pub fn parse_literal(value: &str) -> Result<Self, String> {
+-        value
+-            .parse::<IpNet>()
+-            .or_else(|_| value.parse::<std::net::IpAddr>().map(IpNet::from))
+-            .map_err(|error| error.to_string())
+-            .map(Self::Literal)
+-    }
+-}
+-
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct ServerStorageSettings {
+     pub root: InterpString,
+@@ -331,8 +298,7 @@ impl Default for SlackIntegrationSettings {
+ 
+ #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct IntegrationWebhooksSettings {
+-    pub strategy:     Option<WebhookStrategy>,
+-    pub ip_allowlist: Option<ServerIpAllowlistOverrideSettings>,
++    pub strategy: Option<WebhookStrategy>,
+ }
+ 
+ fn serialize_socket_addr<S>(value: &SocketAddr, serializer: S) -> Result<S::Ok, S::Error>
+diff --git a/lib/packages/fabro-api-client/src/.openapi-generator/FILES b/lib/packages/fabro-api-client/src/.openapi-generator/FILES
+index d8f4ee3a4..513fea0b3 100644
+--- a/lib/packages/fabro-api-client/src/.openapi-generator/FILES
++++ b/lib/packages/fabro-api-client/src/.openapi-generator/FILES
+@@ -56,6 +56,7 @@ models/auth-session-user.ts
+ models/auth-session.ts
+ models/auth-sessions-response.ts
+ models/automation-api-trigger.ts
++models/automation-list-meta.ts
+ models/automation-list-response.ts
+ models/automation-ref.ts
+ models/automation-schedule-trigger.ts
+@@ -143,7 +144,6 @@ models/fork-response.ts
+ models/fork-source-ref.ts
+ models/git-author-settings.ts
+ models/git-context.ts
+-models/git-hub-meta-hooks-entry.ts
+ models/github-integration-settings.ts
+ models/github-integration-strategy.ts
+ models/health-response.ts
+@@ -184,9 +184,7 @@ models/integration-webhooks-settings.ts
+ models/interview-option.ts
+ models/interview-provider-settings.ts
+ models/interview-question-record.ts
+-models/ip-allow-entry.ts
+ models/link-run-pull-request-request.ts
+-models/literal-ip-allow-entry.ts
+ models/log-destination.ts
+ models/manifest-args.ts
+ models/manifest-config.ts
+@@ -417,8 +415,6 @@ models/server-auth-github-settings.ts
+ models/server-auth-method.ts
+ models/server-auth-settings.ts
+ models/server-integrations-settings.ts
+-models/server-ip-allowlist-override-settings.ts
+-models/server-ip-allowlist-settings.ts
+ models/server-listen-settings.ts
+ models/server-listen-tcp-settings.ts
+ models/server-listen-unix-settings.ts
+diff --git a/lib/packages/fabro-api-client/src/models/automation-list-response.ts b/lib/packages/fabro-api-client/src/models/automation-list-response.ts
+index e100bb637..58258b67d 100644
+--- a/lib/packages/fabro-api-client/src/models/automation-list-response.ts
++++ b/lib/packages/fabro-api-client/src/models/automation-list-response.ts
+@@ -16,6 +16,8 @@
+ // May contain unused imports in some cases
+ // @ts-ignore
+ import type { Automation } from './automation';
++// May contain unused imports in some cases
++// @ts-ignore
+ import type { AutomationListMeta } from './automation-list-meta';
+ 
+ /**
+diff --git a/lib/packages/fabro-api-client/src/models/git-hub-meta-hooks-entry.ts b/lib/packages/fabro-api-client/src/models/git-hub-meta-hooks-entry.ts
+deleted file mode 100644
+index c9b03e94e..000000000
+--- a/lib/packages/fabro-api-client/src/models/git-hub-meta-hooks-entry.ts
++++ /dev/null
+@@ -1,22 +0,0 @@
+-/* tslint:disable */
+-/* eslint-disable */
+-/**
+- * Fabro Run API
+- * HTTP API for managing Fabro workflow run executions.
+- *
+- * The version of the OpenAPI document: 0.1.0
+- *
+- *
+- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+- * https://openapi-generator.tech
+- * Do not edit the class manually.
+- */
+-
+-
+-
+-
+-export const GitHubMetaHooksEntry = {
+-    GIT_HUB_META_HOOKS: 'GitHubMetaHooks'
+-} as const;
+-
+-export type GitHubMetaHooksEntry = typeof GitHubMetaHooksEntry[keyof typeof GitHubMetaHooksEntry];
+diff --git a/lib/packages/fabro-api-client/src/models/index.ts b/lib/packages/fabro-api-client/src/models/index.ts
+index e7a9dc111..e66b048ca 100644
+--- a/lib/packages/fabro-api-client/src/models/index.ts
++++ b/lib/packages/fabro-api-client/src/models/index.ts
+@@ -118,7 +118,6 @@ export * from './fork-response';
+ export * from './fork-source-ref';
+ export * from './git-author-settings';
+ export * from './git-context';
+-export * from './git-hub-meta-hooks-entry';
+ export * from './github-integration-settings';
+ export * from './github-integration-strategy';
+ export * from './health-response';
+@@ -158,9 +157,7 @@ export * from './integration-webhooks-settings';
+ export * from './interview-option';
+ export * from './interview-provider-settings';
+ export * from './interview-question-record';
+-export * from './ip-allow-entry';
+ export * from './link-run-pull-request-request';
+-export * from './literal-ip-allow-entry';
+ export * from './log-destination';
+ export * from './manifest-args';
+ export * from './manifest-config';
+@@ -391,8 +388,6 @@ export * from './server-auth-github-settings';
+ export * from './server-auth-method';
+ export * from './server-auth-settings';
+ export * from './server-integrations-settings';
+-export * from './server-ip-allowlist-override-settings';
+-export * from './server-ip-allowlist-settings';
+ export * from './server-listen-settings';
+ export * from './server-listen-tcp-settings';
+ export * from './server-listen-unix-settings';
+diff --git a/lib/packages/fabro-api-client/src/models/integration-webhooks-settings.ts b/lib/packages/fabro-api-client/src/models/integration-webhooks-settings.ts
+index c9f286718..367922a74 100644
+--- a/lib/packages/fabro-api-client/src/models/integration-webhooks-settings.ts
++++ b/lib/packages/fabro-api-client/src/models/integration-webhooks-settings.ts
+@@ -13,14 +13,10 @@
+  */
+ 
+ 
+-// May contain unused imports in some cases
+-// @ts-ignore
+-import type { ServerIpAllowlistOverrideSettings } from './server-ip-allowlist-override-settings';
+ // May contain unused imports in some cases
+ // @ts-ignore
+ import type { WebhookStrategy } from './webhook-strategy';
+ 
+ export interface IntegrationWebhooksSettings {
+     'strategy': WebhookStrategy | null;
+-    'ip_allowlist': ServerIpAllowlistOverrideSettings | null;
+ }
+diff --git a/lib/packages/fabro-api-client/src/models/ip-allow-entry.ts b/lib/packages/fabro-api-client/src/models/ip-allow-entry.ts
+deleted file mode 100644
+index bff3a8d9c..000000000
+--- a/lib/packages/fabro-api-client/src/models/ip-allow-entry.ts
++++ /dev/null
+@@ -1,26 +0,0 @@
+-/* tslint:disable */
+-/* eslint-disable */
+-/**
+- * Fabro Run API
+- * HTTP API for managing Fabro workflow run executions.
+- *
+- * The version of the OpenAPI document: 0.1.0
+- *
+- *
+- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+- * https://openapi-generator.tech
+- * Do not edit the class manually.
+- */
+-
+-
+-// May contain unused imports in some cases
+-// @ts-ignore
+-import type { GitHubMetaHooksEntry } from './git-hub-meta-hooks-entry';
+-// May contain unused imports in some cases
+-// @ts-ignore
+-import type { LiteralIpAllowEntry } from './literal-ip-allow-entry';
+-
+-/**
+- * @type IpAllowEntry
+- */
+-export type IpAllowEntry = GitHubMetaHooksEntry | LiteralIpAllowEntry;
+diff --git a/lib/packages/fabro-api-client/src/models/literal-ip-allow-entry.ts b/lib/packages/fabro-api-client/src/models/literal-ip-allow-entry.ts
+deleted file mode 100644
+index dfde31f95..000000000
+--- a/lib/packages/fabro-api-client/src/models/literal-ip-allow-entry.ts
++++ /dev/null
+@@ -1,19 +0,0 @@
+-/* tslint:disable */
+-/* eslint-disable */
+-/**
+- * Fabro Run API
+- * HTTP API for managing Fabro workflow run executions.
+- *
+- * The version of the OpenAPI document: 0.1.0
+- *
+- *
+- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+- * https://openapi-generator.tech
+- * Do not edit the class manually.
+- */
+-
+-
+-
+-export interface LiteralIpAllowEntry {
+-    'Literal': string;
+-}
+diff --git a/lib/packages/fabro-api-client/src/models/server-ip-allowlist-override-settings.ts b/lib/packages/fabro-api-client/src/models/server-ip-allowlist-override-settings.ts
+deleted file mode 100644
+index 9b6b5fd19..000000000
+--- a/lib/packages/fabro-api-client/src/models/server-ip-allowlist-override-settings.ts
++++ /dev/null
+@@ -1,23 +0,0 @@
+-/* tslint:disable */
+-/* eslint-disable */
+-/**
+- * Fabro Run API
+- * HTTP API for managing Fabro workflow run executions.
+- *
+- * The version of the OpenAPI document: 0.1.0
+- *
+- *
+- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+- * https://openapi-generator.tech
+- * Do not edit the class manually.
+- */
+-
+-
+-// May contain unused imports in some cases
+-// @ts-ignore
+-import type { IpAllowEntry } from './ip-allow-entry';
+-
+-export interface ServerIpAllowlistOverrideSettings {
+-    'entries': Array<IpAllowEntry> | null;
+-    'trusted_proxy_count': number | null;
+-}
+diff --git a/lib/packages/fabro-api-client/src/models/server-ip-allowlist-settings.ts b/lib/packages/fabro-api-client/src/models/server-ip-allowlist-settings.ts
+deleted file mode 100644
+index bccf9fdf0..000000000
+--- a/lib/packages/fabro-api-client/src/models/server-ip-allowlist-settings.ts
++++ /dev/null
+@@ -1,23 +0,0 @@
+-/* tslint:disable */
+-/* eslint-disable */
+-/**
+- * Fabro Run API
+- * HTTP API for managing Fabro workflow run executions.
+- *
+- * The version of the OpenAPI document: 0.1.0
+- *
+- *
+- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+- * https://openapi-generator.tech
+- * Do not edit the class manually.
+- */
+-
+-
+-// May contain unused imports in some cases
+-// @ts-ignore
+-import type { IpAllowEntry } from './ip-allow-entry';
+-
+-export interface ServerIpAllowlistSettings {
+-    'entries': Array<IpAllowEntry>;
+-    'trusted_proxy_count': number;
+-}
+diff --git a/lib/packages/fabro-api-client/src/models/server-namespace.ts b/lib/packages/fabro-api-client/src/models/server-namespace.ts
+index 315243e88..153195ed8 100644
+--- a/lib/packages/fabro-api-client/src/models/server-namespace.ts
++++ b/lib/packages/fabro-api-client/src/models/server-namespace.ts
+@@ -27,9 +27,6 @@ import type { ServerAuthSettings } from './server-auth-settings';
+ import type { ServerIntegrationsSettings } from './server-integrations-settings';
+ // May contain unused imports in some cases
+ // @ts-ignore
+-import type { ServerIpAllowlistSettings } from './server-ip-allowlist-settings';
+-// May contain unused imports in some cases
+-// @ts-ignore
+ import type { ServerListenSettings } from './server-listen-settings';
+ // May contain unused imports in some cases
+ // @ts-ignore
+@@ -55,7 +52,6 @@ export interface ServerNamespace {
+     'api': ServerApiSettings;
+     'web': ServerWebSettings;
+     'auth': ServerAuthSettings;
+-    'ip_allowlist': ServerIpAllowlistSettings;
+     'sandbox': ServerSandboxSettings;
+     'storage': ServerStorageSettings;
+     'artifacts': ServerArtifactsSettings;
