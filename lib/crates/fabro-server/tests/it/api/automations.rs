@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -180,6 +180,56 @@ fn revision_from(body: &Value) -> &str {
         .expect("automation response should include a revision")
 }
 
+fn assert_schedule_trigger(body: &Value, expression: &str, enabled: bool) {
+    let trigger = body["triggers"]
+        .as_array()
+        .expect("automation response should include triggers")
+        .iter()
+        .find(|trigger| trigger["id"] == "nightly")
+        .expect("automation response should include nightly schedule trigger");
+
+    assert_eq!(
+        trigger,
+        &json!({
+            "type": "schedule",
+            "id": "nightly",
+            "enabled": enabled,
+            "expression": expression
+        })
+    );
+}
+
+async fn persisted_automation_toml(automation_dir: &Path, id: &str) -> toml::Value {
+    let persisted = tokio::fs::read_to_string(automation_dir.join(format!("{id}.toml")))
+        .await
+        .expect("persisted automation TOML should be readable");
+    toml::from_str(&persisted).expect("persisted automation TOML should parse")
+}
+
+fn assert_persisted_schedule_trigger(body: &toml::Value, expression: &str, enabled: bool) {
+    let triggers = body
+        .get("triggers")
+        .and_then(toml::Value::as_array)
+        .expect("persisted automation TOML should include triggers");
+    let trigger = triggers
+        .iter()
+        .find(|trigger| trigger.get("id").and_then(toml::Value::as_str) == Some("nightly"))
+        .expect("persisted automation TOML should include nightly trigger");
+
+    assert_eq!(
+        trigger.get("type").and_then(toml::Value::as_str),
+        Some("schedule")
+    );
+    assert_eq!(
+        trigger.get("expression").and_then(toml::Value::as_str),
+        Some(expression)
+    );
+    assert_eq!(
+        trigger.get("enabled").and_then(toml::Value::as_bool),
+        Some(enabled)
+    );
+}
+
 #[tokio::test]
 async fn empty_automation_list_returns_total_zero() {
     let (app, _temp_dir, _automation_dir) = automation_app();
@@ -210,6 +260,35 @@ async fn create_automation_persists_sibling_toml_file() {
     assert_eq!(body["id"], "nightly");
     assert_eq!(body["name"], "Nightly");
     assert!(automation_dir.join("nightly.toml").exists());
+}
+
+#[tokio::test]
+async fn schedule_trigger_round_trips_through_create_list_get_and_toml() {
+    let (app, _temp_dir, automation_dir) = automation_app();
+
+    let created = create_automation(&app, "nightly", "Nightly").await;
+    assert_schedule_trigger(&created, "0 3 * * *", true);
+
+    let response = app
+        .clone()
+        .oneshot(empty_request(Method::GET, "/automations/nightly"))
+        .await
+        .expect("get automation should respond");
+    let retrieved =
+        response_json(response, StatusCode::OK, "GET /api/v1/automations/nightly").await;
+    assert_schedule_trigger(&retrieved, "0 3 * * *", true);
+
+    let response = app
+        .oneshot(empty_request(Method::GET, "/automations"))
+        .await
+        .expect("list automations should respond");
+    let list = response_json(response, StatusCode::OK, "GET /api/v1/automations").await;
+    assert_schedule_trigger(&list["data"][0], "0 3 * * *", true);
+
+    let persisted = persisted_automation_toml(&automation_dir, "nightly").await;
+    assert_persisted_schedule_trigger(&persisted, "0 3 * * *", true);
+    assert!(persisted.get("id").is_none());
+    assert!(persisted.get("revision").is_none());
 }
 
 #[tokio::test]
@@ -304,6 +383,42 @@ async fn replace_automation_accepts_unquoted_if_match_and_returns_new_etag() {
     assert_eq!(body["name"], "Updated");
     assert_ne!(body["revision"], revision);
     assert_eq!(etag, format!("\"{}\"", revision_from(&body)));
+}
+
+#[tokio::test]
+async fn replace_automation_round_trips_schedule_trigger() {
+    let (app, _temp_dir, automation_dir) = automation_app();
+    let created = create_automation(&app, "nightly", "Nightly").await;
+    let revision = revision_from(&created);
+    let mut replacement = replacement_body("Rescheduled");
+    replacement["triggers"] = json!([
+        {
+            "type": "api",
+            "id": "manual",
+            "enabled": true
+        },
+        {
+            "type": "schedule",
+            "id": "nightly",
+            "enabled": false,
+            "expression": "30 4 * * *"
+        }
+    ]);
+
+    let response = app
+        .oneshot(request_with_if_match(
+            Method::PUT,
+            "/automations/nightly",
+            revision,
+            Some(replacement),
+        ))
+        .await
+        .expect("replace automation should respond");
+    let body = response_json(response, StatusCode::OK, "PUT /api/v1/automations/nightly").await;
+
+    assert_schedule_trigger(&body, "30 4 * * *", false);
+    let persisted = persisted_automation_toml(&automation_dir, "nightly").await;
+    assert_persisted_schedule_trigger(&persisted, "30 4 * * *", false);
 }
 
 #[tokio::test]
@@ -412,6 +527,29 @@ async fn delete_automation_removes_file_and_resource() {
         response,
         StatusCode::NOT_FOUND,
         "GET /api/v1/automations/nightly after delete",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn unknown_trigger_type_is_unprocessable() {
+    let (app, _temp_dir, _automation_dir) = automation_app();
+    let mut body = automation_body("nightly", "Nightly");
+    body["triggers"][1] = json!({
+        "type": "event",
+        "id": "event_trigger",
+        "enabled": true
+    });
+
+    let response = app
+        .oneshot(json_request(Method::POST, "/automations", &body))
+        .await
+        .expect("unknown trigger type create should respond");
+
+    response_status(
+        response,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "POST /api/v1/automations unknown trigger type",
     )
     .await;
 }

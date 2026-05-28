@@ -11,7 +11,7 @@
 pub mod auth;
 #[allow(
     dead_code,
-    reason = "Automation scheduler wiring will call the materializer; issue #398 adds the shared core first."
+    reason = "Automation materializer test hooks and helpers are only referenced by selected targets."
 )]
 mod automation_materializer;
 mod canonical_host;
