@@ -1,0 +1,17 @@
+diff --git a/apps/fabro-web/app/routes/runs.tsx b/apps/fabro-web/app/routes/runs.tsx
+index 10e40c04c..7da0719ea 100644
+--- a/apps/fabro-web/app/routes/runs.tsx
++++ b/apps/fabro-web/app/routes/runs.tsx
+@@ -871,7 +871,11 @@ export default function Runs() {
+ 
+           {view === "columns" ? (
+             <>
+-              <div className="flex min-h-0 flex-1 gap-5 overflow-x-auto pb-4">
++              <div
++                className={`flex min-h-0 gap-5 overflow-x-auto pb-4 ${
++                  isLandingReady && totalRuns === 0 ? "" : "flex-1"
++                }`}
++              >
+                 {visibleColumns.map((col) => (
+                   <div key={col.id} className="w-72 shrink-0">
+                     <BoardColumnView column={col} />
