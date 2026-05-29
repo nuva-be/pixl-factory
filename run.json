@@ -358,7 +358,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-29T15:41:18.463060Z",
-  "last_event_at": "2026-05-29T15:41:27.342896Z",
+  "last_event_at": "2026-05-29T15:43:43.985656Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -462,9 +462,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 39,
       "checkpoint": {
-        "timestamp": "2026-05-29T15:43:39.467874Z",
+        "timestamp": "2026-05-29T15:43:43.984056Z",
         "current_node": "compile_rust",
         "completed_nodes": [
           "start",
@@ -473,21 +473,105 @@
         ],
         "node_retries": {},
         "context_values": {
+          "internal.run_id": "01KST6AQV9EKTCFT20RDZ8XEWQ",
+          "thread.start.current_node": "toolchain",
+          "internal.retry_count.start": 0,
+          "graph.retry_target": "exit",
+          "internal.work_dir": "/home/daytona/workspace/fabro",
+          "failure_signature": "",
+          "internal.node_visit_count": 1,
+          "internal.thread_id": "toolchain",
+          "outcome": "succeeded",
+          "thread.toolchain.current_node": "compile_rust",
+          "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "current_node": "compile_rust",
+          "graph.goal": "Verify the sandbox can lint and test the project",
+          "internal.fidelity": "compact",
+          "internal.retry_count.compile_rust": 0,
+          "internal.retry_count.toolchain": 0,
+          "graph.rankdir": "LR",
+          "failure_class": ""
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "toolchain": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/b8ca0e4caeb04bc5b1536d59d663fbaf5f6689fccabefcb4ddeb0727a377bb53"
+            },
+            "notes": "Script completed: rustc --version && cargo --version && bun --version 2>&1",
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 1552,
+              "active_time_ms": 1552
+            }
+          },
+          "compile_rust": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+            },
+            "notes": "Script completed: cargo check -q --workspace 2>&1",
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 132118,
+              "active_time_ms": 132118
+            }
+          }
+        },
+        "next_node_id": "compile_typescript",
+        "git_commit_sha": "f64f76aba31d4fc891d2875cd879f18350d9aa6e",
+        "node_visits": {
+          "start": 1,
+          "compile_rust": 1,
+          "toolchain": 1
+        }
+      },
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
+    },
+    {
+      "seq": 0,
+      "checkpoint": {
+        "timestamp": "2026-05-29T15:43:54.154571Z",
+        "current_node": "compile_typescript",
+        "completed_nodes": [
+          "start",
+          "toolchain",
+          "compile_rust",
+          "compile_typescript"
+        ],
+        "node_retries": {},
+        "context_values": {
           "failure_signature": "",
           "graph.rankdir": "LR",
           "graph.goal": "Verify the sandbox can lint and test the project",
+          "thread.compile_rust.current_node": "compile_typescript",
           "thread.start.current_node": "toolchain",
+          "internal.retry_count.compile_typescript": 0,
           "thread.toolchain.current_node": "compile_rust",
-          "current_node": "compile_rust",
+          "current_node": "compile_typescript",
           "internal.node_visit_count": 1,
           "internal.work_dir": "/home/daytona/workspace/fabro",
           "internal.fidelity": "compact",
           "outcome": "succeeded",
           "internal.run_id": "01KST6AQV9EKTCFT20RDZ8XEWQ",
           "failure_class": "",
-          "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "command.output": "blob://sha256/360de199dd51ed63e313185ae8102346f45d213e5aa9fb112d463737ee4fcab5",
           "graph.retry_target": "exit",
-          "internal.thread_id": "toolchain",
+          "internal.thread_id": "compile_rust",
           "internal.retry_count.toolchain": 0,
           "internal.retry_count.compile_rust": 0,
           "internal.retry_count.start": 0
@@ -524,13 +608,28 @@
           "start": {
             "status": "succeeded",
             "usage": null
+          },
+          "compile_typescript": {
+            "status": "succeeded",
+            "context_updates": {
+              "command.output": "blob://sha256/360de199dd51ed63e313185ae8102346f45d213e5aa9fb112d463737ee4fcab5"
+            },
+            "notes": "Script completed: cd apps/fabro-web && bun install && bun run typecheck 2>&1",
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 10161,
+              "active_time_ms": 10161
+            }
           }
         },
-        "next_node_id": "compile_typescript",
+        "next_node_id": "lint_rust",
         "node_visits": {
-          "toolchain": 1,
+          "start": 1,
+          "compile_typescript": 1,
           "compile_rust": 1,
-          "start": 1
+          "toolchain": 1
         }
       },
       "diff": {}
@@ -648,7 +747,12 @@
       "first_event_seq": 31,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Script completed: cargo check -q --workspace 2>&1",
+        "failure_reason": null,
+        "timestamp": "2026-05-29T15:43:39.467339Z"
+      },
       "provider_used": null,
       "diff": null,
       "script_invocation": {
@@ -656,10 +760,53 @@
         "command": "exec 2>&1\ncargo check -q --workspace 2>&1",
         "language": "shell"
       },
+      "script_timing": {
+        "output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "exit_code": 0,
+        "duration_ms": 132118,
+        "termination": "exited",
+        "output_bytes": 0,
+        "live_streaming": false
+      },
+      "parallel_results": null,
+      "output": null,
+      "output_bytes": 0,
+      "live_streaming": false,
+      "termination": "exited",
+      "started_at": "2026-05-29T15:41:27.342573Z",
+      "handler": "command",
+      "timing": {
+        "wall_time_ms": 132124,
+        "inference_time_ms": 0,
+        "tool_time_ms": 132118,
+        "active_time_ms": 132118
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    },
+    "compile_typescript@1": {
+      "first_event_seq": 42,
+      "prompt": null,
+      "response": null,
+      "completion": null,
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": {
+        "script": "cd apps/fabro-web && bun install && bun run typecheck 2>&1",
+        "command": "exec 2>&1\ncd apps/fabro-web && bun install && bun run typecheck 2>&1",
+        "language": "shell"
+      },
       "script_timing": null,
       "parallel_results": null,
       "output": null,
-      "started_at": "2026-05-29T15:41:27.342573Z",
+      "started_at": "2026-05-29T15:43:43.985379Z",
       "handler": "command",
       "usage": {
         "input_tokens": 0,
