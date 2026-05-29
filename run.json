@@ -353,7 +353,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-29T12:32:33.121653Z",
-  "last_event_at": "2026-05-29T12:32:51.595681Z",
+  "last_event_at": "2026-05-29T12:32:55.925963Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -802,9 +802,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 68,
       "checkpoint": {
-        "timestamp": "2026-05-29T12:32:51.722830Z",
+        "timestamp": "2026-05-29T12:32:55.923364Z",
         "current_node": "test_rust",
         "completed_nodes": [
           "start",
@@ -816,33 +816,33 @@
         ],
         "node_retries": {},
         "context_values": {
-          "internal.retry_count.toolchain": 0,
-          "internal.retry_count.compile_rust": 0,
-          "outcome": "failed",
-          "internal.retry_count.test_rust": 0,
-          "thread.lint_rust.current_node": "test_rust",
-          "current_node": "test_rust",
-          "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd",
-          "internal.run_id": "01KSSVH9SF4TMGP939NYYZQDMZ",
-          "failure_class": "deterministic",
-          "internal.node_visit_count": 1,
-          "internal.retry_count.start": 0,
-          "thread.toolchain.current_node": "compile_rust",
-          "failure_signature": "test_rust|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: cargo: command not found",
-          "thread.compile_rust.current_node": "compile_typescript",
-          "thread.compile_typescript.current_node": "lint_rust",
-          "graph.retry_target": "exit",
-          "internal.work_dir": "/workspace/fabro",
-          "graph.goal": "Verify the sandbox can lint and test the project",
           "internal.fidelity": "compact",
+          "failure_signature": "test_rust|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: cargo: command not found",
+          "graph.retry_target": "exit",
+          "internal.retry_count.start": 0,
+          "internal.retry_count.toolchain": 0,
+          "graph.goal": "Verify the sandbox can lint and test the project",
+          "thread.lint_rust.current_node": "test_rust",
+          "failure_class": "deterministic",
+          "thread.toolchain.current_node": "compile_rust",
           "internal.retry_count.compile_typescript": 0,
-          "internal.thread_id": "lint_rust",
-          "internal.retry_count.lint_rust": 0,
+          "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd",
+          "current_node": "test_rust",
+          "internal.run_id": "01KSSVH9SF4TMGP939NYYZQDMZ",
           "graph.rankdir": "LR",
-          "thread.start.current_node": "toolchain"
+          "outcome": "failed",
+          "thread.compile_typescript.current_node": "lint_rust",
+          "internal.work_dir": "/workspace/fabro",
+          "internal.retry_count.lint_rust": 0,
+          "thread.compile_rust.current_node": "compile_typescript",
+          "internal.retry_count.compile_rust": 0,
+          "thread.start.current_node": "toolchain",
+          "internal.retry_count.test_rust": 0,
+          "internal.thread_id": "lint_rust",
+          "internal.node_visit_count": 1
         },
         "node_outcomes": {
-          "test_rust": {
+          "compile_rust": {
             "status": "failed",
             "context_updates": {
               "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd"
@@ -855,8 +855,8 @@
             "timing": {
               "wall_time_ms": 0,
               "inference_time_ms": 0,
-              "tool_time_ms": 121,
-              "active_time_ms": 121
+              "tool_time_ms": 116,
+              "active_time_ms": 116
             }
           },
           "compile_typescript": {
@@ -874,6 +874,204 @@
               "inference_time_ms": 0,
               "tool_time_ms": 119,
               "active_time_ms": 119
+            }
+          },
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "toolchain": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: rustc: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 121,
+              "active_time_ms": 121
+            }
+          },
+          "lint_rust": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: cargo: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 118,
+              "active_time_ms": 118
+            }
+          },
+          "test_rust": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: cargo: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 121,
+              "active_time_ms": 121
+            }
+          }
+        },
+        "next_node_id": "test_typescript",
+        "git_commit_sha": "bfc6bf1b4fcd6f25a8f87a9bc4ba775a728adc68",
+        "loop_failure_signatures": {
+          "lint_rust|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: cargo: command not found": 1,
+          "toolchain|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: rustc: command not found": 1,
+          "test_rust|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: cargo: command not found": 1,
+          "compile_typescript|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: bun: command not found": 1,
+          "compile_rust|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: cargo: command not found": 1
+        },
+        "node_visits": {
+          "lint_rust": 1,
+          "compile_typescript": 1,
+          "toolchain": 1,
+          "compile_rust": 1,
+          "start": 1,
+          "test_rust": 1
+        }
+      },
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
+    },
+    {
+      "seq": 0,
+      "checkpoint": {
+        "timestamp": "2026-05-29T12:32:56.050958Z",
+        "current_node": "test_typescript",
+        "completed_nodes": [
+          "start",
+          "toolchain",
+          "compile_rust",
+          "compile_typescript",
+          "lint_rust",
+          "test_rust",
+          "test_typescript"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "internal.retry_count.toolchain": 0,
+          "internal.retry_count.compile_rust": 0,
+          "outcome": "failed",
+          "internal.retry_count.test_rust": 0,
+          "thread.lint_rust.current_node": "test_rust",
+          "internal.retry_count.test_typescript": 0,
+          "current_node": "test_typescript",
+          "command.output": "blob://sha256/ffaf0781e0b2d81b700d17ef09379260140132da55200d9752e66b1008350e10",
+          "internal.run_id": "01KSSVH9SF4TMGP939NYYZQDMZ",
+          "failure_class": "deterministic",
+          "internal.node_visit_count": 1,
+          "internal.retry_count.start": 0,
+          "thread.toolchain.current_node": "compile_rust",
+          "failure_signature": "test_typescript|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: bun: command not found",
+          "thread.compile_rust.current_node": "compile_typescript",
+          "thread.compile_typescript.current_node": "lint_rust",
+          "graph.retry_target": "exit",
+          "thread.test_rust.current_node": "test_typescript",
+          "internal.work_dir": "/workspace/fabro",
+          "graph.goal": "Verify the sandbox can lint and test the project",
+          "internal.fidelity": "compact",
+          "internal.retry_count.compile_typescript": 0,
+          "internal.thread_id": "test_rust",
+          "internal.retry_count.lint_rust": 0,
+          "graph.rankdir": "LR",
+          "thread.start.current_node": "toolchain"
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "test_rust": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: cargo: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 121,
+              "active_time_ms": 121
+            }
+          },
+          "test_typescript": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/ffaf0781e0b2d81b700d17ef09379260140132da55200d9752e66b1008350e10"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: bun: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 117,
+              "active_time_ms": 117
+            }
+          },
+          "compile_typescript": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/ffaf0781e0b2d81b700d17ef09379260140132da55200d9752e66b1008350e10"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: bun: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 119,
+              "active_time_ms": 119
+            }
+          },
+          "toolchain": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: rustc: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 121,
+              "active_time_ms": 121
             }
           },
           "compile_rust": {
@@ -909,37 +1107,17 @@
               "tool_time_ms": 118,
               "active_time_ms": 118
             }
-          },
-          "start": {
-            "status": "succeeded",
-            "usage": null
-          },
-          "toolchain": {
-            "status": "failed",
-            "context_updates": {
-              "command.output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193"
-            },
-            "failure": {
-              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: rustc: command not found\n",
-              "category": "deterministic"
-            },
-            "usage": null,
-            "timing": {
-              "wall_time_ms": 0,
-              "inference_time_ms": 0,
-              "tool_time_ms": 121,
-              "active_time_ms": 121
-            }
           }
         },
-        "next_node_id": "test_typescript",
+        "next_node_id": "exit",
         "node_visits": {
           "test_rust": 1,
           "compile_rust": 1,
           "start": 1,
           "toolchain": 1,
           "lint_rust": 1,
-          "compile_typescript": 1
+          "compile_typescript": 1,
+          "test_typescript": 1
         }
       },
       "diff": {}
@@ -1020,22 +1198,22 @@
       },
       "state": "failed"
     },
-    "test_rust@1": {
-      "first_event_seq": 61,
+    "test_typescript@1": {
+      "first_event_seq": 71,
       "prompt": null,
       "response": null,
       "completion": null,
       "provider_used": null,
       "diff": null,
       "script_invocation": {
-        "script": "ulimit -n 4096 && cargo nextest run --cargo-quiet --workspace --status-level fail 2>&1",
-        "command": "exec 2>&1\nulimit -n 4096 && cargo nextest run --cargo-quiet --workspace --status-level fail 2>&1",
+        "script": "cd apps/fabro-web && bun test 2>&1",
+        "command": "exec 2>&1\ncd apps/fabro-web && bun test 2>&1",
         "language": "shell"
       },
       "script_timing": null,
       "parallel_results": null,
       "output": null,
-      "started_at": "2026-05-29T12:32:51.595361Z",
+      "started_at": "2026-05-29T12:32:55.925691Z",
       "handler": "command",
       "usage": {
         "input_tokens": 0,
@@ -1046,6 +1224,54 @@
         "cache_write_tokens": 0
       },
       "state": "running"
+    },
+    "test_rust@1": {
+      "first_event_seq": 61,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "failed",
+        "notes": null,
+        "failure_reason": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: cargo: command not found\n",
+        "timestamp": "2026-05-29T12:32:51.722270Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": {
+        "script": "ulimit -n 4096 && cargo nextest run --cargo-quiet --workspace --status-level fail 2>&1",
+        "command": "exec 2>&1\nulimit -n 4096 && cargo nextest run --cargo-quiet --workspace --status-level fail 2>&1",
+        "language": "shell"
+      },
+      "script_timing": {
+        "output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd",
+        "exit_code": 127,
+        "duration_ms": 121,
+        "termination": "exited",
+        "output_bytes": 44,
+        "live_streaming": true
+      },
+      "parallel_results": null,
+      "output": null,
+      "output_bytes": 44,
+      "live_streaming": true,
+      "termination": "exited",
+      "started_at": "2026-05-29T12:32:51.595361Z",
+      "handler": "command",
+      "timing": {
+        "wall_time_ms": 126,
+        "inference_time_ms": 0,
+        "tool_time_ms": 121,
+        "active_time_ms": 121
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "failed"
     },
     "toolchain@1": {
       "first_event_seq": 21,
