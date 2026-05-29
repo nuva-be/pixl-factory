@@ -1,0 +1,6 @@
+{
+  "outcome": "succeeded",
+  "notes": "Script completed: cd apps/fabro-web && bun test 2>&1",
+  "failure_reason": null,
+  "timestamp": "2026-05-29T12:48:04.514261Z"
+}

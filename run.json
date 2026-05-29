@@ -357,7 +357,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-29T12:42:15.530122Z",
-  "last_event_at": "2026-05-29T12:47:50.723258Z",
+  "last_event_at": "2026-05-29T12:48:08.859094Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -905,9 +905,9 @@
       }
     },
     {
-      "seq": 0,
+      "seq": 79,
       "checkpoint": {
-        "timestamp": "2026-05-29T12:48:04.514934Z",
+        "timestamp": "2026-05-29T12:48:08.859037Z",
         "current_node": "test_typescript",
         "completed_nodes": [
           "start",
@@ -920,46 +920,49 @@
         ],
         "node_retries": {},
         "context_values": {
-          "thread.test_rust.current_node": "test_typescript",
-          "current_node": "test_typescript",
-          "internal.retry_count.toolchain": 0,
-          "internal.retry_count.test_rust": 0,
-          "failure_class": "",
-          "thread.start.current_node": "toolchain",
-          "outcome": "succeeded",
           "thread.toolchain.current_node": "compile_rust",
+          "thread.compile_typescript.current_node": "lint_rust",
+          "current_node": "test_typescript",
+          "failure_class": "",
+          "internal.node_visit_count": 1,
+          "internal.retry_count.test_rust": 0,
+          "thread.lint_rust.current_node": "test_rust",
+          "internal.retry_count.compile_rust": 0,
+          "internal.retry_count.toolchain": 0,
+          "graph.rankdir": "LR",
+          "internal.work_dir": "/home/daytona/workspace/fabro",
+          "thread.test_rust.current_node": "test_typescript",
+          "internal.retry_count.compile_typescript": 0,
+          "internal.retry_count.lint_rust": 0,
+          "graph.retry_target": "exit",
+          "internal.retry_count.start": 0,
+          "command.output": "blob://sha256/70717c96728bd5dcccef97edafc85147ed1580e006f8266baf96b6079b8aa6f8",
+          "internal.retry_count.test_typescript": 0,
+          "internal.run_id": "01KSSW2TW295B3R4FP8RGZ8DHG",
+          "internal.fidelity": "compact",
+          "internal.thread_id": "test_rust",
           "failure_signature": "",
           "graph.goal": "Verify the sandbox can lint and test the project",
-          "internal.work_dir": "/home/daytona/workspace/fabro",
-          "graph.rankdir": "LR",
-          "internal.retry_count.compile_rust": 0,
-          "command.output": "blob://sha256/70717c96728bd5dcccef97edafc85147ed1580e006f8266baf96b6079b8aa6f8",
-          "internal.node_visit_count": 1,
-          "internal.retry_count.lint_rust": 0,
-          "thread.lint_rust.current_node": "test_rust",
-          "graph.retry_target": "exit",
-          "internal.thread_id": "test_rust",
-          "thread.compile_typescript.current_node": "lint_rust",
-          "internal.run_id": "01KSSW2TW295B3R4FP8RGZ8DHG",
-          "internal.retry_count.test_typescript": 0,
+          "outcome": "succeeded",
           "thread.compile_rust.current_node": "compile_typescript",
-          "internal.retry_count.start": 0,
-          "internal.retry_count.compile_typescript": 0,
-          "internal.fidelity": "compact"
+          "thread.start.current_node": "toolchain"
         },
         "node_outcomes": {
-          "compile_rust": {
-            "status": "succeeded",
+          "lint_rust": {
+            "status": "failed",
             "context_updates": {
-              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
+              "command.output": "blob://sha256/614823a82b43c431408c5c305dd3cee8198447d805d488c6b56ae40d08281418"
             },
-            "notes": "Script completed: cargo check -q --workspace 2>&1",
+            "failure": {
+              "message": "Script failed with exit code: 1\n\n## output\nDiff in /home/daytona/repos/fabro-sh/fabro/lib/crates/fabro-server/src/server/handler/automations.rs:15:\n     ApiError, AppState, IntoResponse, Json, PaginationParams, Path, RequiredUser, Response, Router,\n     State, StatusCode, get, paginate_items,\n };\n-use super::lifecycle;\n-use super::runs;\n+use super::{lifecycle, runs};\n use crate::automation_materializer::AutomationRunMaterializeInput;\n use crate::principal_middleware::RequiredRunToolActor;\n \nDiff in /home/daytona/repos/fabro-sh/fabro/lib/crates/fabro-server/src/server/handler/automations.rs:186:\n     // the run sits in `Submitted` forever because the scheduler only claims\n     // `Runnable`. Mirror what the UI does for a manual create-then-start flow.\n     if response.status().is_success() {\n-        if let Err(err) =\n-            lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await\n-        {\n+        if let Err(err) = lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await {\n             tracing::warn!(\n                 %run_id,\n                 automation_id = %automation.id,\n",
+              "category": "deterministic"
+            },
             "usage": null,
             "timing": {
               "wall_time_ms": 0,
               "inference_time_ms": 0,
-              "tool_time_ms": 132175,
-              "active_time_ms": 132175
+              "tool_time_ms": 3744,
+              "active_time_ms": 3744
             }
           },
           "compile_typescript": {
@@ -976,18 +979,22 @@
               "active_time_ms": 9937
             }
           },
-          "test_rust": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "compile_rust": {
             "status": "succeeded",
             "context_updates": {
-              "command.output": "blob://sha256/b425c318612c82db6d64aab84da1a19028a1f61ddf4acd1f49c744e65be4898e"
+              "command.output": "blob://sha256/12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126"
             },
-            "notes": "Script completed: ulimit -n 4096 && cargo nextest run --cargo-quiet --workspace --status-level fail 2>&1",
+            "notes": "Script completed: cargo check -q --workspace 2>&1",
             "usage": null,
             "timing": {
               "wall_time_ms": 0,
               "inference_time_ms": 0,
-              "tool_time_ms": 165001,
-              "active_time_ms": 165001
+              "tool_time_ms": 132175,
+              "active_time_ms": 132175
             }
           },
           "toolchain": {
@@ -1018,43 +1025,144 @@
               "active_time_ms": 13783
             }
           },
-          "start": {
+          "test_rust": {
             "status": "succeeded",
-            "usage": null
-          },
-          "lint_rust": {
-            "status": "failed",
             "context_updates": {
-              "command.output": "blob://sha256/614823a82b43c431408c5c305dd3cee8198447d805d488c6b56ae40d08281418"
+              "command.output": "blob://sha256/b425c318612c82db6d64aab84da1a19028a1f61ddf4acd1f49c744e65be4898e"
             },
-            "failure": {
-              "message": "Script failed with exit code: 1\n\n## output\nDiff in /home/daytona/repos/fabro-sh/fabro/lib/crates/fabro-server/src/server/handler/automations.rs:15:\n     ApiError, AppState, IntoResponse, Json, PaginationParams, Path, RequiredUser, Response, Router,\n     State, StatusCode, get, paginate_items,\n };\n-use super::lifecycle;\n-use super::runs;\n+use super::{lifecycle, runs};\n use crate::automation_materializer::AutomationRunMaterializeInput;\n use crate::principal_middleware::RequiredRunToolActor;\n \nDiff in /home/daytona/repos/fabro-sh/fabro/lib/crates/fabro-server/src/server/handler/automations.rs:186:\n     // the run sits in `Submitted` forever because the scheduler only claims\n     // `Runnable`. Mirror what the UI does for a manual create-then-start flow.\n     if response.status().is_success() {\n-        if let Err(err) =\n-            lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await\n-        {\n+        if let Err(err) = lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await {\n             tracing::warn!(\n                 %run_id,\n                 automation_id = %automation.id,\n",
-              "category": "deterministic"
-            },
+            "notes": "Script completed: ulimit -n 4096 && cargo nextest run --cargo-quiet --workspace --status-level fail 2>&1",
             "usage": null,
             "timing": {
               "wall_time_ms": 0,
               "inference_time_ms": 0,
-              "tool_time_ms": 3744,
-              "active_time_ms": 3744
+              "tool_time_ms": 165001,
+              "active_time_ms": 165001
             }
           }
         },
         "next_node_id": "exit",
+        "git_commit_sha": "3f70c8ffd6103ac621a5f0f8868339acb77f4199",
+        "loop_failure_signatures": {
+          "lint_rust|deterministic|script failed with exit code: <n> ## output diff in /home/daytona/repos/fabro-sh/fabro/lib/crates/fabro-server/src/server/handler/automations.rs:<n>: apierror,appstate,intoresponse,json,paginationparams,path,requireduser,response,router,sta": 1
+        },
         "node_visits": {
-          "compile_typescript": 1,
-          "test_rust": 1,
+          "start": 1,
           "test_typescript": 1,
           "lint_rust": 1,
           "toolchain": 1,
-          "start": 1,
-          "compile_rust": 1
+          "test_rust": 1,
+          "compile_rust": 1,
+          "compile_typescript": 1
         }
       },
-      "diff": {}
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
     }
   ],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-05-29T12:48:08.877655Z",
+    "status": "failed",
+    "timing": {
+      "wall_time_ms": 353331,
+      "inference_time_ms": 0,
+      "tool_time_ms": 326143,
+      "active_time_ms": 326143
+    },
+    "failure": {
+      "reason": "workflow_error",
+      "detail": {
+        "message": "goal gate unsatisfied for node lint_rust and no retry target",
+        "category": "deterministic"
+      }
+    },
+    "final_git_commit_sha": "3f70c8ffd6103ac621a5f0f8868339acb77f4199",
+    "stages": [
+      {
+        "stage_id": "start",
+        "stage_label": "start",
+        "timing": {
+          "wall_time_ms": 0,
+          "inference_time_ms": 0,
+          "tool_time_ms": 0,
+          "active_time_ms": 0
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "toolchain",
+        "stage_label": "toolchain",
+        "timing": {
+          "wall_time_ms": 1514,
+          "inference_time_ms": 0,
+          "tool_time_ms": 1503,
+          "active_time_ms": 1503
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "compile_rust",
+        "stage_label": "compile_rust",
+        "timing": {
+          "wall_time_ms": 132182,
+          "inference_time_ms": 0,
+          "tool_time_ms": 132175,
+          "active_time_ms": 132175
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "compile_typescript",
+        "stage_label": "compile_typescript",
+        "timing": {
+          "wall_time_ms": 9944,
+          "inference_time_ms": 0,
+          "tool_time_ms": 9937,
+          "active_time_ms": 9937
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "lint_rust",
+        "stage_label": "lint_rust",
+        "timing": {
+          "wall_time_ms": 3751,
+          "inference_time_ms": 0,
+          "tool_time_ms": 3744,
+          "active_time_ms": 3744
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "test_rust",
+        "stage_label": "test_rust",
+        "timing": {
+          "wall_time_ms": 165007,
+          "inference_time_ms": 0,
+          "tool_time_ms": 165001,
+          "active_time_ms": 165001
+        },
+        "retries": 0
+      },
+      {
+        "stage_id": "test_typescript",
+        "stage_label": "test_typescript",
+        "timing": {
+          "wall_time_ms": 13791,
+          "inference_time_ms": 0,
+          "tool_time_ms": 13783,
+          "active_time_ms": 13783
+        },
+        "retries": 0
+      }
+    ],
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "kind": "ready",
     "plan": {
@@ -1166,7 +1274,12 @@
       "first_event_seq": 72,
       "prompt": null,
       "response": null,
-      "completion": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": "Script completed: cd apps/fabro-web && bun test 2>&1",
+        "failure_reason": null,
+        "timestamp": "2026-05-29T12:48:04.514261Z"
+      },
       "provider_used": null,
       "diff": null,
       "script_invocation": {
@@ -1174,11 +1287,27 @@
         "command": "exec 2>&1\ncd apps/fabro-web && bun test 2>&1",
         "language": "shell"
       },
-      "script_timing": null,
+      "script_timing": {
+        "output": "blob://sha256/70717c96728bd5dcccef97edafc85147ed1580e006f8266baf96b6079b8aa6f8",
+        "exit_code": 0,
+        "duration_ms": 13783,
+        "termination": "exited",
+        "output_bytes": 72063,
+        "live_streaming": true
+      },
       "parallel_results": null,
       "output": null,
+      "output_bytes": 72063,
+      "live_streaming": true,
+      "termination": "exited",
       "started_at": "2026-05-29T12:47:50.722873Z",
       "handler": "command",
+      "timing": {
+        "wall_time_ms": 13791,
+        "inference_time_ms": 0,
+        "tool_time_ms": 13783,
+        "active_time_ms": 13783
+      },
       "usage": {
         "input_tokens": 0,
         "output_tokens": 0,
@@ -1187,7 +1316,7 @@
         "cache_read_tokens": 0,
         "cache_write_tokens": 0
       },
-      "state": "running"
+      "state": "succeeded"
     },
     "toolchain@1": {
       "first_event_seq": 22,
