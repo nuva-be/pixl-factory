@@ -353,7 +353,7 @@
     "kind": "running"
   },
   "status_updated_at": "2026-05-29T12:29:28.200890Z",
-  "last_event_at": "2026-05-29T12:29:30.315205Z",
+  "last_event_at": "2026-05-29T12:29:34.383152Z",
   "pending_control": null,
   "checkpoints": [
     {
@@ -394,9 +394,9 @@
       "diff": {}
     },
     {
-      "seq": 0,
+      "seq": 28,
       "checkpoint": {
-        "timestamp": "2026-05-29T12:29:30.439889Z",
+        "timestamp": "2026-05-29T12:29:34.381868Z",
         "current_node": "toolchain",
         "completed_nodes": [
           "start",
@@ -404,7 +404,78 @@
         ],
         "node_retries": {},
         "context_values": {
+          "outcome": "failed",
+          "graph.retry_target": "exit",
+          "internal.run_id": "01KSSVBSMVEY5TRHARM10GE31R",
+          "internal.work_dir": "/workspace/fabro",
+          "internal.retry_count.start": 0,
+          "thread.start.current_node": "toolchain",
+          "failure_signature": "toolchain|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: rustc: command not found",
+          "internal.retry_count.toolchain": 0,
+          "failure_class": "deterministic",
+          "internal.fidelity": "compact",
+          "command.output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193",
+          "internal.node_visit_count": 1,
+          "graph.rankdir": "LR",
+          "graph.goal": "Verify the sandbox can lint and test the project",
           "current_node": "toolchain",
+          "internal.thread_id": "start"
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "toolchain": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: rustc: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 117,
+              "active_time_ms": 117
+            }
+          }
+        },
+        "next_node_id": "compile_rust",
+        "git_commit_sha": "5096af3592099ed8d106519c645d350091f12fd9",
+        "loop_failure_signatures": {
+          "toolchain|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: rustc: command not found": 1
+        },
+        "node_visits": {
+          "start": 1,
+          "toolchain": 1
+        }
+      },
+      "diff": {
+        "summary": {
+          "files_changed": 0,
+          "additions": 0,
+          "deletions": 0
+        }
+      }
+    },
+    {
+      "seq": 0,
+      "checkpoint": {
+        "timestamp": "2026-05-29T12:29:34.506076Z",
+        "current_node": "compile_rust",
+        "completed_nodes": [
+          "start",
+          "toolchain",
+          "compile_rust"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "thread.toolchain.current_node": "compile_rust",
+          "current_node": "compile_rust",
           "failure_class": "deterministic",
           "graph.rankdir": "LR",
           "internal.work_dir": "/workspace/fabro",
@@ -413,12 +484,13 @@
           "internal.retry_count.start": 0,
           "outcome": "failed",
           "thread.start.current_node": "toolchain",
+          "internal.retry_count.compile_rust": 0,
           "internal.fidelity": "compact",
           "graph.retry_target": "exit",
-          "failure_signature": "toolchain|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: rustc: command not found",
-          "internal.thread_id": "start",
+          "failure_signature": "compile_rust|deterministic|script failed with exit code: <n> ## output /bin/bash: line <n>: cargo: command not found",
+          "internal.thread_id": "toolchain",
           "internal.retry_count.toolchain": 0,
-          "command.output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193",
+          "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd",
           "internal.run_id": "01KSSVBSMVEY5TRHARM10GE31R"
         },
         "node_outcomes": {
@@ -439,15 +511,33 @@
               "active_time_ms": 117
             }
           },
+          "compile_rust": {
+            "status": "failed",
+            "context_updates": {
+              "command.output": "blob://sha256/8c6308b179d7566053f30e801ad9d5821551d6cbae0f61b7673b79bbdd03a2cd"
+            },
+            "failure": {
+              "message": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: cargo: command not found\n",
+              "category": "deterministic"
+            },
+            "usage": null,
+            "timing": {
+              "wall_time_ms": 0,
+              "inference_time_ms": 0,
+              "tool_time_ms": 116,
+              "active_time_ms": 116
+            }
+          },
           "start": {
             "status": "succeeded",
             "usage": null
           }
         },
-        "next_node_id": "compile_rust",
+        "next_node_id": "compile_typescript",
         "node_visits": {
           "start": 1,
-          "toolchain": 1
+          "toolchain": 1,
+          "compile_rust": 1
         }
       },
       "diff": {}
@@ -480,22 +570,22 @@
   "superseded_by": null,
   "pending_interviews": {},
   "stages": {
-    "toolchain@1": {
-      "first_event_seq": 21,
+    "compile_rust@1": {
+      "first_event_seq": 31,
       "prompt": null,
       "response": null,
       "completion": null,
       "provider_used": null,
       "diff": null,
       "script_invocation": {
-        "script": "rustc --version && cargo --version && bun --version 2>&1",
-        "command": "exec 2>&1\nrustc --version && cargo --version && bun --version 2>&1",
+        "script": "cargo check -q --workspace 2>&1",
+        "command": "exec 2>&1\ncargo check -q --workspace 2>&1",
         "language": "shell"
       },
       "script_timing": null,
       "parallel_results": null,
       "output": null,
-      "started_at": "2026-05-29T12:29:30.315185Z",
+      "started_at": "2026-05-29T12:29:34.382899Z",
       "handler": "command",
       "usage": {
         "input_tokens": 0,
@@ -506,6 +596,54 @@
         "cache_write_tokens": 0
       },
       "state": "running"
+    },
+    "toolchain@1": {
+      "first_event_seq": 21,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "failed",
+        "notes": null,
+        "failure_reason": "Script failed with exit code: 127\n\n## output\n/bin/bash: line 2: rustc: command not found\n",
+        "timestamp": "2026-05-29T12:29:30.439329Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": {
+        "script": "rustc --version && cargo --version && bun --version 2>&1",
+        "command": "exec 2>&1\nrustc --version && cargo --version && bun --version 2>&1",
+        "language": "shell"
+      },
+      "script_timing": {
+        "output": "blob://sha256/bad20d1b780e7bea92c9a1e98ee7f0eeda6a62992f8c0c4f37f32f0ed3e42193",
+        "exit_code": 127,
+        "duration_ms": 117,
+        "termination": "exited",
+        "output_bytes": 44,
+        "live_streaming": true
+      },
+      "parallel_results": null,
+      "output": null,
+      "output_bytes": 44,
+      "live_streaming": true,
+      "termination": "exited",
+      "started_at": "2026-05-29T12:29:30.315185Z",
+      "handler": "command",
+      "timing": {
+        "wall_time_ms": 123,
+        "inference_time_ms": 0,
+        "tool_time_ms": 117,
+        "active_time_ms": 117
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "failed"
     },
     "start@1": {
       "first_event_seq": 17,
