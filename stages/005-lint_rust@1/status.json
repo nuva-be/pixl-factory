@@ -1,0 +1,6 @@
+{
+  "outcome": "failed",
+  "notes": null,
+  "failure_reason": "Script failed with exit code: 127\n\n## output\n/home/daytona/.daytona/sessions/fabro-b97178d24f49e669/3d9aa862-2f35-49fd-955a-a6cee26baf54/cmd.sh:4: command not found: cargo\n",
+  "timestamp": "2026-05-29T13:16:07.695197Z"
+}
