@@ -1,0 +1,533 @@
+{
+  "title": "Scheduled Automation Executor Implementation Plan",
+  "spec": {
+    "run_id": "01KSTP6Y52WYFHGCJDJ46RQ4M7",
+    "settings": {
+      "project": {
+        "name": null,
+        "description": null,
+        "metadata": {}
+      },
+      "workflow": {
+        "name": null,
+        "description": null,
+        "graph": "workflow.fabro",
+        "metadata": {}
+      },
+      "run": {
+        "goal": {
+          "type": "inline",
+          "value": "# Scheduled Automation Executor Implementation Plan\n\n> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.\n\n**Goal:** Build a backend scheduled executor that creates and starts normal Fabro runs from enabled automation schedule triggers.\n\n**Architecture:** Add a deterministic scheduling planner plus a long-lived server task. The planner keeps only in-memory cron cursors, and the executor reuses the existing automation materializer and run creation/start path. This intentionally does not add persistent automation runtime state, public status fields, one-time schedules, event triggers, CLI commands, or API contract changes.\n\n**Tech Stack:** Rust, Tokio, chrono UTC, croner, Axum server internals, existing `fabro-automation`, `fabro-server`, `fabro-workflow`, and SlateDB run store.\n\n---\n\n## Locked Decisions\n\n- Schedule triggers use existing five-field UTC cron expressions only.\n- Startup does not backfill missed occurrences from server downtime.\n- Each scheduler wake fires each due trigger at most once, then advances that trigger to the next occurrence after the wake time.\n- If a previous run from the same automation trigger is still queued or active, the executor still creates the newly due run.\n- If materialization, run creation, or run start queuing fails, log a warning and wait until the next cron occurrence.\n- Scheduled runs use `AutomationRef.trigger_id` set to the schedule trigger ID.\n- Scheduled runs use `Principal::System { system_kind: SystemActorKind::Engine }` for provenance to avoid public enum/API churn.\n- Do not add an automation state/status store, next-run status, last-run status, one-time schedule support, event triggers, CLI commands, or OpenAPI changes.\n\n## File Structure\n\n- Create `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n  - Owns the in-memory schedule planner, scheduler loop, due trigger firing, and tests.\n- Modify `lib/crates/fabro-server/src/server.rs`\n  - Register the new module, add an automation scheduler `Notify`, expose a notifier method, and initialize state.\n- Modify `lib/crates/fabro-server/src/serve.rs`\n  - Spawn the automation scheduler alongside the existing run scheduler.\n- Modify `lib/crates/fabro-server/src/server/handler/automations.rs`\n  - Notify the scheduler after successful create, replace, and delete.\n- Modify `lib/crates/fabro-server/src/server/handler/mod.rs` and `lifecycle.rs`\n  - Make `lifecycle` and `queue_run_start` visible inside `crate::server` so the scheduler can queue created runs through the same path as the API endpoint.\n- Modify `lib/crates/fabro-automation/src/model.rs` only if a small method on `AutomationTrigger` or `ScheduleTrigger` makes scheduler code clearer.\n\n## Implementation Tasks\n\n### Task 1: Add Deterministic Schedule Planner\n\n**Files:**\n- Create: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n- Modify: `lib/crates/fabro-server/src/server.rs`\n- Test: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n\n- [ ] Add `mod automation_scheduler;` to `server.rs` and `pub(crate) use automation_scheduler::spawn_automation_scheduler;` if `serve.rs` imports it through the server module.\n- [ ] Define planner-only types in `automation_scheduler.rs`:\n  - `ScheduleTriggerKey { automation_id: AutomationId, trigger_id: AutomationTriggerId }`\n  - `ScheduleCursor { automation_revision: AutomationRevision, expression: String, next_due_at: DateTime<Utc> }`\n  - `DueScheduleTrigger { automation: Automation, trigger_id: AutomationTriggerId, due_at: DateTime<Utc> }`\n  - `AutomationSchedulePlanner { cursors: HashMap<ScheduleTriggerKey, ScheduleCursor> }`\n- [ ] Add a private `next_occurrence(expression: &str, after: DateTime<Utc>) -> Result<DateTime<Utc>, croner::errors::CronError>` helper using the same croner options as automation validation: seconds disallowed, year disallowed, exclusive of `after`.\n- [ ] Add `AutomationSchedulePlanner::reconcile(&mut self, automations: &[Automation], now: DateTime<Utc>)`.\n  - Include only enabled automations and enabled `AutomationTrigger::Schedule` triggers.\n  - Insert new cursors with `next_due_at = next_occurrence(expression, now)`.\n  - Keep existing cursors when automation revision and expression are unchanged.\n  - Reset existing cursors when revision or expression changes.\n  - Remove cursors for deleted, disabled, or no-longer-scheduled triggers.\n- [ ] Add `AutomationSchedulePlanner::take_due(&mut self, automations: &[Automation], now: DateTime<Utc>) -> Vec<DueScheduleTrigger>`.\n  - Return cursors whose `next_due_at <= now`.\n  - Advance each due cursor to `next_occurrence(expression, now)` before returning it.\n  - Return at most one due trigger per cursor per call.\n- [ ] Add unit tests with fixed `DateTime<Utc>` values:\n  - New cursor starts at the next future occurrence and does not backfill an older occurrence.\n  - Due cursor is returned once and advanced beyond `now`.\n  - Disabled automation and disabled schedule trigger remove cursors.\n  - Replacing an automation revision or expression resets the cursor.\n  - Multiple schedule triggers on one automation produce independent cursors.\n\n### Task 2: Add Scheduler Loop And Server Wiring\n\n**Files:**\n- Modify: `lib/crates/fabro-server/src/server.rs`\n- Modify: `lib/crates/fabro-server/src/serve.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/automations.rs`\n- Create/modify tests in: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n\n- [ ] Add `automation_scheduler_notify: Notify` to `AppState`.\n- [ ] Initialize it in `build_app_state`.\n- [ ] Add `pub(crate) fn notify_automation_scheduler(&self)` that calls `notify_one()`.\n- [ ] Add `pub(crate) fn automation_scheduler_notified(&self) -> impl Future<Output = ()>` only if needed to avoid exposing the `Notify` field.\n- [ ] In `create_automation`, notify after the store create succeeds.\n- [ ] In `replace_automation`, notify after the store replace succeeds.\n- [ ] In `delete_automation`, notify after the store delete succeeds.\n- [ ] Implement `spawn_automation_scheduler(state: Arc<AppState>)`:\n  - Own an `AutomationSchedulePlanner`.\n  - Reconcile on every loop before computing due triggers.\n  - Use `state.automation_store().list().await` as the source of truth.\n  - Sleep until the nearest cursor due time, capped at 30 seconds, and also wake on `automation_scheduler_notify`.\n  - Exit when `state.shutdown_token().cancelled()` resolves or `state.is_shutting_down()` is true.\n- [ ] Call `spawn_automation_scheduler(Arc::clone(&state))` in `serve.rs` immediately after `spawn_scheduler(Arc::clone(&state))`.\n- [ ] Add tests for notification-sensitive behavior by calling the planner directly, not by relying on wall-clock sleeps.\n\n### Task 3: Fire Scheduled Automation Runs\n\n**Files:**\n- Modify: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/mod.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/lifecycle.rs`\n- Test: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n\n- [ ] Change `handler/mod.rs` from `mod lifecycle;` to `pub(in crate::server) mod lifecycle;`.\n- [ ] Change `queue_run_start` in `lifecycle.rs` from `pub(super)` to `pub(in crate::server)`.\n- [ ] Add `fire_scheduled_automation_run(state: Arc<AppState>, automation: Automation, trigger_id: AutomationTriggerId, due_at: DateTime<Utc>)`.\n  - Create a fresh `RunId`.\n  - Materialize with `state.materialize_automation_run(AutomationRunMaterializeInput { automation_id, target, run_id, user_settings_path, temp_root })`.\n  - Build `AutomationRef { id, name: Some(automation.name.clone()), trigger_id: Some(trigger_id.to_string()) }`.\n  - Call `handler::runs::create_run_from_manifest` with:\n    - `explicit_run_id: Some(run_id)`\n    - `actor: Principal::System { system_kind: SystemActorKind::Engine }`\n    - empty `HeaderMap`\n    - `automation: Some(automation_ref)`\n  - If the response status is success, call `handler::lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await`.\n  - Log success at `info!` with `automation_id`, `trigger_id`, `run_id`, and `due_at`.\n  - Log failures at `warn!` with `automation_id`, `trigger_id`, `due_at`, and safe error/status fields.\n- [ ] Have the scheduler spawn one Tokio task per due trigger so slow materialization does not block cursor reconciliation for other triggers.\n- [ ] Ensure the cursor advances before spawning the fire task so failed fires do not hot-loop.\n\n### Task 4: Scheduled Executor Tests\n\n**Files:**\n- Modify: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n- Modify only if needed: `lib/crates/fabro-server/src/test_support.rs`\n\n- [ ] Add test helpers in `automation_scheduler.rs` tests:\n  - Build a temp `AppState` with `TestAppStateBuilder`.\n  - Use `TestAutomationRunMaterializer::succeed` with a minimal manifest.\n  - Create automation definitions through `state.automation_store().create(...)` rather than hand-authoring run internals.\n- [ ] Add an async test that calls a test-only `run_due_schedules_once(state, planner, now)` helper:\n  - A schedule-only automation fires when due.\n  - The created run has `automation.id`, `automation.name`, and `automation.trigger_id` set to the schedule trigger ID.\n  - The run appears in cached run summaries after creation.\n- [ ] Add an async test proving schedule-only automations do not require an API trigger.\n- [ ] Add an async test proving a disabled automation and disabled schedule trigger do not create runs.\n- [ ] Add an async test proving multiple due triggers create multiple runs.\n- [ ] Add an async test proving active or queued prior runs do not suppress a newly due run.\n- [ ] Add an async test with a failing fake materializer:\n  - No run is created for the failed due occurrence.\n  - A second call before the next cron occurrence does not retry.\n  - A call at the next cron occurrence attempts again.\n- [ ] Keep tests at server/unit level for scheduler internals and existing `api::automations` tests for API behavior.\n\n### Task 5: Verification\n\n**Files:**\n- No source changes beyond previous tasks.\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-automation\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server automation_scheduler\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server automation_materializer\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server automation_metadata\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server --features test-support api::automations\n```\n\n- [ ] Run formatting and lint checks:\n\n```bash\ncargo +nightly-2026-04-14 fmt --check --all\ncargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings\n```\n\n## Acceptance Criteria\n\n- Enabled schedule triggers create and start normal Fabro runs at their UTC cron times.\n- The executor does not create backfilled runs on startup.\n- The executor creates every observed due run even when prior runs from the same trigger are still active.\n- Failed materialization or creation waits until the next cron occurrence.\n- Scheduled runs are visible through normal run APIs and `GET /automations/{id}/runs`.\n- Manual/API-triggered automation behavior is unchanged.\n- No public API schemas, generated clients, CLI commands, runtime status store, one-time schedule support, or event triggers are added.\n"
+        },
+        "working_dir": null,
+        "metadata": {},
+        "inputs": {},
+        "model": {
+          "provider": "anthropic",
+          "name": "claude-sonnet-4-6",
+          "fallbacks": [],
+          "controls": {
+            "reasoning_effort": null,
+            "speed": null
+          }
+        },
+        "git": {
+          "author": null
+        },
+        "prepare": {
+          "commands": [],
+          "timeout_ms": 300000
+        },
+        "execution": {
+          "mode": "normal",
+          "approval": "prompt"
+        },
+        "checkpoint": {
+          "exclude_globs": [],
+          "skip_git_hooks": false
+        },
+        "clone": {
+          "enabled": true
+        },
+        "run_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "meta_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "environment": {
+          "id": "fabro-dev",
+          "provider": "daytona",
+          "image": {
+            "docker": null,
+            "dockerfile": {
+              "type": "inline",
+              "value": "FROM ubuntu:24.04\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        curl git ripgrep ca-certificates build-essential pkg-config libssl-dev unzip python3 \\\n        xvfb xfce4 xfce4-terminal x11vnc novnc dbus-x11 \\\n        libx11-6 libxrandr2 libxext6 libxrender1 libxfixes3 libxss1 libxtst6 libxi6 \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Install real Chromium (not the snap stub) via xtradeb PPA\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        software-properties-common curl gnupg \\\n    && add-apt-repository -y ppa:xtradeb/apps \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends chromium \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Wrapper: Chromium needs --no-sandbox when running as root in a container,\n# and --disable-dev-shm-usage avoids crashes from small /dev/shm\nRUN printf '#!/bin/bash\\nexec /usr/bin/chromium --no-sandbox --disable-dev-shm-usage \"$@\"\\n' \\\n        > /usr/local/bin/chromium-wrapper \\\n    && chmod +x /usr/local/bin/chromium-wrapper\n\n# Make the wrapper the default in the system .desktop file and via alternatives\nRUN sed -i 's|^Exec=.*|Exec=/usr/local/bin/chromium-wrapper %U|' \\\n        /usr/share/applications/chromium.desktop \\\n    && update-alternatives --install /usr/bin/x-www-browser x-www-browser \\\n        /usr/local/bin/chromium-wrapper 100\n\n# Tell XFCE's exo-open that Chromium is the WebBrowser helper (system-wide)\nRUN mkdir -p /etc/xdg/xfce4 /usr/share/xfce4/helpers \\\n    && printf 'WebBrowser=custom-WebBrowser\\n' > /etc/xdg/xfce4/helpers.rc \\\n    && printf '[Desktop Entry]\\n\\\nVersion=1.0\\n\\\nType=X-XFCE-Helper\\n\\\nName=Chromium\\n\\\nIcon=chromium\\n\\\nX-XFCE-Category=WebBrowser\\n\\\nX-XFCE-CommandsWithParameter=/usr/local/bin/chromium-wrapper \"%%s\"\\n\\\nX-XFCE-Commands=/usr/local/bin/chromium-wrapper\\n' \\\n        > /usr/share/xfce4/helpers/custom-WebBrowser.desktop\n\n# GitHub CLI\nRUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\\n        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" \\\n        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \\\n    && apt-get update && apt-get install -y --no-install-recommends gh \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Rust\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y\nENV PATH=\"/root/.cargo/bin:${PATH}\"\nRUN rustup toolchain install nightly-2026-04-14 --profile minimal --component clippy,rustfmt\nRUN cargo install cargo-nextest --locked\nENV CARGO_INCREMENTAL=0\n\n# Bun\nRUN curl -fsSL https://bun.sh/install | bash\nENV PATH=\"/root/.bun/bin:${PATH}\"\n\nWORKDIR /root\n"
+            }
+          },
+          "resources": {
+            "cpu": 8,
+            "memory": "16GB",
+            "disk": "20GB"
+          },
+          "network": {
+            "mode": "allow_all",
+            "allow": []
+          },
+          "lifecycle": {
+            "preserve": false,
+            "stop_on_terminal": true,
+            "auto_stop": "30m"
+          },
+          "labels": {
+            "repo": "fabro-sh/fabro"
+          },
+          "volumes": [],
+          "env": {}
+        },
+        "notifications": {
+          "feed": {
+            "enabled": true,
+            "provider": "slack",
+            "events": [
+              "run.started",
+              "run.completed",
+              "run.failed"
+            ],
+            "slack": {
+              "channel": "#feed-fabro"
+            }
+          }
+        },
+        "interviews": {
+          "provider": null,
+          "slack": null
+        },
+        "agent": {
+          "fabro_tools": false,
+          "permissions": null,
+          "mcps": {}
+        },
+        "hooks": [],
+        "scm": {
+          "provider": null,
+          "owner": null,
+          "repository": null,
+          "github": null
+        },
+        "pull_request": {
+          "enabled": true,
+          "draft": false,
+          "auto_merge": false,
+          "merge_strategy": "squash"
+        },
+        "artifacts": {
+          "include": []
+        },
+        "integrations": {
+          "github": {
+            "permissions": {}
+          }
+        }
+      }
+    },
+    "graph": {
+      "name": "ImplementPlan",
+      "nodes": {
+        "verify": {
+          "id": "verify",
+          "attrs": {
+            "provider": {
+              "String": "anthropic"
+            },
+            "shape": {
+              "String": "parallelogram"
+            },
+            "script": {
+              "String": "git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\"disabled\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1"
+            },
+            "label": {
+              "String": "Verify"
+            },
+            "goal_gate": {
+              "Boolean": true
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "retry_target": {
+              "String": "fixup"
+            }
+          }
+        },
+        "fixup": {
+          "id": "fixup",
+          "attrs": {
+            "max_visits": {
+              "Integer": 3
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "prompt": {
+              "String": "The verify step failed. Read the build output from context and fix all format, clippy, Rust test, docs, TypeScript typecheck/test, and build failures."
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "label": {
+              "String": "Fixup"
+            }
+          }
+        },
+        "preflight_compile": {
+          "id": "preflight_compile",
+          "attrs": {
+            "script": {
+              "String": "cargo check -q --workspace 2>&1"
+            },
+            "shape": {
+              "String": "parallelogram"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "max_retries": {
+              "Integer": 0
+            },
+            "label": {
+              "String": "Preflight Compile"
+            }
+          }
+        },
+        "implement": {
+          "id": "implement",
+          "attrs": {
+            "model": {
+              "String": "gpt-5.5"
+            },
+            "label": {
+              "String": "Implement"
+            },
+            "reasoning_effort": {
+              "String": "xhigh"
+            },
+            "provider": {
+              "String": "openai"
+            },
+            "prompt": {
+              "String": "Read the plan file referenced in the goal and implement every step. Make all the code changes described in the plan. Use red/green TDD."
+            }
+          }
+        },
+        "toolchain": {
+          "id": "toolchain",
+          "attrs": {
+            "shape": {
+              "String": "parallelogram"
+            },
+            "max_retries": {
+              "Integer": 0
+            },
+            "script": {
+              "String": "command -v cargo >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && sudo ln -sf $HOME/.cargo/bin/* /usr/local/bin/; }; cargo --version 2>&1"
+            },
+            "label": {
+              "String": "Toolchain"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "provider": {
+              "String": "anthropic"
+            }
+          }
+        },
+        "preflight_lint": {
+          "id": "preflight_lint",
+          "attrs": {
+            "provider": {
+              "String": "anthropic"
+            },
+            "shape": {
+              "String": "parallelogram"
+            },
+            "script": {
+              "String": "cargo +nightly-2026-04-14 clippy -q --workspace --all-targets -- -D warnings 2>&1"
+            },
+            "max_retries": {
+              "Integer": 0
+            },
+            "label": {
+              "String": "Preflight Lint"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            }
+          }
+        },
+        "start": {
+          "id": "start",
+          "attrs": {
+            "shape": {
+              "String": "Mdiamond"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "label": {
+              "String": "Start"
+            }
+          }
+        },
+        "simplify_gpt": {
+          "id": "simplify_gpt",
+          "attrs": {
+            "model": {
+              "String": "gpt-5.5"
+            },
+            "provider": {
+              "String": "openai"
+            },
+            "prompt": {
+              "String": "# Simplify: Code Review and Cleanup\n\nReview changes vs. origin for reuse, quality, and efficiency. Fix any issues found.\n\n## Phase 1: Identify Changes\n\nRun git diff (or git diff HEAD if there are staged changes) to see what changed. If there are no git changes, review the most recently modified files that the user mentioned or that you edited earlier in this conversation.\n\n## Phase 2: Launch Three Review Agents in Parallel\n\nUse the Agent tool to launch all three agents concurrently in a single message. Pass each agent the full diff so it has the complete context.\n\n### Agent 1: Code Reuse Review\n\nFor each change:\n\n1. Search for existing utilities and helpers that could replace newly written code. Use Grep to find similar patterns elsewhere in the codebase — common locations are utility directories, shared modules, and files adjacent to the changed ones.\n2. Flag any new function that duplicates existing functionality. Suggest the existing function to use instead.\n3. Flag any inline logic that could use an existing utility — hand-rolled string manipulation, manual path handling, custom environment checks, ad-hoc type guards, and similar patterns are common candidates.\n\nNote: This is a greenfield app, so focus on maximizing simplicity and don't worry about changing things to achieve it.\n\n### Agent 2: Code Quality Review\n\nReview the same changes for hacky patterns:\n\n1. Redundant state: state that duplicates existing state, cached values that could be derived, observers/effects that could be direct calls\n2. Parameter sprawl: adding new parameters to a function instead of generalizing or restructuring existing ones\n3. Copy-paste with slight variation: near-duplicate code blocks that should be unified with a shared abstraction\n4. Leaky abstractions: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries\n5. Stringly-typed code: using raw strings where constants, enums (string unions), or branded types already exist in the codebase\n\nNote: This is a greenfield app, so be aggressive in optimizing quality.\n\n### Agent 3: Efficiency Review\n\nReview the same changes for efficiency:\n\n1. Unnecessary work: redundant computations, repeated file reads, duplicate network/API calls, N+1 patterns\n2. Missed concurrency: independent operations run sequentially when they could run in parallel\n3. Hot-path bloat: new blocking work added to startup or per-request/per-render hot paths\n4. Unnecessary existence checks: pre-checking file/resource existence before operating (TOCTOU anti-pattern) — operate directly and handle the error\n5. Memory: unbounded data structures, missing cleanup, event listener leaks\n6. Overly broad operations: reading entire files when only a portion is needed, loading all items when filtering for one\n\n## Phase 3: Fix Issues\n\nWait for all three agents to complete. Aggregate their findings and fix each issue directly. If a finding is a false positive or not worth addressing, note it and move on — do not argue with the finding, just skip it.\n\nWhen done, briefly summarize what was fixed (or confirm the code was already clean)."
+            },
+            "label": {
+              "String": "Simplify (GPT-55)"
+            }
+          }
+        },
+        "exit": {
+          "id": "exit",
+          "attrs": {
+            "label": {
+              "String": "Exit"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "shape": {
+              "String": "Msquare"
+            }
+          }
+        },
+        "simplify_opus": {
+          "id": "simplify_opus",
+          "attrs": {
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "label": {
+              "String": "Simplify (Opus)"
+            },
+            "prompt": {
+              "String": "# Simplify: Code Review and Cleanup\n\nReview changes vs. origin for reuse, quality, and efficiency. Fix any issues found.\n\n## Phase 1: Identify Changes\n\nRun git diff (or git diff HEAD if there are staged changes) to see what changed. If there are no git changes, review the most recently modified files that the user mentioned or that you edited earlier in this conversation.\n\n## Phase 2: Launch Three Review Agents in Parallel\n\nUse the Agent tool to launch all three agents concurrently in a single message. Pass each agent the full diff so it has the complete context.\n\n### Agent 1: Code Reuse Review\n\nFor each change:\n\n1. Search for existing utilities and helpers that could replace newly written code. Use Grep to find similar patterns elsewhere in the codebase — common locations are utility directories, shared modules, and files adjacent to the changed ones.\n2. Flag any new function that duplicates existing functionality. Suggest the existing function to use instead.\n3. Flag any inline logic that could use an existing utility — hand-rolled string manipulation, manual path handling, custom environment checks, ad-hoc type guards, and similar patterns are common candidates.\n\nNote: This is a greenfield app, so focus on maximizing simplicity and don't worry about changing things to achieve it.\n\n### Agent 2: Code Quality Review\n\nReview the same changes for hacky patterns:\n\n1. Redundant state: state that duplicates existing state, cached values that could be derived, observers/effects that could be direct calls\n2. Parameter sprawl: adding new parameters to a function instead of generalizing or restructuring existing ones\n3. Copy-paste with slight variation: near-duplicate code blocks that should be unified with a shared abstraction\n4. Leaky abstractions: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries\n5. Stringly-typed code: using raw strings where constants, enums (string unions), or branded types already exist in the codebase\n\nNote: This is a greenfield app, so be aggressive in optimizing quality.\n\n### Agent 3: Efficiency Review\n\nReview the same changes for efficiency:\n\n1. Unnecessary work: redundant computations, repeated file reads, duplicate network/API calls, N+1 patterns\n2. Missed concurrency: independent operations run sequentially when they could run in parallel\n3. Hot-path bloat: new blocking work added to startup or per-request/per-render hot paths\n4. Unnecessary existence checks: pre-checking file/resource existence before operating (TOCTOU anti-pattern) — operate directly and handle the error\n5. Memory: unbounded data structures, missing cleanup, event listener leaks\n6. Overly broad operations: reading entire files when only a portion is needed, loading all items when filtering for one\n\n## Phase 3: Fix Issues\n\nWait for all three agents to complete. Aggregate their findings and fix each issue directly. If a finding is a false positive or not worth addressing, note it and move on — do not argue with the finding, just skip it.\n\nWhen done, briefly summarize what was fixed (or confirm the code was already clean)."
+            }
+          }
+        },
+        "fix_lints": {
+          "id": "fix_lints",
+          "attrs": {
+            "label": {
+              "String": "Fix Lints"
+            },
+            "provider": {
+              "String": "anthropic"
+            },
+            "model": {
+              "String": "claude-opus-4-7"
+            },
+            "prompt": {
+              "String": "The preflight lint step failed. Read the build output from context and fix all clippy lint warnings."
+            },
+            "max_visits": {
+              "Integer": 3
+            }
+          }
+        }
+      },
+      "edges": [
+        {
+          "from": "start",
+          "to": "toolchain",
+          "attrs": {}
+        },
+        {
+          "from": "toolchain",
+          "to": "preflight_compile",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "toolchain",
+          "to": "exit",
+          "attrs": {}
+        },
+        {
+          "from": "preflight_compile",
+          "to": "preflight_lint",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "preflight_compile",
+          "to": "exit",
+          "attrs": {}
+        },
+        {
+          "from": "preflight_lint",
+          "to": "implement",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "preflight_lint",
+          "to": "fix_lints",
+          "attrs": {}
+        },
+        {
+          "from": "fix_lints",
+          "to": "preflight_lint",
+          "attrs": {}
+        },
+        {
+          "from": "implement",
+          "to": "simplify_opus",
+          "attrs": {}
+        },
+        {
+          "from": "simplify_opus",
+          "to": "simplify_gpt",
+          "attrs": {}
+        },
+        {
+          "from": "simplify_gpt",
+          "to": "verify",
+          "attrs": {}
+        },
+        {
+          "from": "verify",
+          "to": "exit",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "verify",
+          "to": "fixup",
+          "attrs": {}
+        },
+        {
+          "from": "fixup",
+          "to": "verify",
+          "attrs": {}
+        }
+      ],
+      "attrs": {
+        "rankdir": {
+          "String": "LR"
+        },
+        "model_stylesheet": {
+          "String": "\n            * { model: claude-opus-4-7; }\n        "
+        },
+        "goal": {
+          "String": "# Scheduled Automation Executor Implementation Plan\n\n> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.\n\n**Goal:** Build a backend scheduled executor that creates and starts normal Fabro runs from enabled automation schedule triggers.\n\n**Architecture:** Add a deterministic scheduling planner plus a long-lived server task. The planner keeps only in-memory cron cursors, and the executor reuses the existing automation materializer and run creation/start path. This intentionally does not add persistent automation runtime state, public status fields, one-time schedules, event triggers, CLI commands, or API contract changes.\n\n**Tech Stack:** Rust, Tokio, chrono UTC, croner, Axum server internals, existing `fabro-automation`, `fabro-server`, `fabro-workflow`, and SlateDB run store.\n\n---\n\n## Locked Decisions\n\n- Schedule triggers use existing five-field UTC cron expressions only.\n- Startup does not backfill missed occurrences from server downtime.\n- Each scheduler wake fires each due trigger at most once, then advances that trigger to the next occurrence after the wake time.\n- If a previous run from the same automation trigger is still queued or active, the executor still creates the newly due run.\n- If materialization, run creation, or run start queuing fails, log a warning and wait until the next cron occurrence.\n- Scheduled runs use `AutomationRef.trigger_id` set to the schedule trigger ID.\n- Scheduled runs use `Principal::System { system_kind: SystemActorKind::Engine }` for provenance to avoid public enum/API churn.\n- Do not add an automation state/status store, next-run status, last-run status, one-time schedule support, event triggers, CLI commands, or OpenAPI changes.\n\n## File Structure\n\n- Create `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n  - Owns the in-memory schedule planner, scheduler loop, due trigger firing, and tests.\n- Modify `lib/crates/fabro-server/src/server.rs`\n  - Register the new module, add an automation scheduler `Notify`, expose a notifier method, and initialize state.\n- Modify `lib/crates/fabro-server/src/serve.rs`\n  - Spawn the automation scheduler alongside the existing run scheduler.\n- Modify `lib/crates/fabro-server/src/server/handler/automations.rs`\n  - Notify the scheduler after successful create, replace, and delete.\n- Modify `lib/crates/fabro-server/src/server/handler/mod.rs` and `lifecycle.rs`\n  - Make `lifecycle` and `queue_run_start` visible inside `crate::server` so the scheduler can queue created runs through the same path as the API endpoint.\n- Modify `lib/crates/fabro-automation/src/model.rs` only if a small method on `AutomationTrigger` or `ScheduleTrigger` makes scheduler code clearer.\n\n## Implementation Tasks\n\n### Task 1: Add Deterministic Schedule Planner\n\n**Files:**\n- Create: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n- Modify: `lib/crates/fabro-server/src/server.rs`\n- Test: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n\n- [ ] Add `mod automation_scheduler;` to `server.rs` and `pub(crate) use automation_scheduler::spawn_automation_scheduler;` if `serve.rs` imports it through the server module.\n- [ ] Define planner-only types in `automation_scheduler.rs`:\n  - `ScheduleTriggerKey { automation_id: AutomationId, trigger_id: AutomationTriggerId }`\n  - `ScheduleCursor { automation_revision: AutomationRevision, expression: String, next_due_at: DateTime<Utc> }`\n  - `DueScheduleTrigger { automation: Automation, trigger_id: AutomationTriggerId, due_at: DateTime<Utc> }`\n  - `AutomationSchedulePlanner { cursors: HashMap<ScheduleTriggerKey, ScheduleCursor> }`\n- [ ] Add a private `next_occurrence(expression: &str, after: DateTime<Utc>) -> Result<DateTime<Utc>, croner::errors::CronError>` helper using the same croner options as automation validation: seconds disallowed, year disallowed, exclusive of `after`.\n- [ ] Add `AutomationSchedulePlanner::reconcile(&mut self, automations: &[Automation], now: DateTime<Utc>)`.\n  - Include only enabled automations and enabled `AutomationTrigger::Schedule` triggers.\n  - Insert new cursors with `next_due_at = next_occurrence(expression, now)`.\n  - Keep existing cursors when automation revision and expression are unchanged.\n  - Reset existing cursors when revision or expression changes.\n  - Remove cursors for deleted, disabled, or no-longer-scheduled triggers.\n- [ ] Add `AutomationSchedulePlanner::take_due(&mut self, automations: &[Automation], now: DateTime<Utc>) -> Vec<DueScheduleTrigger>`.\n  - Return cursors whose `next_due_at <= now`.\n  - Advance each due cursor to `next_occurrence(expression, now)` before returning it.\n  - Return at most one due trigger per cursor per call.\n- [ ] Add unit tests with fixed `DateTime<Utc>` values:\n  - New cursor starts at the next future occurrence and does not backfill an older occurrence.\n  - Due cursor is returned once and advanced beyond `now`.\n  - Disabled automation and disabled schedule trigger remove cursors.\n  - Replacing an automation revision or expression resets the cursor.\n  - Multiple schedule triggers on one automation produce independent cursors.\n\n### Task 2: Add Scheduler Loop And Server Wiring\n\n**Files:**\n- Modify: `lib/crates/fabro-server/src/server.rs`\n- Modify: `lib/crates/fabro-server/src/serve.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/automations.rs`\n- Create/modify tests in: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n\n- [ ] Add `automation_scheduler_notify: Notify` to `AppState`.\n- [ ] Initialize it in `build_app_state`.\n- [ ] Add `pub(crate) fn notify_automation_scheduler(&self)` that calls `notify_one()`.\n- [ ] Add `pub(crate) fn automation_scheduler_notified(&self) -> impl Future<Output = ()>` only if needed to avoid exposing the `Notify` field.\n- [ ] In `create_automation`, notify after the store create succeeds.\n- [ ] In `replace_automation`, notify after the store replace succeeds.\n- [ ] In `delete_automation`, notify after the store delete succeeds.\n- [ ] Implement `spawn_automation_scheduler(state: Arc<AppState>)`:\n  - Own an `AutomationSchedulePlanner`.\n  - Reconcile on every loop before computing due triggers.\n  - Use `state.automation_store().list().await` as the source of truth.\n  - Sleep until the nearest cursor due time, capped at 30 seconds, and also wake on `automation_scheduler_notify`.\n  - Exit when `state.shutdown_token().cancelled()` resolves or `state.is_shutting_down()` is true.\n- [ ] Call `spawn_automation_scheduler(Arc::clone(&state))` in `serve.rs` immediately after `spawn_scheduler(Arc::clone(&state))`.\n- [ ] Add tests for notification-sensitive behavior by calling the planner directly, not by relying on wall-clock sleeps.\n\n### Task 3: Fire Scheduled Automation Runs\n\n**Files:**\n- Modify: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/mod.rs`\n- Modify: `lib/crates/fabro-server/src/server/handler/lifecycle.rs`\n- Test: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n\n- [ ] Change `handler/mod.rs` from `mod lifecycle;` to `pub(in crate::server) mod lifecycle;`.\n- [ ] Change `queue_run_start` in `lifecycle.rs` from `pub(super)` to `pub(in crate::server)`.\n- [ ] Add `fire_scheduled_automation_run(state: Arc<AppState>, automation: Automation, trigger_id: AutomationTriggerId, due_at: DateTime<Utc>)`.\n  - Create a fresh `RunId`.\n  - Materialize with `state.materialize_automation_run(AutomationRunMaterializeInput { automation_id, target, run_id, user_settings_path, temp_root })`.\n  - Build `AutomationRef { id, name: Some(automation.name.clone()), trigger_id: Some(trigger_id.to_string()) }`.\n  - Call `handler::runs::create_run_from_manifest` with:\n    - `explicit_run_id: Some(run_id)`\n    - `actor: Principal::System { system_kind: SystemActorKind::Engine }`\n    - empty `HeaderMap`\n    - `automation: Some(automation_ref)`\n  - If the response status is success, call `handler::lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await`.\n  - Log success at `info!` with `automation_id`, `trigger_id`, `run_id`, and `due_at`.\n  - Log failures at `warn!` with `automation_id`, `trigger_id`, `due_at`, and safe error/status fields.\n- [ ] Have the scheduler spawn one Tokio task per due trigger so slow materialization does not block cursor reconciliation for other triggers.\n- [ ] Ensure the cursor advances before spawning the fire task so failed fires do not hot-loop.\n\n### Task 4: Scheduled Executor Tests\n\n**Files:**\n- Modify: `lib/crates/fabro-server/src/server/automation_scheduler.rs`\n- Modify only if needed: `lib/crates/fabro-server/src/test_support.rs`\n\n- [ ] Add test helpers in `automation_scheduler.rs` tests:\n  - Build a temp `AppState` with `TestAppStateBuilder`.\n  - Use `TestAutomationRunMaterializer::succeed` with a minimal manifest.\n  - Create automation definitions through `state.automation_store().create(...)` rather than hand-authoring run internals.\n- [ ] Add an async test that calls a test-only `run_due_schedules_once(state, planner, now)` helper:\n  - A schedule-only automation fires when due.\n  - The created run has `automation.id`, `automation.name`, and `automation.trigger_id` set to the schedule trigger ID.\n  - The run appears in cached run summaries after creation.\n- [ ] Add an async test proving schedule-only automations do not require an API trigger.\n- [ ] Add an async test proving a disabled automation and disabled schedule trigger do not create runs.\n- [ ] Add an async test proving multiple due triggers create multiple runs.\n- [ ] Add an async test proving active or queued prior runs do not suppress a newly due run.\n- [ ] Add an async test with a failing fake materializer:\n  - No run is created for the failed due occurrence.\n  - A second call before the next cron occurrence does not retry.\n  - A call at the next cron occurrence attempts again.\n- [ ] Keep tests at server/unit level for scheduler internals and existing `api::automations` tests for API behavior.\n\n### Task 5: Verification\n\n**Files:**\n- No source changes beyond previous tasks.\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-automation\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server automation_scheduler\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server automation_materializer\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server automation_metadata\n```\n\n- [ ] Run:\n\n```bash\ncargo nextest run -p fabro-server --features test-support api::automations\n```\n\n- [ ] Run formatting and lint checks:\n\n```bash\ncargo +nightly-2026-04-14 fmt --check --all\ncargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings\n```\n\n## Acceptance Criteria\n\n- Enabled schedule triggers create and start normal Fabro runs at their UTC cron times.\n- The executor does not create backfilled runs on startup.\n- The executor creates every observed due run even when prior runs from the same trigger are still active.\n- Failed materialization or creation waits until the next cron occurrence.\n- Scheduled runs are visible through normal run APIs and `GET /automations/{id}/runs`.\n- Manual/API-triggered automation behavior is unchanged.\n- No public API schemas, generated clients, CLI commands, runtime status store, one-time schedule support, or event triggers are added.\n"
+        }
+      }
+    },
+    "graph_source": "digraph ImplementPlan {\n    graph [\n        goal=\"Implement and simplify\",\n        model_stylesheet=\"\n            * { model: claude-opus-4-7; }\n        \"\n    ]\n    rankdir=LR\n\n    start [shape=Mdiamond, label=\"Start\"]\n    exit  [shape=Msquare, label=\"Exit\"]\n\n    toolchain         [label=\"Toolchain\", shape=parallelogram, script=\"command -v cargo >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && sudo ln -sf $HOME/.cargo/bin/* /usr/local/bin/; }; cargo --version 2>&1\", max_retries=0]\n    preflight_compile [label=\"Preflight Compile\", shape=parallelogram, script=\"cargo check -q --workspace 2>&1\", max_retries=0]\n    preflight_lint    [label=\"Preflight Lint\", shape=parallelogram, script=\"cargo +nightly-2026-04-14 clippy -q --workspace --all-targets -- -D warnings 2>&1\", max_retries=0]\n    fix_lints         [label=\"Fix Lints\", prompt=\"The preflight lint step failed. Read the build output from context and fix all clippy lint warnings.\", max_visits=3]\n    implement         [label=\"Implement\", prompt=\"Read the plan file referenced in the goal and implement every step. Make all the code changes described in the plan. Use red/green TDD.\", model=\"gpt-55\", reasoning_effort=\"xhigh\"]\n    simplify_opus     [label=\"Simplify (Opus)\", prompt=\"@prompts/simplify.md\"]\n    simplify_gpt      [label=\"Simplify (GPT-55)\", prompt=\"@prompts/simplify.md\", model=\"gpt-55\"]\n    verify            [label=\"Verify\", shape=parallelogram, script=\"git fetch origin main 2>&1 && git merge --no-edit --no-stat origin/main 2>&1 && cargo +nightly-2026-04-14 fmt --all 2>&1 && cargo dev docs refresh 2>&1 && cargo +nightly-2026-04-14 fmt --check --all 2>&1 && { command -v rg >/dev/null 2>&1 || { echo 'rg is required for verify'; exit 127; }; } && ! rg -n 'AuthMode::Disabled|RunAuthMethod|RunSubjectProvenance|\\bActorRef\\b|\\bActorKind\\b|AuthenticatedSubject|AuthenticatedService|AuthorizeRunScoped|AuthorizeRunBlob|AuthorizeStageArtifact|AuthorizeCommandLog|auth_method\\s*==\\s*\\\"disabled\\\"' lib/crates apps lib/packages docs/public/api-reference/fabro-api.yaml 2>&1 && cargo +nightly-2026-04-14 clippy --workspace --all-targets -- -D warnings 2>&1 && cargo nextest run --workspace --status-level slow --profile ci 2>&1 && cargo dev docs check 2>&1 && bun install --frozen-lockfile 2>&1 && (cd apps/fabro-web && bun run typecheck) 2>&1 && (cd apps/fabro-web && bun run test) 2>&1 && (cd lib/packages/fabro-api-client && bun run typecheck) 2>&1 && cargo dev build -- -p fabro-cli --release 2>&1\", goal_gate=true, retry_target=\"fixup\"]\n    fixup             [label=\"Fixup\", prompt=\"The verify step failed. Read the build output from context and fix all format, clippy, Rust test, docs, TypeScript typecheck/test, and build failures.\", max_visits=3]\n\n    start -> toolchain\n    toolchain -> preflight_compile [condition=\"outcome=succeeded\"]\n    toolchain -> exit\n    preflight_compile -> preflight_lint [condition=\"outcome=succeeded\"]\n    preflight_compile -> exit\n    preflight_lint -> implement [condition=\"outcome=succeeded\"]\n    preflight_lint -> fix_lints\n    fix_lints -> preflight_lint\n    implement -> simplify_opus -> simplify_gpt -> verify\n    verify -> exit  [condition=\"outcome=succeeded\"]\n    verify -> fixup\n    fixup -> verify\n}\n",
+    "workflow_slug": "implement-plan",
+    "source_directory": "/Users/bhelmkamp/p/fabro-sh/fabro",
+    "provenance": {
+      "server": {
+        "version": "0.247.0-nightly.0"
+      },
+      "client": {
+        "user_agent": "fabro-cli/0.247.0-nightly.0",
+        "name": "fabro-cli",
+        "version": "0.247.0-nightly.0"
+      },
+      "subject": {
+        "kind": "user",
+        "identity": {
+          "issuer": "https://github.com",
+          "subject": "19"
+        },
+        "login": "brynary",
+        "auth_method": "github",
+        "avatar_url": "https://avatars.githubusercontent.com/u/19?v=4"
+      }
+    },
+    "manifest_blob": "374d6f46b5cf643b576f62e2f5153020f090ec135cc1d36dd51c9a278f3df272",
+    "definition_blob": "f13f100f4f1f386c63f22b375c331077f1c1b3bd2df0dd17388b26786f23b9a6",
+    "git": {
+      "origin_url": "https://github.com/fabro-sh/fabro",
+      "branch": "main",
+      "sha": "0e224aa70598433ce2dccb0a669b8b4e497978dc",
+      "dirty": "dirty",
+      "push_outcome": {
+        "type": "not_attempted"
+      }
+    }
+  },
+  "web_url": "http://127.0.0.1:32276/runs/01KSTP6Y52WYFHGCJDJ46RQ4M7",
+  "start": null,
+  "status": {
+    "kind": "starting"
+  },
+  "status_updated_at": "2026-05-29T20:18:33.809336Z",
+  "last_event_at": "2026-05-29T20:18:58.090449Z",
+  "pending_control": null,
+  "checkpoints": [],
+  "conclusion": null,
+  "sandbox": {
+    "kind": "ready",
+    "plan": {
+      "provider": "daytona"
+    },
+    "instance": {
+      "provider": "daytona",
+      "snapshot": "fabro-fdb28dec-1233-892c-b9d7-9f88f8353e7a",
+      "runtime": {
+        "id": "fabro-01KSTP6Y52WYFHGCJDJ46RQ4M7",
+        "working_directory": "/home/daytona/workspace/fabro",
+        "repo_cloned": true,
+        "clone_origin_url": "https://github.com/fabro-sh/fabro",
+        "clone_branch": "main",
+        "workspace_root": "/home/daytona/workspace",
+        "repos_root": "/home/daytona/repos",
+        "primary_repo_path": "/home/daytona/repos/fabro-sh/fabro",
+        "primary_repo_link": "/home/daytona/workspace/fabro"
+      }
+    }
+  },
+  "pull_request": null,
+  "superseded_by": null,
+  "pending_interviews": {},
+  "stages": {}
+}
