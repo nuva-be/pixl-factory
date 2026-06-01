@@ -10,7 +10,6 @@ use fabro_graphviz::graph::Graph as GvGraph;
 use fabro_interview::AutoApproveInterviewer;
 use fabro_model::Catalog;
 use fabro_store::{ArtifactStore, Database, RunProjection};
-use fabro_types::test_support::test_run_provenance_with;
 use object_store::local::LocalFileSystem;
 
 use crate::artifact_upload::ArtifactSink;
@@ -176,9 +175,13 @@ async fn initialized(
         workflow_slug:    run_options.workflow_slug.clone(),
         automation:       None,
         db_prefix:        None,
-        provenance:       test_run_provenance_with(fabro_types::Principal::System {
-            system_kind: fabro_types::SystemActorKind::Engine,
-        }),
+        provenance:       fabro_types::RunProvenance {
+            server:  None,
+            client:  None,
+            subject: fabro_types::Principal::System {
+                system_kind: fabro_types::SystemActorKind::Engine,
+            },
+        },
         manifest_blob:    None,
         git:              run_options.pre_run_git.clone(),
         fork_source_ref:  run_options.fork_source_ref.clone(),
