@@ -1,0 +1,109 @@
+diff --git a/apps/fabro-web/app/components/runs-list/run-table-row.tsx b/apps/fabro-web/app/components/runs-list/run-table-row.tsx
+index e367e1e6f..b02d73d0f 100644
+--- a/apps/fabro-web/app/components/runs-list/run-table-row.tsx
++++ b/apps/fabro-web/app/components/runs-list/run-table-row.tsx
+@@ -35,8 +35,8 @@ export function RunTableRow({
+ }) {
+   const lifecycleLabel = listLifecycleStatusLabel(run);
+   const statusDisplay = columnStatusDisplay[run.status];
+-  const creator = principalDisplay(run.createdBy);
+   const show = (col: ToggleableColumn) => !hiddenColumns.has(col);
++  const creator = show("created_by") ? principalDisplay(run.createdBy) : null;
+ 
+   return (
+     <tr className={`group relative border-b border-line transition-colors last:border-b-0 ${selected ? "bg-overlay/30" : "hover:bg-overlay/40"}`}>
+@@ -53,7 +53,7 @@ export function RunTableRow({
+           <span className={`font-mono text-xs ${statusDisplay.text}`}>{run.statusLabel}</span>
+         </span>
+       </td>
+-      {show("created_by") && (
++      {creator != null && (
+         <td className="relative z-10 w-8 whitespace-nowrap px-3 py-2.5">
+           <Tooltip label={creator.label}>
+             <span aria-label={`Created by ${creator.label}`}>{creator.glyph}</span>
+diff --git a/lib/crates/fabro-server/src/principal_middleware.rs b/lib/crates/fabro-server/src/principal_middleware.rs
+index 2559b07bf..20d25dd12 100644
+--- a/lib/crates/fabro-server/src/principal_middleware.rs
++++ b/lib/crates/fabro-server/src/principal_middleware.rs
+@@ -172,13 +172,29 @@ impl AuthContextSlot {
+     pub(crate) fn log_snapshot(&self) -> RequestAuthLogContext {
+         let context = self.0.lock().expect("auth context lock poisoned");
+         RequestAuthLogContext {
+-            principal:       context.principal.clone(),
++            principal:       context.principal.as_ref().map(principal_for_log),
+             auth_status:     context.auth_status,
+             auth_error_code: context.auth_error_code,
+         }
+     }
+ }
+ 
++// HTTP logging never emits the avatar URL; strip it to avoid an owned String
++// allocation on every authenticated request.
++fn principal_for_log(principal: &Principal) -> Principal {
++    if let Principal::User(user) = principal {
++        if user.avatar_url.is_some() {
++            return Principal::User(UserPrincipal {
++                identity:    user.identity.clone(),
++                login:       user.login.clone(),
++                auth_method: user.auth_method,
++                avatar_url:  None,
++            });
++        }
++    }
++    principal.clone()
++}
++
+ impl<S: Send + Sync> FromRequestParts<S> for RequestAuth {
+     type Rejection = Infallible;
+ 
+diff --git a/lib/crates/fabro-types/src/test_support.rs b/lib/crates/fabro-types/src/test_support.rs
+index 994813974..8508ec82a 100644
+--- a/lib/crates/fabro-types/src/test_support.rs
++++ b/lib/crates/fabro-types/src/test_support.rs
+@@ -11,9 +11,14 @@ pub fn test_principal() -> Principal {
+ 
+ #[must_use]
+ pub fn test_run_provenance() -> RunProvenance {
++    test_run_provenance_with(test_principal())
++}
++
++#[must_use]
++pub fn test_run_provenance_with(subject: Principal) -> RunProvenance {
+     RunProvenance {
+-        server:  None,
+-        client:  None,
+-        subject: test_principal(),
++        server: None,
++        client: None,
++        subject,
+     }
+ }
+diff --git a/lib/crates/fabro-workflow/src/test_support.rs b/lib/crates/fabro-workflow/src/test_support.rs
+index 1acf410a4..af43dc5b8 100644
+--- a/lib/crates/fabro-workflow/src/test_support.rs
++++ b/lib/crates/fabro-workflow/src/test_support.rs
+@@ -10,6 +10,7 @@ use fabro_graphviz::graph::Graph as GvGraph;
+ use fabro_interview::AutoApproveInterviewer;
+ use fabro_model::Catalog;
+ use fabro_store::{ArtifactStore, Database, RunProjection};
++use fabro_types::test_support::test_run_provenance_with;
+ use object_store::local::LocalFileSystem;
+ 
+ use crate::artifact_upload::ArtifactSink;
+@@ -175,13 +176,9 @@ async fn initialized(
+         workflow_slug:    run_options.workflow_slug.clone(),
+         automation:       None,
+         db_prefix:        None,
+-        provenance:       fabro_types::RunProvenance {
+-            server:  None,
+-            client:  None,
+-            subject: fabro_types::Principal::System {
+-                system_kind: fabro_types::SystemActorKind::Engine,
+-            },
+-        },
++        provenance:       test_run_provenance_with(fabro_types::Principal::System {
++            system_kind: fabro_types::SystemActorKind::Engine,
++        }),
+         manifest_blob:    None,
+         git:              run_options.pre_run_git.clone(),
+         fork_source_ref:  run_options.fork_source_ref.clone(),
