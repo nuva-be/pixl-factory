@@ -330,7 +330,10 @@ fn resolve_integrations(layer: Option<&ServerIntegrationsLayer>) -> ServerIntegr
                 enabled:         slack.enabled.unwrap_or(true),
                 default_channel: slack.default_channel.clone(),
             })
-            .unwrap_or_default(),
+            .unwrap_or(SlackIntegrationSettings {
+                enabled:         false,
+                default_channel: None,
+            }),
     }
 }
 
