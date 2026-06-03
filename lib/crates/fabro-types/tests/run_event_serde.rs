@@ -1,12 +1,27 @@
 use std::collections::BTreeMap;
 
 use fabro_types::graph::Graph;
-use fabro_types::run::{DirtyStatus, ForkSourceRef, GitContext, PreRunPushOutcome};
+use fabro_types::run::{DirtyStatus, ForkSourceRef, GitContext, PreRunPushOutcome, RunProvenance};
 use fabro_types::run_event::run::{RunCreatedProps, RunParentLinkedProps, RunParentUnlinkedProps};
 use fabro_types::run_event::{RunSessionTurnFailedCode, RunSessionTurnFailedProps};
 use fabro_types::settings::InterpString;
 use fabro_types::settings::run::RunGoal;
-use fabro_types::{AutomationRef, EventBody, TurnId, WorkflowSettings, fixtures};
+use fabro_types::{
+    AuthMethod, AutomationRef, EventBody, IdpIdentity, Principal, TurnId, WorkflowSettings,
+    fixtures,
+};
+
+fn test_provenance() -> RunProvenance {
+    RunProvenance {
+        server:  None,
+        client:  None,
+        subject: Principal::user(
+            IdpIdentity::new("fabro:test", "test-user").expect("test identity should parse"),
+            "test".to_string(),
+            AuthMethod::DevToken,
+        ),
+    }
+}
 
 fn templated_settings() -> WorkflowSettings {
     let mut settings = WorkflowSettings::default();
@@ -32,7 +47,7 @@ fn run_created_props_round_trip_templated_settings() {
             trigger_id: Some("schedule_1".to_string()),
         }),
         db_prefix:        Some("run_".to_string()),
-        provenance:       None,
+        provenance:       test_provenance(),
         manifest_blob:    None,
         git:              Some(GitContext {
             origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
@@ -97,7 +112,7 @@ fn run_created_props_omits_web_url_when_absent() {
         workflow_slug:    None,
         automation:       None,
         db_prefix:        None,
-        provenance:       None,
+        provenance:       test_provenance(),
         manifest_blob:    None,
         git:              None,
         fork_source_ref:  None,
@@ -134,7 +149,15 @@ fn run_created_props_defaults_additive_fields_for_legacy_events() {
         "settings": WorkflowSettings::default(),
         "graph": Graph::new("ship"),
         "labels": {},
-        "run_dir": "/tmp/run"
+        "run_dir": "/tmp/run",
+        "provenance": {
+            "subject": {
+                "kind": "user",
+                "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                "login": "test",
+                "auth_method": "dev_token"
+            }
+        }
     });
 
     let props: RunCreatedProps =

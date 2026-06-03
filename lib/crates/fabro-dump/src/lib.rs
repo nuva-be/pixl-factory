@@ -472,6 +472,7 @@ mod tests {
     use fabro_store::{RunProjection, StageId};
     use fabro_types::graph::Graph;
     use fabro_types::run::RunSpec;
+    use fabro_types::test_support::test_run_provenance;
     use fabro_types::{
         Checkpoint, CheckpointRecord, Conclusion, RunDiff, RunSandbox, RunSandboxInstance,
         RunSandboxPlan, RunStatus, SandboxProviderKind, StageCompletion, StageModelUsage,
@@ -498,7 +499,7 @@ mod tests {
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
             labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
-            provenance:       None,
+            provenance:       test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,

@@ -10,7 +10,20 @@ use fabro_graphviz::graph::Graph as GvGraph;
 use fabro_interview::AutoApproveInterviewer;
 use fabro_model::Catalog;
 use fabro_store::{ArtifactStore, Database, RunProjection};
+use fabro_types::{AuthMethod, IdpIdentity, Principal, RunProvenance};
 use object_store::local::LocalFileSystem;
+
+fn test_run_provenance() -> RunProvenance {
+    RunProvenance {
+        server:  None,
+        client:  None,
+        subject: Principal::user(
+            IdpIdentity::new("fabro:test", "test-user").expect("test identity should parse"),
+            "test".to_string(),
+            AuthMethod::DevToken,
+        ),
+    }
+}
 
 use crate::artifact_upload::ArtifactSink;
 use crate::error::{Error, Result};
@@ -175,7 +188,7 @@ async fn initialized(
         workflow_slug:    run_options.workflow_slug.clone(),
         automation:       None,
         db_prefix:        None,
-        provenance:       None,
+        provenance:       test_run_provenance(),
         manifest_blob:    None,
         git:              run_options.pre_run_git.clone(),
         fork_source_ref:  run_options.fork_source_ref.clone(),

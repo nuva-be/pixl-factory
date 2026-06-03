@@ -1339,6 +1339,14 @@ mod retrieve_sandbox_tests {
                     "settings": WorkflowSettings::default(),
                     "graph": Graph::new("test"),
                     "run_dir": "/tmp/test",
+                    "provenance": {
+                        "subject": {
+                            "kind": "user",
+                            "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                            "login": "test",
+                            "auth_method": "dev_token"
+                        }
+                    }
                 },
             }),
             run_id,

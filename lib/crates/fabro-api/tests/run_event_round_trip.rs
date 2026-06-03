@@ -9,6 +9,17 @@ fn run_event_reuses_canonical_type() {
     assert_same_type::<ApiRunEvent, RunEvent>();
 }
 
+fn test_provenance_json() -> Value {
+    json!({
+        "subject": {
+            "kind": "user",
+            "identity": { "issuer": "fabro:test", "subject": "test-user" },
+            "login": "test",
+            "auth_method": "dev_token"
+        }
+    })
+}
+
 #[test]
 fn run_event_round_trips_run_created() {
     let value = json!({
@@ -20,7 +31,8 @@ fn run_event_round_trips_run_created() {
             "settings": WorkflowSettings::default(),
             "graph": Graph::new("test"),
             "run_dir": "/tmp/fabro/run-1",
-            "source_directory": "/tmp/fabro/run-1"
+            "source_directory": "/tmp/fabro/run-1",
+            "provenance": test_provenance_json()
         }
     });
 
@@ -39,6 +51,7 @@ fn run_event_round_trips_run_created_with_web_url() {
             "graph": Graph::new("test"),
             "run_dir": "/tmp/fabro/run-1",
             "source_directory": "/tmp/fabro/run-1",
+            "provenance": test_provenance_json(),
             "web_url": format!("http://localhost:3000/runs/{}", fixtures::RUN_1)
         }
     });

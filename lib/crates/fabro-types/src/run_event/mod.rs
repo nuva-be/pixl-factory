@@ -1017,7 +1017,15 @@ mod tests {
                 "graph": graph,
                 "labels": {},
                 "run_dir": "/tmp/run",
-                "source_directory": "/tmp/run"
+                "source_directory": "/tmp/run",
+                "provenance": {
+                    "subject": {
+                        "kind": "user",
+                        "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                        "login": "test",
+                        "auth_method": "dev_token"
+                    }
+                }
             }
         });
 
@@ -1038,7 +1046,15 @@ mod tests {
                 "labels": {},
                 "run_dir": "/tmp/run",
                 "source_directory": "/tmp/run",
-                "manifest_blob": RunBlobId::new(br#"{"version":1}"#).to_string()
+                "manifest_blob": RunBlobId::new(br#"{"version":1}"#).to_string(),
+                "provenance": {
+                    "subject": {
+                        "kind": "user",
+                        "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                        "login": "test",
+                        "auth_method": "dev_token"
+                    }
+                }
             }
         });
 

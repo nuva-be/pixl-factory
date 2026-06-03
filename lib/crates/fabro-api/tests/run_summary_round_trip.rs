@@ -88,7 +88,7 @@ fn run_summary_json_matches_openapi_shape() {
             origin_url: None,
             provider:   RepositoryProvider::Unknown,
         }),
-        created_by:       None,
+        created_by:       fabro_types::test_support::test_principal(),
         origin:           RunOrigin::default(),
         labels:           HashMap::from([("team".to_string(), "core".to_string())]),
         lifecycle:        RunLifecycle {
@@ -161,7 +161,12 @@ fn run_summary_json_matches_openapi_shape() {
                 "origin_url": null,
                 "provider": "unknown"
             },
-            "created_by": null,
+            "created_by": {
+                "kind": "user",
+                "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                "login": "test",
+                "auth_method": "dev_token"
+            },
             "origin": {
                 "kind": "api"
             },
@@ -252,6 +257,12 @@ fn run_summary_deserializes_when_optional_fields_are_absent() {
             "name": "fabro",
             "origin_url": null,
             "provider": "unknown"
+        },
+        "created_by": {
+            "kind": "user",
+            "identity": { "issuer": "fabro:test", "subject": "test-user" },
+            "login": "test",
+            "auth_method": "dev_token"
         },
         "models": [],
         "timestamps": {

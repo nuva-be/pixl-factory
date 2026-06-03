@@ -922,11 +922,7 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> Run {
         })
         .map(|(_, record)| record.question.clone());
     let models = run_models(state);
-    let created_by = state
-        .spec
-        .provenance
-        .as_ref()
-        .and_then(|provenance| provenance.subject.clone());
+    let created_by = state.spec.provenance.subject.clone();
     let source_directory = state.spec.source_directory.clone();
     let repo_origin_url = state.spec.git.as_ref().map(|git| git.origin_url.clone());
     let start_time = state.start.as_ref().map(|start| start.start_time);
@@ -1267,6 +1263,7 @@ mod tests {
         StagePromptProps, StageRetryingProps, StageStartedProps,
     };
     use fabro_types::settings::run::{DockerfileSource, EnvironmentProvider};
+    use fabro_types::test_support::test_run_provenance;
     use fabro_types::{
         AgentBackend, AutomationRef, BilledModelUsage, BilledTokenCounts, BlockedReason,
         Checkpoint, CheckpointRecord, CommandTermination, EventBody, FailureCategory,
@@ -1358,7 +1355,7 @@ mod tests {
             automation:       None,
             source_directory: None,
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             git:              None,
@@ -1638,12 +1635,35 @@ mod tests {
         assert!(sandbox.get("failure").is_none());
     }
 
+    fn inject_required_run_created_fields(
+        event: &str,
+        properties: &serde_json::Value,
+    ) -> serde_json::Value {
+        if event != "run.created" || !properties.is_object() {
+            return properties.clone();
+        }
+        let mut props = properties.clone();
+        let obj = props.as_object_mut().expect("properties must be an object");
+        obj.entry("provenance".to_string()).or_insert_with(|| {
+            json!({
+                "subject": {
+                    "kind": "user",
+                    "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                    "login": "test",
+                    "auth_method": "dev_token"
+                }
+            })
+        });
+        props
+    }
+
     fn test_raw_event(
         seq: u32,
         event: &str,
         properties: &serde_json::Value,
         node_id: Option<&str>,
     ) -> EventEnvelope {
+        let properties = inject_required_run_created_fields(event, properties);
         EventEnvelope {
             seq,
             event: RunEvent::from_value(json!({
@@ -1665,6 +1685,7 @@ mod tests {
         properties: &serde_json::Value,
         node_id: Option<&str>,
     ) -> EventEnvelope {
+        let properties = inject_required_run_created_fields(event, properties);
         EventEnvelope {
             seq,
             event: RunEvent::from_value(json!({
@@ -1822,7 +1843,14 @@ mod tests {
                 "repo_origin_url": null,
                 "base_branch": null,
                 "labels": {},
-                "provenance": null,
+                "provenance": {
+                    "subject": {
+                        "kind": "user",
+                        "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                        "login": "test",
+                        "auth_method": "dev_token"
+                    }
+                },
                 "manifest_blob": null,
                 "definition_blob": null,
                 "git": null,
@@ -2851,7 +2879,7 @@ mod tests {
             source_directory: Some("/tmp/repo".to_string()),
             git:              None,
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -2877,7 +2905,7 @@ mod tests {
             source_directory: Some("/tmp/repo".to_string()),
             git:              None,
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -3016,7 +3044,15 @@ mod tests {
                         "labels": {},
                         "run_dir": "/tmp/run",
                         "source_directory": "/tmp/run",
-                        "manifest_blob": manifest_blob
+                        "manifest_blob": manifest_blob,
+                        "provenance": {
+                            "subject": {
+                                "kind": "user",
+                                "identity": { "issuer": "fabro:test", "subject": "test-user" },
+                                "login": "test",
+                                "auth_method": "dev_token"
+                            }
+                        }
                     }
                 }))
                 .unwrap(),

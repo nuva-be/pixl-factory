@@ -691,9 +691,9 @@ pub(crate) async fn create_run_from_manifest(
         prepared.clone(),
         ready_provider_ids.clone(),
         web_url.clone(),
+        run_provenance(&headers, &actor),
     );
     create_input.run_id = Some(run_id);
-    create_input.provenance = Some(run_provenance(&headers, &actor));
     create_input.submitted_manifest_bytes = Some(submitted_manifest_bytes);
     create_input.automation = automation;
 
@@ -864,7 +864,7 @@ pub(super) fn run_provenance(headers: &HeaderMap, subject: &Principal) -> RunPro
             version: FABRO_VERSION.to_string(),
         }),
         client:  run_client_provenance(headers),
-        subject: Some(subject.clone()),
+        subject: subject.clone(),
     }
 }
 
