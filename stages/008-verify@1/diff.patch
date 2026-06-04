@@ -1,0 +1,894 @@
+diff --git a/.fabro/workflows/card-game-fast/workflow.fabro b/.fabro/workflows/card-game-fast/workflow.fabro
+new file mode 100644
+index 000000000..9d03b2596
+--- /dev/null
++++ b/.fabro/workflows/card-game-fast/workflow.fabro
+@@ -0,0 +1,101 @@
++digraph CardGameFast {
++    graph [
++        goal="Quickly build a terminal-based card game in Python",
++        rankdir=LR,
++        default_max_retries=2,
++        retry_target="implement_app"
++    ]
++
++    start [shape=Mdiamond, label="Start"]
++    exit  [shape=Msquare, label="Exit"]
++
++    plan_app [
++        label="Plan App",
++        shape=box,
++        prompt="Goal: $goal
++
++Create a concise implementation plan for the requested Python terminal card game.
++
++Cover:
++- Game rules and data structures (Card, Deck, Pile or equivalent state types)
++- Terminal rendering approach using the standard-library curses module
++- Input handling and move/action validation
++- Win/loss detection
++- UI layout
++- Test strategy
++
++Put all app files under card-game-app/. Include `python3 main.py --smoke` for non-interactive demo verification.
++
++Write the plan to .ai/card-game-fast-plan.md.
++Write status.json at workspace root: outcome=succeeded if the plan is complete, outcome=failed with failure_reason otherwise."
++    ]
++
++    implement_app [
++        label="Implement App",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="Read .ai/card-game-fast-plan.md.
++
++Build the complete app under card-game-app/ in one focused pass:
++- pyproject.toml
++- main.py
++- src/card_game_tui/ package
++- tests/ package
++- README.md
++
++Implement:
++- Card, Deck, Pile, or equivalent game-state types
++- Requested game rules: initial setup/deal where applicable, move/action validation, auto-complete or helper actions where applicable, win/loss condition, undo
++- Curses UI with card rendering, board layout, keyboard input, move/action selection, and help text
++- --smoke mode that imports the app, creates a game, renders a text snapshot or summary, and exits without curses interaction
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if the app builds, tests pass, and smoke mode works, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_app [
++        label="Verify App",
++        shape=box,
++        class="verify",
++        goal_gate=true,
++        prompt="Verify the completed card game app.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py && python3 main.py --smoke
++
++Check:
++- The app is under card-game-app/
++- It uses curses for the interactive TUI
++- It implements the requested game rules
++- README.md explains setup, run, tests, and controls
++- No generated files are outside card-game-app/ except .ai/ reports and root status.json
++
++Write findings to .ai/card-game-fast-verify.md.
++Write status.json at workspace root: outcome=succeeded if the app is demo-ready, outcome=failed with specific missing or broken items."
++    ]
++
++    fix_app [
++        label="Fix App",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="The fast card game verification failed.
++
++Read .ai/card-game-fast-verify.md and fix the issues in card-game-app/.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if all issues are fixed, outcome=failed with failure_reason otherwise."
++    ]
++
++    start -> plan_app -> implement_app -> verify_app
++
++    verify_app -> exit    [condition="outcome=succeeded"]
++    verify_app -> fix_app [condition="outcome=failed", label="Fix"]
++    verify_app -> fix_app [label="Fallback"]
++    fix_app -> verify_app
++}
+diff --git a/.fabro/workflows/card-game-fast/workflow.toml b/.fabro/workflows/card-game-fast/workflow.toml
+new file mode 100644
+index 000000000..0cdce6b94
+--- /dev/null
++++ b/.fabro/workflows/card-game-fast/workflow.toml
+@@ -0,0 +1,4 @@
++_version = 1
++
++[workflow]
++graph = "workflow.fabro"
+diff --git a/.fabro/workflows/card-game/workflow.fabro b/.fabro/workflows/card-game/workflow.fabro
+new file mode 100644
+index 000000000..0c5f06ab3
+--- /dev/null
++++ b/.fabro/workflows/card-game/workflow.fabro
+@@ -0,0 +1,284 @@
++digraph CardGame {
++    graph [
++        goal="Build a terminal-based card game in Python",
++        rankdir=LR,
++        default_max_retries=3,
++        retry_target="impl_setup",
++        fallback_retry_target="impl_logic"
++    ]
++
++    start [shape=Mdiamond, label="Start"]
++    exit  [shape=Msquare, label="Exit"]
++
++    expand_spec [
++        label="Expand Spec",
++        shape=box,
++        prompt="Goal: $goal
++
++Create a detailed implementation spec for the requested Python terminal card game.
++
++Cover:
++- Game rules and data structures (Card, Deck, Pile or equivalent state types)
++- Terminal rendering approach using the standard-library curses module
++- Input handling and move/action validation
++- Win/loss detection
++- UI layout
++- Test strategy
++
++Keep game rules testable without curses. Include a smoke mode so `python3 main.py --smoke` starts enough of the app to prove imports and setup without requiring an interactive terminal.
++
++Write the spec to .ai/card-game-spec.md.
++Write status.json at workspace root: outcome=succeeded if the spec is complete, outcome=failed with failure_reason otherwise."
++    ]
++
++    impl_setup [
++        label="Setup Project",
++        shape=box,
++        prompt="Read .ai/card-game-spec.md.
++
++Create the Python project skeleton under card-game-app/:
++- pyproject.toml with pytest configured
++- main.py entrypoint
++- src/card_game_tui/ package
++- tests/ directory
++- README.md stub
++
++Add minimal importable modules so the project compiles.
++
++Run:
++cd card-game-app && python3 -m py_compile main.py src/card_game_tui/*.py
++
++Write status.json at workspace root: outcome=succeeded if the project skeleton exists and compiles, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_setup [
++        label="Verify Setup",
++        shape=box,
++        class="verify",
++        prompt="Verify setup for the card game app.
++
++Check:
++1. card-game-app/pyproject.toml exists
++2. card-game-app/main.py exists
++3. card-game-app/src/card_game_tui exists
++4. Python files compile
++
++Run:
++cd card-game-app && python3 -m py_compile main.py src/card_game_tui/*.py
++
++Write findings to .ai/verify_setup.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_setup [shape=diamond, label="Setup OK?"]
++
++    impl_data [
++        label="Data Structures",
++        shape=box,
++        prompt="Read .ai/card-game-spec.md.
++
++Implement Card, Deck, Pile, or equivalent game-state types under card-game-app/src/card_game_tui/.
++
++Add focused unit tests under card-game-app/tests/.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v
++
++Write status.json at workspace root: outcome=succeeded if tests pass and the data model is implemented, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_data [
++        label="Verify Data",
++        shape=box,
++        class="verify",
++        prompt="Verify the card game data structures.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py
++
++Check that the core game-state types are defined and basic operations work.
++
++Write findings to .ai/verify_data.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_data [shape=diamond, label="Data OK?"]
++
++    impl_logic [
++        label="Game Logic",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="Read .ai/card-game-spec.md and the current card-game-app implementation.
++
++Implement the requested card game's rules:
++- Initial setup/deal where applicable
++- Move/action validation
++- Auto-complete or helper actions where applicable
++- Win/loss condition
++- Undo
++
++Add tests for legal actions, illegal actions, win/loss detection, and edge cases.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v
++
++Write status.json at workspace root: outcome=succeeded if all tests pass and rules are implemented, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_logic [
++        label="Verify Logic",
++        shape=box,
++        class="verify",
++        prompt="Verify the card game logic.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v
++
++Check move/action validation, win/loss detection, and undo.
++
++Write findings to .ai/verify_logic.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_logic [shape=diamond, label="Logic OK?"]
++
++    impl_ui [
++        label="Terminal UI",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="Read .ai/card-game-spec.md and the game logic.
++
++Implement the curses TUI:
++- Card rendering using ASCII art
++- Board layout
++- Keyboard input
++- Move/action selection
++- Help text
++- `python3 main.py --smoke` non-interactive smoke path
++
++Keep rendering helpers testable where practical and avoid coupling game rules to curses.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if tests pass, files compile, and smoke mode works, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_ui [
++        label="Verify UI",
++        shape=box,
++        class="verify",
++        prompt="Verify the terminal UI.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py && python3 main.py --smoke
++
++Check that:
++- main.py can start smoke mode
++- UI module imports without requiring an interactive terminal
++- Board rendering helpers have tests or smoke coverage
++- Controls are documented in README.md
++
++Write findings to .ai/verify_ui.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_ui [shape=diamond, label="UI OK?"]
++
++    impl_integration [
++        label="Integrate",
++        shape=box,
++        prompt="Finish the card game app.
++
++Do the integration work:
++- Wire main.py to start the curses game loop normally
++- Keep --smoke non-interactive
++- Add README.md run instructions and controls
++- Add any missing tests needed for confidence
++- Ensure no generated files are outside card-game-app/ except .ai/ reports and root status.json
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if the app is playable and tests pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_integration [
++        label="Verify Integration",
++        shape=box,
++        class="verify",
++        prompt="Verify final integration.
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/card_game_tui/*.py && python3 main.py --smoke
++
++Check README.md includes setup, run, test, and controls instructions.
++
++Write findings to .ai/verify_integration.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_integration [shape=diamond, label="Integration OK?"]
++
++    review [
++        label="Final Review",
++        shape=box,
++        class="hard",
++        goal_gate=true,
++        prompt="Review the complete card game app against .ai/card-game-spec.md.
++
++Confirm:
++- The app is in card-game-app/
++- It is Python 3.11+ and uses curses for the TUI
++- The requested game rules are implemented correctly
++- Keyboard controls are usable and documented
++- Tests pass
++- Smoke mode works without an interactive terminal
++
++Run:
++cd card-game-app && python3 -m pytest tests/ -v && python3 main.py --smoke
++
++Write review to .ai/card-game-review.md.
++Write status.json at workspace root: outcome=succeeded if the app is complete and demo-ready, outcome=failed with specific missing or broken items."
++    ]
++
++    check_review [shape=diamond, label="Review OK?"]
++
++    start -> expand_spec -> impl_setup -> verify_setup -> check_setup
++
++    check_setup -> impl_data  [condition="outcome=succeeded"]
++    check_setup -> impl_setup [condition="outcome=failed", label="Retry"]
++    check_setup -> impl_setup [label="Fallback"]
++
++    impl_data -> verify_data -> check_data
++
++    check_data -> impl_logic [condition="outcome=succeeded"]
++    check_data -> impl_data  [condition="outcome=failed", label="Retry"]
++    check_data -> impl_data  [label="Fallback"]
++
++    impl_logic -> verify_logic -> check_logic
++
++    check_logic -> impl_ui    [condition="outcome=succeeded"]
++    check_logic -> impl_logic [condition="outcome=failed", label="Retry"]
++    check_logic -> impl_logic [label="Fallback"]
++
++    impl_ui -> verify_ui -> check_ui
++
++    check_ui -> impl_integration [condition="outcome=succeeded"]
++    check_ui -> impl_ui          [condition="outcome=failed", label="Retry"]
++    check_ui -> impl_ui          [label="Fallback"]
++
++    impl_integration -> verify_integration -> check_integration
++
++    check_integration -> review           [condition="outcome=succeeded"]
++    check_integration -> impl_integration [condition="outcome=failed", label="Retry"]
++    check_integration -> impl_integration [label="Fallback"]
++
++    review -> check_review
++
++    check_review -> exit    [condition="outcome=succeeded"]
++    check_review -> impl_ui [condition="outcome=failed", label="Fix"]
++    check_review -> impl_ui [label="Fallback"]
++}
+diff --git a/.fabro/workflows/card-game/workflow.toml b/.fabro/workflows/card-game/workflow.toml
+new file mode 100644
+index 000000000..0cdce6b94
+--- /dev/null
++++ b/.fabro/workflows/card-game/workflow.toml
+@@ -0,0 +1,4 @@
++_version = 1
++
++[workflow]
++graph = "workflow.fabro"
+diff --git a/.fabro/workflows/solitaire-fast/workflow.fabro b/.fabro/workflows/solitaire-fast/workflow.fabro
+new file mode 100644
+index 000000000..821edc329
+--- /dev/null
++++ b/.fabro/workflows/solitaire-fast/workflow.fabro
+@@ -0,0 +1,101 @@
++digraph SolitaireFast {
++    graph [
++        goal="Quickly build a terminal-based solitaire (Klondike) game in Python",
++        rankdir=LR,
++        default_max_retries=2,
++        retry_target="implement_app"
++    ]
++
++    start [shape=Mdiamond, label="Start"]
++    exit  [shape=Msquare, label="Exit"]
++
++    plan_app [
++        label="Plan App",
++        shape=box,
++        prompt="Goal: $goal
++
++Create a concise implementation plan for a Python terminal solitaire game.
++
++Cover:
++- Game rules and data structures (Card, Deck, Pile types)
++- Terminal rendering approach using the standard-library curses module
++- Input handling and move validation
++- Win/loss detection
++- UI layout
++- Test strategy
++
++Put all app files under solitaire-app/. Include `python3 main.py --smoke` for non-interactive demo verification.
++
++Write the plan to .ai/solitaire-fast-plan.md.
++Write status.json at workspace root: outcome=succeeded if the plan is complete, outcome=failed with failure_reason otherwise."
++    ]
++
++    implement_app [
++        label="Implement App",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="Read .ai/solitaire-fast-plan.md.
++
++Build the complete app under solitaire-app/ in one focused pass:
++- pyproject.toml
++- main.py
++- src/solitaire_tui/ package
++- tests/ package
++- README.md
++
++Implement:
++- Card, Deck, and Pile types
++- Klondike rules: initial deal, move validation, auto-complete detection, win condition, undo
++- Curses UI with card rendering, board layout, keyboard input, move selection, and help text
++- --smoke mode that imports the app, creates a game, renders a text snapshot or summary, and exits without curses interaction
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if the app builds, tests pass, and smoke mode works, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_app [
++        label="Verify App",
++        shape=box,
++        class="verify",
++        goal_gate=true,
++        prompt="Verify the completed solitaire app.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke
++
++Check:
++- The app is under solitaire-app/
++- It uses curses for the interactive TUI
++- It implements Klondike rules
++- README.md explains setup, run, tests, and controls
++- No generated files are outside solitaire-app/ except .ai/ reports and root status.json
++
++Write findings to .ai/solitaire-fast-verify.md.
++Write status.json at workspace root: outcome=succeeded if the app is demo-ready, outcome=failed with specific missing or broken items."
++    ]
++
++    fix_app [
++        label="Fix App",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="The fast solitaire verification failed.
++
++Read .ai/solitaire-fast-verify.md and fix the issues in solitaire-app/.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if all issues are fixed, outcome=failed with failure_reason otherwise."
++    ]
++
++    start -> plan_app -> implement_app -> verify_app
++
++    verify_app -> exit    [condition="outcome=succeeded"]
++    verify_app -> fix_app [condition="outcome=failed", label="Fix"]
++    verify_app -> fix_app [label="Fallback"]
++    fix_app -> verify_app
++}
+diff --git a/.fabro/workflows/solitaire-fast/workflow.toml b/.fabro/workflows/solitaire-fast/workflow.toml
+new file mode 100644
+index 000000000..0cdce6b94
+--- /dev/null
++++ b/.fabro/workflows/solitaire-fast/workflow.toml
+@@ -0,0 +1,4 @@
++_version = 1
++
++[workflow]
++graph = "workflow.fabro"
+diff --git a/.fabro/workflows/solitaire/workflow.fabro b/.fabro/workflows/solitaire/workflow.fabro
+new file mode 100644
+index 000000000..28db1ebdc
+--- /dev/null
++++ b/.fabro/workflows/solitaire/workflow.fabro
+@@ -0,0 +1,284 @@
++digraph Solitaire {
++    graph [
++        goal="Build a terminal-based solitaire (Klondike) game in Python",
++        rankdir=LR,
++        default_max_retries=3,
++        retry_target="impl_setup",
++        fallback_retry_target="impl_logic"
++    ]
++
++    start [shape=Mdiamond, label="Start"]
++    exit  [shape=Msquare, label="Exit"]
++
++    expand_spec [
++        label="Expand Spec",
++        shape=box,
++        prompt="Goal: $goal
++
++Create a detailed implementation spec for a Python terminal solitaire game.
++
++Cover:
++- Game rules and data structures (Card, Deck, Pile types)
++- Terminal rendering approach using the standard-library curses module
++- Input handling and move validation
++- Win/loss detection
++- UI layout
++- Test strategy
++
++Keep game rules testable without curses. Include a smoke mode so `python3 main.py --smoke` starts enough of the app to prove imports and setup without requiring an interactive terminal.
++
++Write the spec to .ai/solitaire-spec.md.
++Write status.json at workspace root: outcome=succeeded if the spec is complete, outcome=failed with failure_reason otherwise."
++    ]
++
++    impl_setup [
++        label="Setup Project",
++        shape=box,
++        prompt="Read .ai/solitaire-spec.md.
++
++Create the Python project skeleton under solitaire-app/:
++- pyproject.toml with pytest configured
++- main.py entrypoint
++- src/solitaire_tui/ package
++- tests/ directory
++- README.md stub
++
++Add minimal importable modules so the project compiles.
++
++Run:
++cd solitaire-app && python3 -m py_compile main.py src/solitaire_tui/*.py
++
++Write status.json at workspace root: outcome=succeeded if the project skeleton exists and compiles, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_setup [
++        label="Verify Setup",
++        shape=box,
++        class="verify",
++        prompt="Verify setup for the solitaire app.
++
++Check:
++1. solitaire-app/pyproject.toml exists
++2. solitaire-app/main.py exists
++3. solitaire-app/src/solitaire_tui exists
++4. Python files compile
++
++Run:
++cd solitaire-app && python3 -m py_compile main.py src/solitaire_tui/*.py
++
++Write findings to .ai/verify_setup.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_setup [shape=diamond, label="Setup OK?"]
++
++    impl_data [
++        label="Data Structures",
++        shape=box,
++        prompt="Read .ai/solitaire-spec.md.
++
++Implement Card, Deck, and Pile types under solitaire-app/src/solitaire_tui/.
++
++Add focused unit tests under solitaire-app/tests/.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v
++
++Write status.json at workspace root: outcome=succeeded if tests pass and the data model is implemented, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_data [
++        label="Verify Data",
++        shape=box,
++        class="verify",
++        prompt="Verify the solitaire data structures.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py
++
++Check that Card, Deck, and Pile types are defined and basic operations work.
++
++Write findings to .ai/verify_data.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_data [shape=diamond, label="Data OK?"]
++
++    impl_logic [
++        label="Game Logic",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="Read .ai/solitaire-spec.md and the current solitaire-app implementation.
++
++Implement Klondike rules:
++- Initial deal
++- Move validation
++- Auto-complete detection
++- Win condition
++- Undo
++
++Add tests for legal moves, illegal moves, win detection, and edge cases.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v
++
++Write status.json at workspace root: outcome=succeeded if all tests pass and rules are implemented, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_logic [
++        label="Verify Logic",
++        shape=box,
++        class="verify",
++        prompt="Verify Klondike game logic.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v
++
++Check move validation, win detection, and undo.
++
++Write findings to .ai/verify_logic.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_logic [shape=diamond, label="Logic OK?"]
++
++    impl_ui [
++        label="Terminal UI",
++        shape=box,
++        class="hard",
++        max_retries=2,
++        prompt="Read .ai/solitaire-spec.md and the game logic.
++
++Implement the curses TUI:
++- Card rendering using ASCII art
++- Board layout
++- Keyboard input
++- Move selection
++- Help text
++- `python3 main.py --smoke` non-interactive smoke path
++
++Keep rendering helpers testable where practical and avoid coupling game rules to curses.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if tests pass, files compile, and smoke mode works, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_ui [
++        label="Verify UI",
++        shape=box,
++        class="verify",
++        prompt="Verify the terminal UI.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke
++
++Check that:
++- main.py can start smoke mode
++- UI module imports without requiring an interactive terminal
++- Board rendering helpers have tests or smoke coverage
++- Controls are documented in README.md
++
++Write findings to .ai/verify_ui.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_ui [shape=diamond, label="UI OK?"]
++
++    impl_integration [
++        label="Integrate",
++        shape=box,
++        prompt="Finish the solitaire app.
++
++Do the integration work:
++- Wire main.py to start the curses game loop normally
++- Keep --smoke non-interactive
++- Add README.md run instructions and controls
++- Add any missing tests needed for confidence
++- Ensure no generated files are outside solitaire-app/ except .ai/ reports and root status.json
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 main.py --smoke
++
++Write status.json at workspace root: outcome=succeeded if the app is playable and tests pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    verify_integration [
++        label="Verify Integration",
++        shape=box,
++        class="verify",
++        prompt="Verify final integration.
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke
++
++Check README.md includes setup, run, test, and controls instructions.
++
++Write findings to .ai/verify_integration.md.
++Write status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
++    ]
++
++    check_integration [shape=diamond, label="Integration OK?"]
++
++    review [
++        label="Final Review",
++        shape=box,
++        class="hard",
++        goal_gate=true,
++        prompt="Review the complete solitaire app against .ai/solitaire-spec.md.
++
++Confirm:
++- The app is in solitaire-app/
++- It is Python 3.11+ and uses curses for the TUI
++- Klondike rules are implemented correctly
++- Keyboard controls are usable and documented
++- Tests pass
++- Smoke mode works without an interactive terminal
++
++Run:
++cd solitaire-app && python3 -m pytest tests/ -v && python3 main.py --smoke
++
++Write review to .ai/solitaire-review.md.
++Write status.json at workspace root: outcome=succeeded if the app is complete and demo-ready, outcome=failed with specific missing or broken items."
++    ]
++
++    check_review [shape=diamond, label="Review OK?"]
++
++    start -> expand_spec -> impl_setup -> verify_setup -> check_setup
++
++    check_setup -> impl_data  [condition="outcome=succeeded"]
++    check_setup -> impl_setup [condition="outcome=failed", label="Retry"]
++    check_setup -> impl_setup [label="Fallback"]
++
++    impl_data -> verify_data -> check_data
++
++    check_data -> impl_logic [condition="outcome=succeeded"]
++    check_data -> impl_data  [condition="outcome=failed", label="Retry"]
++    check_data -> impl_data  [label="Fallback"]
++
++    impl_logic -> verify_logic -> check_logic
++
++    check_logic -> impl_ui    [condition="outcome=succeeded"]
++    check_logic -> impl_logic [condition="outcome=failed", label="Retry"]
++    check_logic -> impl_logic [label="Fallback"]
++
++    impl_ui -> verify_ui -> check_ui
++
++    check_ui -> impl_integration [condition="outcome=succeeded"]
++    check_ui -> impl_ui          [condition="outcome=failed", label="Retry"]
++    check_ui -> impl_ui          [label="Fallback"]
++
++    impl_integration -> verify_integration -> check_integration
++
++    check_integration -> review           [condition="outcome=succeeded"]
++    check_integration -> impl_integration [condition="outcome=failed", label="Retry"]
++    check_integration -> impl_integration [label="Fallback"]
++
++    review -> check_review
++
++    check_review -> exit    [condition="outcome=succeeded"]
++    check_review -> impl_ui [condition="outcome=failed", label="Fix"]
++    check_review -> impl_ui [label="Fallback"]
++}
+diff --git a/.fabro/workflows/solitaire/workflow.toml b/.fabro/workflows/solitaire/workflow.toml
+new file mode 100644
+index 000000000..0cdce6b94
+--- /dev/null
++++ b/.fabro/workflows/solitaire/workflow.toml
+@@ -0,0 +1,4 @@
++_version = 1
++
++[workflow]
++graph = "workflow.fabro"
+diff --git a/docs/plans/2026-06-04-preserve-error-sources-plan.md b/docs/plans/2026-06-04-preserve-error-sources-plan.md
+new file mode 100644
+index 000000000..b20e0c8c3
+--- /dev/null
++++ b/docs/plans/2026-06-04-preserve-error-sources-plan.md
+@@ -0,0 +1,54 @@
++# Preserve Error Sources Across Failure Paths
++
++## Summary
++
++Fix the current error-handling policy violations by keeping structured errors intact until diagnostic/render boundaries. The implementation should preserve source chains through `fabro-core`, workflow lifecycle hooks, workflow operations, server-managed run failures, and error events that currently expose only `error: String`.
++
++## Key Changes
++
++- Add a source-aware core error variant in `fabro-core`, for example `Error::OtherWithSource { message, source: SharedError }`, plus `Error::other_with_source(message, source)`. Use `fabro_util::error::SharedError` and `collect_chain`; add `anyhow.workspace` to `fabro-core` if needed for the constructor.
++- Update `fabro-core::Error::to_fail_outcome()` so source-aware errors produce `FailureDetail.causes`, while preserving existing retry/category behavior for `Other`.
++- Update `fabro-workflow/src/pipeline/execute.rs` to convert source-aware core errors into `WorkflowError::engine_with_source(...)` instead of the catch-all `Error::engine(e.to_string())`.
++
++## Implementation Changes
++
++- Replace lifecycle string flattening with source-aware core errors:
++  - `lifecycle/git.rs`: emit `checkpoint.failed` with `error = e.to_string()` and `causes = collect_causes(&e)`, then return `CoreError::other_with_source("git checkpoint commit failed for node ...", e)`.
++  - `lifecycle/fidelity.rs`: wrap artifact context/outcome resolution errors with `CoreError::other_with_source(...)`.
++  - `lifecycle/artifact.rs`: wrap artifact ledger and tempdir failures with `CoreError::other_with_source(...)`.
++- Sweep workflow operation/store conversions where internal errors currently use `Error::engine(err.to_string())`. Use `Error::engine_with_source("<specific operation context>", err)` for store, serde, IO, and task/join failures in operations such as start, retry, resume, rewind, archive, fork, timeline, create, `pipeline/persist.rs`, `pipeline/initialize.rs`, and `handler/manager_loop.rs`. Keep intentional user-facing parse/validation string projections unchanged.
++- Add optional `causes: Vec<String>` with `#[serde(default, skip_serializing_if = "Vec::is_empty")]` to these diagnostic event props and internal event variants:
++  - `checkpoint.failed`
++  - `pull_request.failed`
++  - `agent.failover`
++  - `agent.mcp.failed`
++- Update event conversion and emitters:
++  - Pull request flow should return `anyhow::Result` or a local typed error instead of `Result<_, String>`, use `.context(...)`, and emit `causes` from the error chain.
++  - Failover events should collect causes from the `fabro_llm::Error` before moving it.
++  - MCP failures should preserve causes from structured MCP startup/handshake errors; update `fabro-mcp` error wrapping to use context instead of interpolating the source error into `anyhow!`.
++- Update server managed-run failure rendering:
++  - Add helpers that accept `WorkflowError` or `(message, causes)` rather than only `String`.
++  - Store compact cause-aware text in `managed_run.error` using existing render helpers.
++  - Reuse the same source-aware `WorkflowError` for persisted `run.failed` and in-memory managed-run state.
++
++## Public Interfaces
++
++- `fabro-types` run event props gain optional `causes` fields for the four diagnostic events above. This is backward-compatible because old events deserialize with empty causes and empty causes are omitted from serialization.
++- `docs/internal/events.md` examples/tables should document `causes`.
++- No TypeScript client regeneration is required for per-event properties because OpenAPI models `RunEvent.properties` as arbitrary JSON, but Rust API round-trip tests should be updated.
++
++## Test Plan
++
++- `fabro-core/src/error.rs`: assert `OtherWithSource` preserves `source()` and `to_fail_outcome().failure.causes`.
++- `fabro-workflow/src/pipeline/execute.rs` tests: a lifecycle/core error with a nested source becomes a workflow error whose `FailureDetail.causes` contains the leaf cause.
++- `fabro-workflow/src/event/convert.rs`: checkpoint, PR failure, failover, and MCP failure events map `causes` into `fabro-types` props.
++- `fabro-workflow/src/pipeline/pull_request.rs`: PR content/client/deserialization failures retain source-chain causes.
++- `fabro-agent`/`fabro-mcp` tests: MCP server failure events serialize causes when the underlying startup/handshake error has a chain.
++- `fabro-server/src/server/tests.rs`: managed-run failure summaries render cause-aware text, and persisted `run.failed` still carries structured causes.
++- Run `cargo nextest run -p fabro-core`, `cargo nextest run -p fabro-workflow`, `cargo nextest run -p fabro-agent`, `cargo nextest run -p fabro-mcp`, and targeted `fabro-server` tests. Run `cargo +nightly-2026-04-14 fmt --check --all` after edits.
++
++## Assumptions
++
++- API error responses such as `ApiError::new(..., err.to_string())` are not part of this sweep unless they create run diagnostics; the policy explicitly allows curated HTTP JSON messages.
++- Projection-only summary strings may remain strings, but they must be rendered from preserved causes at the boundary.
++- Empty `causes` means "no structured source available," not "error had no cause."
