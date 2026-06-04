@@ -1,0 +1,788 @@
+{
+  "title": "Build a terminal-based Klondike solitaire game in Python with a curses TUI",
+  "spec": {
+    "run_id": "01KT9X0N42W6PRBVH2N5914EQJ",
+    "settings": {
+      "project": {
+        "name": null,
+        "description": null,
+        "metadata": {}
+      },
+      "workflow": {
+        "name": null,
+        "description": null,
+        "graph": "workflow.fabro",
+        "metadata": {}
+      },
+      "run": {
+        "goal": {
+          "type": "inline",
+          "value": "Build a terminal-based Klondike solitaire game in Python with a curses TUI"
+        },
+        "working_dir": null,
+        "metadata": {},
+        "inputs": {},
+        "model": {
+          "provider": "gemini",
+          "name": "gemini-3.5-flash",
+          "fallbacks": [],
+          "controls": {
+            "reasoning_effort": null,
+            "speed": null
+          }
+        },
+        "git": {
+          "author": null
+        },
+        "prepare": {
+          "commands": [],
+          "timeout_ms": 300000
+        },
+        "execution": {
+          "mode": "normal",
+          "approval": "prompt"
+        },
+        "checkpoint": {
+          "exclude_globs": [],
+          "skip_git_hooks": false
+        },
+        "clone": {
+          "enabled": true
+        },
+        "run_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "meta_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "environment": {
+          "id": "fabro-dev",
+          "provider": "daytona",
+          "image": {
+            "docker": null,
+            "dockerfile": {
+              "type": "inline",
+              "value": "FROM ubuntu:24.04\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        curl git ripgrep ca-certificates build-essential pkg-config libssl-dev unzip python3 \\\n        xvfb xfce4 xfce4-terminal x11vnc novnc dbus-x11 \\\n        libx11-6 libxrandr2 libxext6 libxrender1 libxfixes3 libxss1 libxtst6 libxi6 \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Install real Chromium (not the snap stub) via xtradeb PPA\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        software-properties-common curl gnupg \\\n    && add-apt-repository -y ppa:xtradeb/apps \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends chromium \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Wrapper: Chromium needs --no-sandbox when running as root in a container,\n# and --disable-dev-shm-usage avoids crashes from small /dev/shm\nRUN printf '#!/bin/bash\\nexec /usr/bin/chromium --no-sandbox --disable-dev-shm-usage \"$@\"\\n' \\\n        > /usr/local/bin/chromium-wrapper \\\n    && chmod +x /usr/local/bin/chromium-wrapper\n\n# Make the wrapper the default in the system .desktop file and via alternatives\nRUN sed -i 's|^Exec=.*|Exec=/usr/local/bin/chromium-wrapper %U|' \\\n        /usr/share/applications/chromium.desktop \\\n    && update-alternatives --install /usr/bin/x-www-browser x-www-browser \\\n        /usr/local/bin/chromium-wrapper 100\n\n# Tell XFCE's exo-open that Chromium is the WebBrowser helper (system-wide)\nRUN mkdir -p /etc/xdg/xfce4 /usr/share/xfce4/helpers \\\n    && printf 'WebBrowser=custom-WebBrowser\\n' > /etc/xdg/xfce4/helpers.rc \\\n    && printf '[Desktop Entry]\\n\\\nVersion=1.0\\n\\\nType=X-XFCE-Helper\\n\\\nName=Chromium\\n\\\nIcon=chromium\\n\\\nX-XFCE-Category=WebBrowser\\n\\\nX-XFCE-CommandsWithParameter=/usr/local/bin/chromium-wrapper \"%%s\"\\n\\\nX-XFCE-Commands=/usr/local/bin/chromium-wrapper\\n' \\\n        > /usr/share/xfce4/helpers/custom-WebBrowser.desktop\n\n# GitHub CLI\nRUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\\n        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" \\\n        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \\\n    && apt-get update && apt-get install -y --no-install-recommends gh \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Rust\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y\nENV PATH=\"/root/.cargo/bin:${PATH}\"\nRUN rustup toolchain install nightly-2026-04-14 --profile minimal --component clippy,rustfmt\nRUN cargo install cargo-nextest --locked\nENV CARGO_INCREMENTAL=0\n\n# Bun\nRUN curl -fsSL https://bun.sh/install | bash\nENV PATH=\"/root/.bun/bin:${PATH}\"\n\nWORKDIR /root\n"
+            }
+          },
+          "resources": {
+            "cpu": 8,
+            "memory": "16GB",
+            "disk": "20GB"
+          },
+          "network": {
+            "mode": "allow_all",
+            "allow": []
+          },
+          "lifecycle": {
+            "preserve": false,
+            "stop_on_terminal": true,
+            "auto_stop": "30m"
+          },
+          "labels": {
+            "repo": "fabro-sh/fabro"
+          },
+          "volumes": [],
+          "env": {}
+        },
+        "notifications": {
+          "feed": {
+            "enabled": true,
+            "provider": "slack",
+            "events": [
+              "run.started",
+              "run.completed",
+              "run.failed"
+            ],
+            "slack": {
+              "channel": "#feed-fabro"
+            }
+          }
+        },
+        "interviews": {
+          "provider": null,
+          "slack": null
+        },
+        "agent": {
+          "fabro_tools": false,
+          "permissions": null,
+          "mcps": {}
+        },
+        "hooks": [],
+        "scm": {
+          "provider": null,
+          "owner": null,
+          "repository": null,
+          "github": null
+        },
+        "pull_request": {
+          "enabled": true,
+          "draft": false,
+          "auto_merge": false,
+          "merge_strategy": "squash"
+        },
+        "artifacts": {
+          "include": []
+        },
+        "integrations": {
+          "github": {
+            "permissions": {}
+          }
+        }
+      }
+    },
+    "graph": {
+      "name": "Solitaire",
+      "nodes": {
+        "impl_logic": {
+          "id": "impl_logic",
+          "attrs": {
+            "shape": {
+              "String": "box"
+            },
+            "prompt": {
+              "String": "Read .ai/solitaire-spec.md and the current solitaire-app implementation.\n\nImplement complete draw-one Klondike game logic:\n- Legal moves from waste/tableau to tableau\n- Legal moves to foundation\n- Moving face-up tableau runs\n- Flipping newly exposed tableau cards\n- Drawing from stock to waste\n- Recycling waste into stock when stock is empty\n- Undo for player actions\n- Win detection when all foundations are complete\n\nAdd tests for legal moves, illegal moves, deal invariants, stock/waste behavior, undo, and win detection.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v\n\nWrite status.json at workspace root: outcome=succeeded if all tests pass and rules are implemented, outcome=failed with failure_reason otherwise."
+            },
+            "class": {
+              "String": "hard"
+            },
+            "max_retries": {
+              "Integer": 2
+            },
+            "label": {
+              "String": "Game Logic"
+            }
+          },
+          "classes": [
+            "hard"
+          ]
+        },
+        "impl_data": {
+          "id": "impl_data",
+          "attrs": {
+            "shape": {
+              "String": "box"
+            },
+            "label": {
+              "String": "Data Structures"
+            },
+            "prompt": {
+              "String": "Read .ai/solitaire-spec.md.\n\nImplement core data structures under solitaire-app/src/solitaire_tui/:\n- Card with rank, suit, face_up, color, display helpers\n- Deck with standard 52-card creation and shuffle\n- Pile types or clear pile abstractions for tableau, foundation, stock, and waste\n- GameState container with initial deal\n\nAdd focused unit tests under solitaire-app/tests/.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v\n\nWrite status.json at workspace root: outcome=succeeded if tests pass and the data model is implemented, outcome=failed with failure_reason otherwise."
+            }
+          }
+        },
+        "verify_logic": {
+          "id": "verify_logic",
+          "attrs": {
+            "prompt": {
+              "String": "Verify Klondike game logic.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v\n\nCheck for coverage of:\n- Deal invariants\n- Tableau move legality\n- Foundation move legality\n- Stock/waste draw and recycle\n- Undo\n- Win detection\n\nWrite findings to .ai/verify_logic.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
+            },
+            "shape": {
+              "String": "box"
+            },
+            "class": {
+              "String": "verify"
+            },
+            "label": {
+              "String": "Verify Logic"
+            }
+          },
+          "classes": [
+            "verify"
+          ]
+        },
+        "verify_integration": {
+          "id": "verify_integration",
+          "attrs": {
+            "prompt": {
+              "String": "Verify final integration.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke\n\nCheck README.md includes setup, run, test, and controls instructions.\n\nWrite findings to .ai/verify_integration.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
+            },
+            "class": {
+              "String": "verify"
+            },
+            "shape": {
+              "String": "box"
+            },
+            "label": {
+              "String": "Verify Integration"
+            }
+          },
+          "classes": [
+            "verify"
+          ]
+        },
+        "check_data": {
+          "id": "check_data",
+          "attrs": {
+            "label": {
+              "String": "Data OK?"
+            },
+            "shape": {
+              "String": "diamond"
+            }
+          }
+        },
+        "check_ui": {
+          "id": "check_ui",
+          "attrs": {
+            "label": {
+              "String": "UI OK?"
+            },
+            "shape": {
+              "String": "diamond"
+            }
+          }
+        },
+        "check_integration": {
+          "id": "check_integration",
+          "attrs": {
+            "shape": {
+              "String": "diamond"
+            },
+            "label": {
+              "String": "Integration OK?"
+            }
+          }
+        },
+        "impl_ui": {
+          "id": "impl_ui",
+          "attrs": {
+            "prompt": {
+              "String": "Read .ai/solitaire-spec.md and the game logic.\n\nImplement the curses TUI:\n- Board rendering for foundations, stock, waste, and 7 tableau piles\n- Compact card labels with face-down cards hidden\n- Keyboard navigation and selection\n- Commands for draw, recycle, move to foundation, undo, help, new game, and quit\n- Clear status/help messages\n- Graceful handling for terminals that are too small\n- `python3 main.py --smoke` non-interactive smoke path\n\nKeep rendering helpers testable where practical and avoid coupling game rules to curses.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke\n\nWrite status.json at workspace root: outcome=succeeded if tests pass, files compile, and smoke mode works, outcome=failed with failure_reason otherwise."
+            },
+            "max_retries": {
+              "Integer": 2
+            },
+            "class": {
+              "String": "hard"
+            },
+            "label": {
+              "String": "Terminal UI"
+            },
+            "shape": {
+              "String": "box"
+            }
+          },
+          "classes": [
+            "hard"
+          ]
+        },
+        "start": {
+          "id": "start",
+          "attrs": {
+            "shape": {
+              "String": "Mdiamond"
+            },
+            "label": {
+              "String": "Start"
+            }
+          }
+        },
+        "expand_spec": {
+          "id": "expand_spec",
+          "attrs": {
+            "prompt": {
+              "String": "Goal: $goal\n\nCreate a detailed implementation spec for a Python Klondike solitaire TUI.\n\nHard requirements:\n- Create the application under solitaire-app/.\n- Use Python 3.11+ and the standard-library curses module for the playable UI.\n- Implement draw-one Klondike with 7 tableau piles, 4 foundations, stock, and waste.\n- Support keyboard-only play.\n- Keep game rules testable without curses.\n- Include a smoke mode so `python3 main.py --smoke` starts enough of the app to prove imports and setup without requiring an interactive terminal.\n\nWrite the spec to .ai/solitaire-spec.md.\nWrite status.json at workspace root: outcome=succeeded if the spec is complete, outcome=failed with failure_reason otherwise."
+            },
+            "label": {
+              "String": "Expand Spec"
+            },
+            "shape": {
+              "String": "box"
+            }
+          }
+        },
+        "check_review": {
+          "id": "check_review",
+          "attrs": {
+            "label": {
+              "String": "Review OK?"
+            },
+            "shape": {
+              "String": "diamond"
+            }
+          }
+        },
+        "verify_setup": {
+          "id": "verify_setup",
+          "attrs": {
+            "prompt": {
+              "String": "Verify setup for the solitaire app.\n\nCheck:\n1. solitaire-app/pyproject.toml exists\n2. solitaire-app/main.py exists\n3. solitaire-app/src/solitaire_tui exists\n4. Python files compile\n\nRun:\ncd solitaire-app && python3 -m py_compile main.py src/solitaire_tui/*.py\n\nWrite findings to .ai/verify_setup.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
+            },
+            "class": {
+              "String": "verify"
+            },
+            "label": {
+              "String": "Verify Setup"
+            },
+            "shape": {
+              "String": "box"
+            }
+          },
+          "classes": [
+            "verify"
+          ]
+        },
+        "impl_integration": {
+          "id": "impl_integration",
+          "attrs": {
+            "prompt": {
+              "String": "Finish the solitaire app.\n\nDo the integration work:\n- Wire main.py to start the curses game loop normally\n- Keep --smoke non-interactive\n- Add README.md run instructions and controls\n- Add any missing tests needed for confidence\n- Ensure no generated files are outside solitaire-app/ except .ai/ reports and root status.json\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 main.py --smoke\n\nWrite status.json at workspace root: outcome=succeeded if the app is playable and tests pass, outcome=failed with failure_reason otherwise."
+            },
+            "shape": {
+              "String": "box"
+            },
+            "label": {
+              "String": "Integrate"
+            }
+          }
+        },
+        "verify_ui": {
+          "id": "verify_ui",
+          "attrs": {
+            "prompt": {
+              "String": "Verify the terminal UI.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke\n\nCheck that:\n- main.py can start smoke mode\n- UI module imports without requiring an interactive terminal\n- Board rendering helpers have tests or smoke coverage\n- Controls are documented in README.md\n\nWrite findings to .ai/verify_ui.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
+            },
+            "label": {
+              "String": "Verify UI"
+            },
+            "shape": {
+              "String": "box"
+            },
+            "class": {
+              "String": "verify"
+            }
+          },
+          "classes": [
+            "verify"
+          ]
+        },
+        "impl_setup": {
+          "id": "impl_setup",
+          "attrs": {
+            "label": {
+              "String": "Setup Project"
+            },
+            "prompt": {
+              "String": "Read .ai/solitaire-spec.md.\n\nCreate the Python project skeleton under solitaire-app/:\n- pyproject.toml with pytest configured\n- main.py entrypoint\n- src/solitaire_tui/ package\n- tests/ directory\n- README.md stub\n\nAdd minimal importable modules so the project compiles.\n\nRun:\ncd solitaire-app && python3 -m py_compile main.py src/solitaire_tui/*.py\n\nWrite status.json at workspace root: outcome=succeeded if the project skeleton exists and compiles, outcome=failed with failure_reason otherwise."
+            },
+            "shape": {
+              "String": "box"
+            }
+          }
+        },
+        "check_setup": {
+          "id": "check_setup",
+          "attrs": {
+            "label": {
+              "String": "Setup OK?"
+            },
+            "shape": {
+              "String": "diamond"
+            }
+          }
+        },
+        "verify_data": {
+          "id": "verify_data",
+          "attrs": {
+            "label": {
+              "String": "Verify Data"
+            },
+            "class": {
+              "String": "verify"
+            },
+            "shape": {
+              "String": "box"
+            },
+            "prompt": {
+              "String": "Verify the solitaire data structures.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py\n\nCheck that Card, Deck, pile handling, and initial GameState/deal behavior are covered by tests.\n\nWrite findings to .ai/verify_data.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise."
+            }
+          },
+          "classes": [
+            "verify"
+          ]
+        },
+        "review": {
+          "id": "review",
+          "attrs": {
+            "shape": {
+              "String": "box"
+            },
+            "goal_gate": {
+              "Boolean": true
+            },
+            "prompt": {
+              "String": "Review the complete solitaire app against .ai/solitaire-spec.md.\n\nConfirm:\n- The app is in solitaire-app/\n- It is Python 3.11+ and uses curses for the TUI\n- Draw-one Klondike rules are implemented correctly\n- Keyboard controls are usable and documented\n- Tests pass\n- Smoke mode works without an interactive terminal\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 main.py --smoke\n\nWrite review to .ai/solitaire-review.md.\nWrite status.json at workspace root: outcome=succeeded if the app is complete and demo-ready, outcome=failed with specific missing or broken items."
+            },
+            "class": {
+              "String": "hard"
+            },
+            "label": {
+              "String": "Final Review"
+            }
+          },
+          "classes": [
+            "hard"
+          ]
+        },
+        "exit": {
+          "id": "exit",
+          "attrs": {
+            "shape": {
+              "String": "Msquare"
+            },
+            "label": {
+              "String": "Exit"
+            }
+          }
+        },
+        "check_logic": {
+          "id": "check_logic",
+          "attrs": {
+            "label": {
+              "String": "Logic OK?"
+            },
+            "shape": {
+              "String": "diamond"
+            }
+          }
+        }
+      },
+      "edges": [
+        {
+          "from": "start",
+          "to": "expand_spec",
+          "attrs": {}
+        },
+        {
+          "from": "expand_spec",
+          "to": "impl_setup",
+          "attrs": {}
+        },
+        {
+          "from": "impl_setup",
+          "to": "verify_setup",
+          "attrs": {}
+        },
+        {
+          "from": "verify_setup",
+          "to": "check_setup",
+          "attrs": {}
+        },
+        {
+          "from": "check_setup",
+          "to": "impl_data",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "check_setup",
+          "to": "impl_setup",
+          "attrs": {
+            "condition": {
+              "String": "outcome=failed"
+            },
+            "label": {
+              "String": "Retry"
+            }
+          }
+        },
+        {
+          "from": "check_setup",
+          "to": "impl_setup",
+          "attrs": {
+            "label": {
+              "String": "Fallback"
+            }
+          }
+        },
+        {
+          "from": "impl_data",
+          "to": "verify_data",
+          "attrs": {}
+        },
+        {
+          "from": "verify_data",
+          "to": "check_data",
+          "attrs": {}
+        },
+        {
+          "from": "check_data",
+          "to": "impl_logic",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "check_data",
+          "to": "impl_data",
+          "attrs": {
+            "condition": {
+              "String": "outcome=failed"
+            },
+            "label": {
+              "String": "Retry"
+            }
+          }
+        },
+        {
+          "from": "check_data",
+          "to": "impl_data",
+          "attrs": {
+            "label": {
+              "String": "Fallback"
+            }
+          }
+        },
+        {
+          "from": "impl_logic",
+          "to": "verify_logic",
+          "attrs": {}
+        },
+        {
+          "from": "verify_logic",
+          "to": "check_logic",
+          "attrs": {}
+        },
+        {
+          "from": "check_logic",
+          "to": "impl_ui",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "check_logic",
+          "to": "impl_logic",
+          "attrs": {
+            "condition": {
+              "String": "outcome=failed"
+            },
+            "label": {
+              "String": "Retry"
+            }
+          }
+        },
+        {
+          "from": "check_logic",
+          "to": "impl_logic",
+          "attrs": {
+            "label": {
+              "String": "Fallback"
+            }
+          }
+        },
+        {
+          "from": "impl_ui",
+          "to": "verify_ui",
+          "attrs": {}
+        },
+        {
+          "from": "verify_ui",
+          "to": "check_ui",
+          "attrs": {}
+        },
+        {
+          "from": "check_ui",
+          "to": "impl_integration",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "check_ui",
+          "to": "impl_ui",
+          "attrs": {
+            "label": {
+              "String": "Retry"
+            },
+            "condition": {
+              "String": "outcome=failed"
+            }
+          }
+        },
+        {
+          "from": "check_ui",
+          "to": "impl_ui",
+          "attrs": {
+            "label": {
+              "String": "Fallback"
+            }
+          }
+        },
+        {
+          "from": "impl_integration",
+          "to": "verify_integration",
+          "attrs": {}
+        },
+        {
+          "from": "verify_integration",
+          "to": "check_integration",
+          "attrs": {}
+        },
+        {
+          "from": "check_integration",
+          "to": "review",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "check_integration",
+          "to": "impl_integration",
+          "attrs": {
+            "label": {
+              "String": "Retry"
+            },
+            "condition": {
+              "String": "outcome=failed"
+            }
+          }
+        },
+        {
+          "from": "check_integration",
+          "to": "impl_integration",
+          "attrs": {
+            "label": {
+              "String": "Fallback"
+            }
+          }
+        },
+        {
+          "from": "review",
+          "to": "check_review",
+          "attrs": {}
+        },
+        {
+          "from": "check_review",
+          "to": "exit",
+          "attrs": {
+            "condition": {
+              "String": "outcome=succeeded"
+            }
+          }
+        },
+        {
+          "from": "check_review",
+          "to": "impl_ui",
+          "attrs": {
+            "label": {
+              "String": "Fix"
+            },
+            "condition": {
+              "String": "outcome=failed"
+            }
+          }
+        },
+        {
+          "from": "check_review",
+          "to": "impl_ui",
+          "attrs": {
+            "label": {
+              "String": "Fallback"
+            }
+          }
+        }
+      ],
+      "attrs": {
+        "rankdir": {
+          "String": "LR"
+        },
+        "retry_target": {
+          "String": "impl_setup"
+        },
+        "default_max_retries": {
+          "Integer": 3
+        },
+        "goal": {
+          "String": "Build a terminal-based Klondike solitaire game in Python with a curses TUI"
+        },
+        "fallback_retry_target": {
+          "String": "impl_logic"
+        }
+      }
+    },
+    "graph_source": "digraph Solitaire {\n    graph [\n        goal=\"Build a terminal-based Klondike solitaire game in Python with a curses TUI\",\n        rankdir=LR,\n        default_max_retries=3,\n        retry_target=\"impl_setup\",\n        fallback_retry_target=\"impl_logic\"\n    ]\n\n    start [shape=Mdiamond, label=\"Start\"]\n    exit  [shape=Msquare, label=\"Exit\"]\n\n    expand_spec [\n        label=\"Expand Spec\",\n        shape=box,\n        prompt=\"Goal: $goal\n\nCreate a detailed implementation spec for a Python Klondike solitaire TUI.\n\nHard requirements:\n- Create the application under solitaire-app/.\n- Use Python 3.11+ and the standard-library curses module for the playable UI.\n- Implement draw-one Klondike with 7 tableau piles, 4 foundations, stock, and waste.\n- Support keyboard-only play.\n- Keep game rules testable without curses.\n- Include a smoke mode so `python3 main.py --smoke` starts enough of the app to prove imports and setup without requiring an interactive terminal.\n\nWrite the spec to .ai/solitaire-spec.md.\nWrite status.json at workspace root: outcome=succeeded if the spec is complete, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    impl_setup [\n        label=\"Setup Project\",\n        shape=box,\n        prompt=\"Read .ai/solitaire-spec.md.\n\nCreate the Python project skeleton under solitaire-app/:\n- pyproject.toml with pytest configured\n- main.py entrypoint\n- src/solitaire_tui/ package\n- tests/ directory\n- README.md stub\n\nAdd minimal importable modules so the project compiles.\n\nRun:\ncd solitaire-app && python3 -m py_compile main.py src/solitaire_tui/*.py\n\nWrite status.json at workspace root: outcome=succeeded if the project skeleton exists and compiles, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    verify_setup [\n        label=\"Verify Setup\",\n        shape=box,\n        class=\"verify\",\n        prompt=\"Verify setup for the solitaire app.\n\nCheck:\n1. solitaire-app/pyproject.toml exists\n2. solitaire-app/main.py exists\n3. solitaire-app/src/solitaire_tui exists\n4. Python files compile\n\nRun:\ncd solitaire-app && python3 -m py_compile main.py src/solitaire_tui/*.py\n\nWrite findings to .ai/verify_setup.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    check_setup [shape=diamond, label=\"Setup OK?\"]\n\n    impl_data [\n        label=\"Data Structures\",\n        shape=box,\n        prompt=\"Read .ai/solitaire-spec.md.\n\nImplement core data structures under solitaire-app/src/solitaire_tui/:\n- Card with rank, suit, face_up, color, display helpers\n- Deck with standard 52-card creation and shuffle\n- Pile types or clear pile abstractions for tableau, foundation, stock, and waste\n- GameState container with initial deal\n\nAdd focused unit tests under solitaire-app/tests/.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v\n\nWrite status.json at workspace root: outcome=succeeded if tests pass and the data model is implemented, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    verify_data [\n        label=\"Verify Data\",\n        shape=box,\n        class=\"verify\",\n        prompt=\"Verify the solitaire data structures.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py\n\nCheck that Card, Deck, pile handling, and initial GameState/deal behavior are covered by tests.\n\nWrite findings to .ai/verify_data.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    check_data [shape=diamond, label=\"Data OK?\"]\n\n    impl_logic [\n        label=\"Game Logic\",\n        shape=box,\n        class=\"hard\",\n        max_retries=2,\n        prompt=\"Read .ai/solitaire-spec.md and the current solitaire-app implementation.\n\nImplement complete draw-one Klondike game logic:\n- Legal moves from waste/tableau to tableau\n- Legal moves to foundation\n- Moving face-up tableau runs\n- Flipping newly exposed tableau cards\n- Drawing from stock to waste\n- Recycling waste into stock when stock is empty\n- Undo for player actions\n- Win detection when all foundations are complete\n\nAdd tests for legal moves, illegal moves, deal invariants, stock/waste behavior, undo, and win detection.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v\n\nWrite status.json at workspace root: outcome=succeeded if all tests pass and rules are implemented, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    verify_logic [\n        label=\"Verify Logic\",\n        shape=box,\n        class=\"verify\",\n        prompt=\"Verify Klondike game logic.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v\n\nCheck for coverage of:\n- Deal invariants\n- Tableau move legality\n- Foundation move legality\n- Stock/waste draw and recycle\n- Undo\n- Win detection\n\nWrite findings to .ai/verify_logic.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    check_logic [shape=diamond, label=\"Logic OK?\"]\n\n    impl_ui [\n        label=\"Terminal UI\",\n        shape=box,\n        class=\"hard\",\n        max_retries=2,\n        prompt=\"Read .ai/solitaire-spec.md and the game logic.\n\nImplement the curses TUI:\n- Board rendering for foundations, stock, waste, and 7 tableau piles\n- Compact card labels with face-down cards hidden\n- Keyboard navigation and selection\n- Commands for draw, recycle, move to foundation, undo, help, new game, and quit\n- Clear status/help messages\n- Graceful handling for terminals that are too small\n- `python3 main.py --smoke` non-interactive smoke path\n\nKeep rendering helpers testable where practical and avoid coupling game rules to curses.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke\n\nWrite status.json at workspace root: outcome=succeeded if tests pass, files compile, and smoke mode works, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    verify_ui [\n        label=\"Verify UI\",\n        shape=box,\n        class=\"verify\",\n        prompt=\"Verify the terminal UI.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke\n\nCheck that:\n- main.py can start smoke mode\n- UI module imports without requiring an interactive terminal\n- Board rendering helpers have tests or smoke coverage\n- Controls are documented in README.md\n\nWrite findings to .ai/verify_ui.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    check_ui [shape=diamond, label=\"UI OK?\"]\n\n    impl_integration [\n        label=\"Integrate\",\n        shape=box,\n        prompt=\"Finish the solitaire app.\n\nDo the integration work:\n- Wire main.py to start the curses game loop normally\n- Keep --smoke non-interactive\n- Add README.md run instructions and controls\n- Add any missing tests needed for confidence\n- Ensure no generated files are outside solitaire-app/ except .ai/ reports and root status.json\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 main.py --smoke\n\nWrite status.json at workspace root: outcome=succeeded if the app is playable and tests pass, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    verify_integration [\n        label=\"Verify Integration\",\n        shape=box,\n        class=\"verify\",\n        prompt=\"Verify final integration.\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 -m py_compile main.py src/solitaire_tui/*.py && python3 main.py --smoke\n\nCheck README.md includes setup, run, test, and controls instructions.\n\nWrite findings to .ai/verify_integration.md.\nWrite status.json at workspace root: outcome=succeeded if all checks pass, outcome=failed with failure_reason otherwise.\"\n    ]\n\n    check_integration [shape=diamond, label=\"Integration OK?\"]\n\n    review [\n        label=\"Final Review\",\n        shape=box,\n        class=\"hard\",\n        goal_gate=true,\n        prompt=\"Review the complete solitaire app against .ai/solitaire-spec.md.\n\nConfirm:\n- The app is in solitaire-app/\n- It is Python 3.11+ and uses curses for the TUI\n- Draw-one Klondike rules are implemented correctly\n- Keyboard controls are usable and documented\n- Tests pass\n- Smoke mode works without an interactive terminal\n\nRun:\ncd solitaire-app && python3 -m pytest tests/ -v && python3 main.py --smoke\n\nWrite review to .ai/solitaire-review.md.\nWrite status.json at workspace root: outcome=succeeded if the app is complete and demo-ready, outcome=failed with specific missing or broken items.\"\n    ]\n\n    check_review [shape=diamond, label=\"Review OK?\"]\n\n    start -> expand_spec -> impl_setup -> verify_setup -> check_setup\n\n    check_setup -> impl_data  [condition=\"outcome=succeeded\"]\n    check_setup -> impl_setup [condition=\"outcome=failed\", label=\"Retry\"]\n    check_setup -> impl_setup [label=\"Fallback\"]\n\n    impl_data -> verify_data -> check_data\n\n    check_data -> impl_logic [condition=\"outcome=succeeded\"]\n    check_data -> impl_data  [condition=\"outcome=failed\", label=\"Retry\"]\n    check_data -> impl_data  [label=\"Fallback\"]\n\n    impl_logic -> verify_logic -> check_logic\n\n    check_logic -> impl_ui    [condition=\"outcome=succeeded\"]\n    check_logic -> impl_logic [condition=\"outcome=failed\", label=\"Retry\"]\n    check_logic -> impl_logic [label=\"Fallback\"]\n\n    impl_ui -> verify_ui -> check_ui\n\n    check_ui -> impl_integration [condition=\"outcome=succeeded\"]\n    check_ui -> impl_ui          [condition=\"outcome=failed\", label=\"Retry\"]\n    check_ui -> impl_ui          [label=\"Fallback\"]\n\n    impl_integration -> verify_integration -> check_integration\n\n    check_integration -> review           [condition=\"outcome=succeeded\"]\n    check_integration -> impl_integration [condition=\"outcome=failed\", label=\"Retry\"]\n    check_integration -> impl_integration [label=\"Fallback\"]\n\n    review -> check_review\n\n    check_review -> exit    [condition=\"outcome=succeeded\"]\n    check_review -> impl_ui [condition=\"outcome=failed\", label=\"Fix\"]\n    check_review -> impl_ui [label=\"Fallback\"]\n}\n",
+    "workflow_slug": "solitaire",
+    "source_directory": "/Users/bhelmkamp/p/fabro-sh/fabro",
+    "provenance": {
+      "server": {
+        "version": "0.253.0-nightly.0"
+      },
+      "client": {
+        "user_agent": "fabro-cli/0.253.0-nightly.0",
+        "name": "fabro-cli",
+        "version": "0.253.0-nightly.0"
+      },
+      "subject": {
+        "kind": "user",
+        "identity": {
+          "issuer": "https://github.com",
+          "subject": "19"
+        },
+        "login": "brynary",
+        "auth_method": "github",
+        "avatar_url": "https://avatars.githubusercontent.com/u/19?v=4"
+      }
+    },
+    "manifest_blob": "259175d7288bb52052c09be47a39807cf2755a96ffdea70b40bf4c988a3d276c",
+    "definition_blob": "067c84ee79399f505c3e963a82a26c499c4e7b53f0ed9b22eab6ad3bb16d992f",
+    "git": {
+      "origin_url": "https://github.com/fabro-sh/fabro",
+      "branch": "main",
+      "sha": "497aaba6f20c1fac052346c39f52e08fabadb179",
+      "dirty": "dirty",
+      "push_outcome": {
+        "type": "not_attempted"
+      }
+    }
+  },
+  "web_url": "http://127.0.0.1:32276/runs/01KT9X0N42W6PRBVH2N5914EQJ",
+  "start": null,
+  "status": {
+    "kind": "starting"
+  },
+  "status_updated_at": "2026-06-04T18:06:04.474776Z",
+  "last_event_at": "2026-06-04T18:07:06.911784Z",
+  "pending_control": null,
+  "checkpoints": [],
+  "conclusion": null,
+  "sandbox": {
+    "kind": "ready",
+    "plan": {
+      "provider": "daytona"
+    },
+    "instance": {
+      "provider": "daytona",
+      "snapshot": "fabro-fdb28dec-1233-892c-b9d7-9f88f8353e7a",
+      "runtime": {
+        "id": "fabro-01KT9X0N42W6PRBVH2N5914EQJ",
+        "working_directory": "/home/daytona/workspace/fabro",
+        "repo_cloned": true,
+        "clone_origin_url": "https://github.com/fabro-sh/fabro",
+        "clone_branch": "main",
+        "workspace_root": "/home/daytona/workspace",
+        "repos_root": "/home/daytona/repos",
+        "primary_repo_path": "/home/daytona/repos/fabro-sh/fabro",
+        "primary_repo_link": "/home/daytona/workspace/fabro"
+      }
+    }
+  },
+  "pull_request": null,
+  "superseded_by": null,
+  "pending_interviews": {},
+  "stages": {}
+}
