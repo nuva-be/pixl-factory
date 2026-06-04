@@ -1,7 +1,7 @@
 import curses
 import locale
 import sys
-from game import FreeCellGame, Card
+from .game import FreeCellGame, Card
 
 # Enable localized Unicode support for suit symbols
 try:

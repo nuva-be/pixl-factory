@@ -1,5 +1,5 @@
 import unittest
-from game import Card, Deck, FreeCellGame
+from card_game_tui.game import Card, Deck, FreeCellGame
 
 class TestCard(unittest.TestCase):
     def test_card_properties(self):
@@ -93,6 +93,34 @@ class TestFreeCellGame(unittest.TestCase):
         self.assertTrue(success)
         self.assertEqual(game.tableaus[0][-1], Card('H', 9))
         self.assertEqual(game.tableaus[0][-2], Card('S', 10))
+
+    def test_move_to_tableau_sequence(self):
+        game = FreeCellGame(seed=42)
+        # Empty all free cells and tableaus to control state
+        game.free_cells = [None] * 4
+        game.tableaus = [[] for _ in range(8)]
+        
+        # Tableau 0: King of Clubs, Queen of Hearts
+        game.tableaus[0] = [Card('C', 13), Card('H', 12)]
+        # Tableau 1: Jack of Spades
+        game.tableaus[1] = [Card('S', 11)]
+        
+        # Place Jack of Spades (Black 11) on Queen of Hearts (Red 12)
+        success = game.move_to_tableau('tableau', 1, 0)
+        self.assertTrue(success)
+        self.assertEqual(game.tableaus[0][-1], Card('S', 11))
+        self.assertEqual(game.tableaus[0][-2], Card('H', 12))
+        
+        # Now Tableau 0 has: KC, QH, JS (a valid sequence: Black 13, Red 12, Black 11)
+        # Let's place a Red 10 (10 of Diamonds) on Tableau 2
+        game.tableaus[2] = [Card('D', 10)]
+        
+        # Let's place Queen of Hearts + Jack of Spades sequence onto a King of Spades (Black 13) in Tableau 3
+        game.tableaus[3] = [Card('S', 13)]
+        success = game.move_to_tableau('tableau', 0, 3)
+        self.assertTrue(success)
+        self.assertEqual(game.tableaus[3], [Card('S', 13), Card('H', 12), Card('S', 11)])
+        self.assertEqual(game.tableaus[0], [Card('C', 13)])
 
     def test_undo(self):
         game = FreeCellGame(seed=42)

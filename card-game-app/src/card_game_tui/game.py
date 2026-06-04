@@ -267,11 +267,6 @@ class FreeCellGame:
 
     def auto_solve_step(self) -> bool:
         # Automatically move cards to foundations if they are safe to do so
-        # A card is safe to move to a foundation if both cards of lower rank of opposite color are already in the foundations
-        # (meaning there's no need to build on them in the tableaus).
-        # For simplicity and classic play, we can just auto-move any card that can legally go to foundations
-        # if it's an Ace or 2, or if cards of lower rank are already at foundations.
-        # Let's write a simple auto-foundation-move step and return True if a move was made.
         suits = ['H', 'D', 'C', 'S']
         
         def is_safe_for_foundation(card: Card) -> bool:
@@ -279,9 +274,6 @@ class FreeCellGame:
             if card.rank <= 2:
                 return True
             # Otherwise, check the ranks of opposite color suits in foundation.
-            # e.g., if card is 5 of Hearts (Red), opposite colors are Clubs (Black) and Spades (Black).
-            # If both Black foundations have at least rank 4, then 5 of Hearts is safe because no black cards
-            # of rank 4 or lower can ever need to be placed on 5 of Hearts.
             opp_suits = ['C', 'S'] if card.color == 'red' else ['H', 'D']
             opp_rank_limit = card.rank - 1
             for os in opp_suits:
@@ -340,3 +332,37 @@ class FreeCellGame:
         elif src_type == 'tableau':
             return self.tableaus[src_idx].pop() if self.tableaus[src_idx] else None
         return None
+
+    def get_summary(self) -> str:
+        lines = []
+        lines.append("=" * 50)
+        lines.append("FREECELL GAME STATE SUMMARY")
+        lines.append("=" * 50)
+        
+        # Free cells
+        fc_strs = [f"[{c}]" if c else "[   ]" for c in self.free_cells]
+        lines.append(f"Free Cells:  " + " ".join(fc_strs))
+        
+        # Foundations
+        f_strs = []
+        for suit in ['H', 'D', 'C', 'S']:
+            cards = self.foundations[suit]
+            top = str(cards[-1]) if cards else " "
+            f_strs.append(f"{suit}:[{top:>3}]")
+        lines.append(f"Foundations: " + " ".join(f_strs))
+        lines.append("-" * 50)
+        
+        # Tableaus
+        lines.append("Tableaus:")
+        max_len = max(len(t) for t in self.tableaus)
+        for r in range(max_len):
+            row_parts = []
+            for t_idx in range(8):
+                tab = self.tableaus[t_idx]
+                if r < len(tab):
+                    row_parts.append(f"{str(tab[r]):>5}")
+                else:
+                    row_parts.append("     ")
+            lines.append(" ".join(row_parts))
+        lines.append("=" * 50)
+        return "\n".join(lines)

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 import sys
-from game import FreeCellGame
-from ui import FreeCellUI
+import os
+
+# Add src to path so we can run main.py directly even if card-game-app isn't installed
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from card_game_tui.game import FreeCellGame
+from card_game_tui.ui import FreeCellUI
 
 def run_smoke_test() -> int:
     """Runs a non-interactive smoke test/verification of the FreeCell game logic."""
@@ -10,7 +15,11 @@ def run_smoke_test() -> int:
     # 1. Initialize deterministic game with fixed seed
     game = FreeCellGame(seed=42)
     
-    # 2. Verify initial deals
+    # 2. Render initial state snapshot
+    print("\nInitial Game State:")
+    print(game.get_summary())
+    
+    # 3. Verify initial deals
     print("Verifying initial card distribution...")
     if len(game.tableaus) != 8:
         print(f"Error: Expected 8 tableaus, got {len(game.tableaus)}", file=sys.stderr)
@@ -24,7 +33,7 @@ def run_smoke_test() -> int:
         
     print(f"Initial tableau card counts match perfectly: {lengths}")
     
-    # 3. Verify single card move to Free Cell
+    # 4. Verify single card move to Free Cell
     top_card_t0 = game.tableaus[0][-1]
     print(f"Moving card {top_card_t0} from Tableau 0 to Free Cell 0...")
     
@@ -32,6 +41,9 @@ def run_smoke_test() -> int:
     if not success:
         print("Error: Failed to move card to empty free cell", file=sys.stderr)
         return 1
+        
+    print("\nGame State after move:")
+    print(game.get_summary())
         
     if game.free_cells[0] != top_card_t0:
         print(f"Error: Card at Free Cell 0 should be {top_card_t0}, got {game.free_cells[0]}", file=sys.stderr)
@@ -43,7 +55,7 @@ def run_smoke_test() -> int:
         
     print("Single card move to Free Cell validated successfully.")
 
-    # 4. Verify invalid move is rejected
+    # 5. Verify invalid move is rejected
     next_card_t0 = game.tableaus[0][-1]
     print(f"Attempting illegal move: placing {next_card_t0} into already occupied Free Cell 0...")
     success = game.move_card_to_free_cell('tableau', 0, 0)
@@ -52,12 +64,15 @@ def run_smoke_test() -> int:
         return 1
     print("Illegal move correctly rejected.")
 
-    # 5. Verify undo functionality works
+    # 6. Verify undo functionality works
     print("Testing Undo functionality...")
     undo_success = game.undo()
     if not undo_success:
         print("Error: Undo failed", file=sys.stderr)
         return 1
+        
+    print("\nGame State after undo:")
+    print(game.get_summary())
         
     if game.free_cells[0] is not None:
         print(f"Error: Expected Free Cell 0 to be empty after undo, got {game.free_cells[0]}", file=sys.stderr)
@@ -69,7 +84,7 @@ def run_smoke_test() -> int:
         
     print("Undo functionality validated successfully.")
 
-    # 6. Verify valid moves check works
+    # 7. Verify valid moves check works
     print("Verifying if state check for available moves is active...")
     if not game.has_any_valid_moves():
         print("Error: Game has valid moves but has_any_valid_moves() returned False", file=sys.stderr)
