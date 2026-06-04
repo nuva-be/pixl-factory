@@ -350,15 +350,37 @@
     }
   },
   "web_url": "http://127.0.0.1:32276/runs/01KTA9QXBN0PS07R25E9P703CZ",
-  "start": null,
-  "status": {
-    "kind": "starting"
+  "start": {
+    "start_time": "2026-06-04T21:50:51.198189Z",
+    "run_branch": "fabro/run/01KTA9QXBN0PS07R25E9P703CZ",
+    "base_sha": "497aaba6f20c1fac052346c39f52e08fabadb179"
   },
-  "status_updated_at": "2026-06-04T21:50:30.626981Z",
-  "last_event_at": "2026-06-04T21:50:45.710882Z",
+  "status": {
+    "kind": "running"
+  },
+  "status_updated_at": "2026-06-04T21:50:51.198231Z",
+  "last_event_at": "2026-06-04T21:50:53.499785Z",
   "pending_control": null,
   "checkpoints": [],
-  "conclusion": null,
+  "conclusion": {
+    "timestamp": "2026-06-04T21:50:53.504640Z",
+    "status": "failed",
+    "timing": {
+      "wall_time_ms": 2303,
+      "inference_time_ms": 0,
+      "tool_time_ms": 0,
+      "active_time_ms": 0
+    },
+    "failure": {
+      "reason": "cancelled",
+      "detail": {
+        "message": "Pipeline cancelled",
+        "category": "canceled"
+      }
+    },
+    "total_retries": 0,
+    "diff": {}
+  },
   "sandbox": {
     "kind": "ready",
     "plan": {
