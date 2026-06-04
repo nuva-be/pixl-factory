@@ -1,0 +1,197 @@
+diff --git a/card-game-app/README.md b/card-game-app/README.md
+new file mode 100644
+index 000000000..6e01b19ee
+--- /dev/null
++++ b/card-game-app/README.md
+@@ -0,0 +1,66 @@
++# Terminal FreeCell Solitaire
++
++A terminal-based FreeCell solitaire game in Python using the standard library `curses` module.
++
++## Features
++
++- **Intuitive Two-Step Controls**: Select a source tableau column or FreeCell, then select your destination.
++- **Auto-Collect (Auto-Home)**: Automatically moves safe cards to foundations on every move or manually via the `s` key.
++- **Smart Sequence Moves**: Move alternating, descending card sequences across columns automatically based on the number of empty FreeCells and columns.
++- **Undo Support**: Full undo history using the `u` key.
++- **Color Coded UI**: Highlighting and color schemes for easy readability and status messages.
++- **Deterministic Seed Support**: Supports standard game layouts with seeding for testing or reproduction.
++- **Headless Smoke Mode**: Run headless tests and simulation with `--smoke`.
++
++## Controls
++
++### Source/Destination Selection
++1. **Source Selection**:
++   - `1` - `8`: Select Tableau column 1 to 8.
++   - `q`, `w`, `e`, `r`: Select FreeCell 1, 2, 3, or 4.
++2. **Destination Selection** (after selecting a source):
++   - `1` - `8`: Move to destination Tableau column.
++   - `q`, `w`, `e`, `r`: Move to destination FreeCell.
++   - `f`: Move to Foundation (or press space).
++
++### General Commands
++- `u`: Undo the last move.
++- `s`: Force auto-collect safe cards to foundations.
++- `n`: Start a new game (asks for confirmation).
++- `Esc` or `x`: Exit the game (asks for confirmation).
++
++## Directory Structure
++
++```text
++card-game-app/
++├── main.py               # CLI entry point (handles --smoke vs curses UI)
++├── pyproject.toml        # Build and Pytest configuration
++├── README.md             # This documentation
++├── src/
++│   └── card_game_tui/
++│       ├── __init__.py   # Exports core API
++│       ├── game.py       # Core rules, Card, Deck, and GameState logic
++│       └── ui.py         # Curses interface rendering and loop
++└── tests/
++    ├── __init__.py
++    └── test_game.py      # pytest test suite for game logic
++```
++
++## Setup & Running
++
++Requires Python 3.8+.
++
++### Running the game
++```bash
++python3 main.py
++```
++
++### Running the Non-Interactive Smoke Test
++```bash
++python3 main.py --smoke
++```
++
++### Running Unit Tests
++```bash
++python3 -m pytest tests/ -v
++```
+diff --git a/card-game-app/main.py b/card-game-app/main.py
+index 14fa36c4f..86942710b 100644
+--- a/card-game-app/main.py
++++ b/card-game-app/main.py
+@@ -2,11 +2,13 @@
+ import sys
+ import os
+ 
+-# Ensure the card-game-app directory is in the import path
+-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++# Ensure the src/ directory is in the import path
++src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
++if src_path not in sys.path:
++    sys.path.insert(0, src_path)
+ 
+-from game import GameState, Card
+-import ui
++from card_game_tui.game import GameState, Card
++from card_game_tui.ui import play_game
+ 
+ def print_ascii_state(state):
+     print("\n" + "=" * 60)
+@@ -118,7 +120,7 @@ if __name__ == "__main__":
+     else:
+         # Run normal interactive curses game
+         try:
+-            ui.play_game()
++            play_game()
+         except Exception as e:
+             print(f"An error occurred: {e}", file=sys.stderr)
+             sys.exit(1)
+diff --git a/card-game-app/pyproject.toml b/card-game-app/pyproject.toml
+new file mode 100644
+index 000000000..5c4ccf692
+--- /dev/null
++++ b/card-game-app/pyproject.toml
+@@ -0,0 +1,24 @@
++[build-system]
++requires = ["setuptools>=61.0.0"]
++build-backend = "setuptools.build_meta"
++
++[project]
++name = "card_game_tui"
++version = "0.1.0"
++description = "A terminal-based FreeCell solitaire game in Python using curses"
++readme = "README.md"
++requires-python = ">=3.8"
++license = {text = "MIT"}
++authors = [
++    {name = "Developer", email = "developer@example.com"}
++]
++classifiers = [
++    "Programming Language :: Python :: 3",
++    "License :: OSI Approved :: MIT License",
++    "Operating System :: OS Independent",
++]
++dependencies = []
++
++[tool.pytest.ini_options]
++pythonpath = ["src"]
++testpaths = ["tests"]
+diff --git a/card-game-app/src/card_game_tui/__init__.py b/card-game-app/src/card_game_tui/__init__.py
+new file mode 100644
+index 000000000..22a806ecd
+--- /dev/null
++++ b/card-game-app/src/card_game_tui/__init__.py
+@@ -0,0 +1,4 @@
++from .game import Card, Deck, GameState
++from .ui import play_game
++
++__all__ = ["Card", "Deck", "GameState", "play_game"]
+diff --git a/card-game-app/game.py b/card-game-app/src/card_game_tui/game.py
+similarity index 100%
+rename from card-game-app/game.py
+rename to card-game-app/src/card_game_tui/game.py
+diff --git a/card-game-app/ui.py b/card-game-app/src/card_game_tui/ui.py
+similarity index 98%
+rename from card-game-app/ui.py
+rename to card-game-app/src/card_game_tui/ui.py
+index 7a16302e6..48c27192d 100644
+--- a/card-game-app/ui.py
++++ b/card-game-app/src/card_game_tui/ui.py
+@@ -1,7 +1,7 @@
+ import curses
+ import os
+ import sys
+-from game import GameState, Card
++from .game import GameState, Card
+ 
+ def init_colors():
+     # Only initialize if color is supported
+@@ -146,7 +146,10 @@ def draw_board(stdscr, state, selected_src, message):
+ def play_game():
+     def main_loop(stdscr):
+         # Set up screen
+-        curses.curs_set(0) # Hide cursor
++        try:
++            curses.curs_set(0) # Hide cursor
++        except curses.error:
++            pass # Some terminals don't support hiding cursor
+         init_colors()
+         
+         state = GameState()
+diff --git a/card-game-app/tests/__init__.py b/card-game-app/tests/__init__.py
+new file mode 100644
+index 000000000..35d55f5e0
+--- /dev/null
++++ b/card-game-app/tests/__init__.py
+@@ -0,0 +1 @@
++# Tests package init
+diff --git a/card-game-app/test_game.py b/card-game-app/tests/test_game.py
+similarity index 99%
+rename from card-game-app/test_game.py
+rename to card-game-app/tests/test_game.py
+index eca4bb047..e911460dd 100644
+--- a/card-game-app/test_game.py
++++ b/card-game-app/tests/test_game.py
+@@ -1,6 +1,6 @@
+ import unittest
+ import copy
+-from game import Card, Deck, GameState
++from card_game_tui.game import Card, Deck, GameState
+ 
+ class TestFreeCellGame(unittest.TestCase):
+     def test_card_properties(self):
