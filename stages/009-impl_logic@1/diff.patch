@@ -1,0 +1,198 @@
+diff --git a/card-game-app/tests/test_rules.py b/card-game-app/tests/test_rules.py
+index b24ab70be..ee6d27d4e 100644
+--- a/card-game-app/tests/test_rules.py
++++ b/card-game-app/tests/test_rules.py
+@@ -78,3 +78,89 @@ def test_validate_move_sequence():
+     assert not valid
+     assert "Insufficient empty FreeCells" in reason
+ 
++def test_validate_move_to_freecell():
++    state = GameState()
++    state.free_cells = [None] * 4
++    state.tableau[0] = [Card(Rank.ACE, Suit.SPADES)]
++    
++    # Valid move of single card to empty FreeCell
++    move_valid = Move('C', 0, 'F', 0, 1)
++    valid, reason = validate_move(state, move_valid)
++    assert valid
++
++    # Cannot move a sequence to a FreeCell
++    state.tableau[0] = [Card(Rank.TWO, Suit.HEARTS), Card(Rank.ACE, Suit.SPADES)]
++    move_seq = Move('C', 0, 'F', 1, 2)
++    valid, reason = validate_move(state, move_seq)
++    assert not valid
++    assert "Cannot move a sequence to a FreeCell" in reason
++
++    # Cannot move to an occupied FreeCell
++    state.free_cells[2] = Card(Rank.KING, Suit.CLUBS)
++    move_occ = Move('C', 0, 'F', 2, 1)
++    valid, reason = validate_move(state, move_occ)
++    assert not valid
++    assert "Target FreeCell is occupied" in reason
++
++def test_validate_move_to_foundation():
++    state = GameState()
++    state.free_cells = [None] * 4
++    state.foundations = {suit: [] for suit in Suit}
++    state.tableau[0] = [Card(Rank.ACE, Suit.SPADES)]
++    state.tableau[1] = [Card(Rank.TWO, Suit.SPADES)]
++
++    # Moving Ace of Spades to empty Foundation is valid
++    move_ace = Move('C', 0, 'A', 0, 1)
++    valid, reason = validate_move(state, move_ace)
++    assert valid
++
++    # Moving Two of Spades to empty Foundation is invalid
++    move_two_invalid = Move('C', 1, 'A', 0, 1)
++    valid, reason = validate_move(state, move_two_invalid)
++    assert not valid
++    assert "Foundations must start with an Ace" in reason
++
++    # Place Ace of Spades in foundation first
++    state.foundations[Suit.SPADES] = [Card(Rank.ACE, Suit.SPADES)]
++    # Now, moving Two of Spades to foundation is valid
++    move_two_valid = Move('C', 1, 'A', 0, 1)
++    valid, reason = validate_move(state, move_two_valid)
++    assert valid
++
++    # Moving a non-consecutive card (e.g. Four of Spades) is invalid
++    state.tableau[2] = [Card(Rank.FOUR, Suit.SPADES)]
++    move_four_invalid = Move('C', 2, 'A', 0, 1)
++    valid, reason = validate_move(state, move_four_invalid)
++    assert not valid
++    assert "Must be next rank up" in reason
++
++    # Cannot move a sequence to a Foundation
++    state.tableau[3] = [Card(Rank.THREE, Suit.HEARTS), Card(Rank.TWO, Suit.SPADES)]
++    move_seq = Move('C', 3, 'A', 0, 2)
++    valid, reason = validate_move(state, move_seq)
++    assert not valid
++    assert "Cannot move a sequence to a Foundation" in reason
++
++def test_validate_move_sequence_invalid_alternating_color():
++    state = GameState()
++    state.free_cells = [None] * 4
++    state.tableau[0] = [Card(Rank.JACK, Suit.HEARTS), Card(Rank.TEN, Suit.DIAMONDS)]
++    
++    # Hearts and Diamonds are both RED. Sequence J♥, 10♦ is invalid!
++    move = Move('C', 0, 'C', 1, 2)
++    valid, reason = validate_move(state, move)
++    assert not valid
++    assert "alternating color descending sequence" in reason
++
++def test_validate_move_sequence_invalid_ranks():
++    state = GameState()
++    state.free_cells = [None] * 4
++    state.tableau[0] = [Card(Rank.JACK, Suit.HEARTS), Card(Rank.NINE, Suit.SPADES)]
++    
++    # Jack (11) and Nine (9) is invalid sequence (should be Jack and Ten)
++    move = Move('C', 0, 'C', 1, 2)
++    valid, reason = validate_move(state, move)
++    assert not valid
++    assert "alternating color descending sequence" in reason
++
++
+diff --git a/card-game-app/tests/test_state.py b/card-game-app/tests/test_state.py
+index 8fa28a0f8..57eb946a8 100644
+--- a/card-game-app/tests/test_state.py
++++ b/card-game-app/tests/test_state.py
+@@ -127,3 +127,99 @@ def test_is_lost():
+     # Thus, no legal moves are possible!
+     assert state.is_lost()
+ 
++def test_execute_invalid_move_no_history():
++    state = GameState()
++    state.tableau = [[] for _ in range(8)]
++    state.free_cells = [None] * 4
++    state.tableau[0] = [Card(Rank.KING, Suit.HEARTS)]
++    state.tableau[1] = [Card(Rank.TEN, Suit.DIAMONDS)]
++
++    # Attempt invalid move (cannot place 10♦ on K♥)
++    move = Move('C', 1, 'C', 0, 1)
++    success, reason = state.execute_move(move)
++    assert not success
++    assert not state.history  # History should remain empty
++
++def test_multiple_undo_redo():
++    state = GameState()
++    state.tableau = [[] for _ in range(8)]
++    state.free_cells = [None] * 4
++    state.foundations = {suit: [] for suit in Suit}
++
++    # Set up some cards
++    state.tableau[0] = [Card(Rank.ACE, Suit.SPADES)]
++    state.tableau[1] = [Card(Rank.TWO, Suit.SPADES)]
++
++    # 1. Move Ace of Spades to foundation
++    success, _ = state.execute_move(Move('C', 0, 'A', 0, 1))
++    assert success
++    assert len(state.foundations[Suit.SPADES]) == 1
++
++    # 2. Move Two of Spades to foundation (will auto-home, but we move manually)
++    success, _ = state.execute_move(Move('C', 1, 'A', 0, 1))
++    assert success
++    assert len(state.foundations[Suit.SPADES]) == 2
++
++    # Check state before undo
++    assert not state.tableau[0]
++    assert not state.tableau[1]
++
++    # Undo 2nd move
++    assert state.undo()
++    assert len(state.foundations[Suit.SPADES]) == 1
++    assert state.tableau[1] == [Card(Rank.TWO, Suit.SPADES)]
++
++    # Undo 1st move
++    assert state.undo()
++    assert len(state.foundations[Suit.SPADES]) == 0
++    assert state.tableau[0] == [Card(Rank.ACE, Suit.SPADES)]
++
++    # No more history
++    assert not state.undo()
++
++    # Redo 1st move
++    assert state.redo()
++    assert len(state.foundations[Suit.SPADES]) == 1
++    assert not state.tableau[0]
++
++    # Redo 2nd move
++    assert state.redo()
++    assert len(state.foundations[Suit.SPADES]) == 2
++    assert not state.tableau[1]
++
++    # No more redo history
++    assert not state.redo()
++
++def test_is_lost_false_if_freecell_can_move_to_tableau():
++    state = GameState()
++    # 8 columns filled with 5♠ -> no moves between columns
++    state.tableau = [[Card(Rank.FIVE, Suit.SPADES)] for _ in range(8)]
++    # All FreeCells but one occupied by King of Hearts. One has Six of Hearts
++    state.free_cells = [
++        Card(Rank.KING, Suit.HEARTS),
++        Card(Rank.KING, Suit.HEARTS),
++        Card(Rank.KING, Suit.HEARTS),
++        Card(Rank.FOUR, Suit.HEARTS)  # Four of Hearts can go on Five of Spades!
++    ]
++    state.foundations = {suit: [] for suit in Suit}
++
++    # Not lost because 4♥ in FreeCell can move onto 5♠ on any Tableau column
++    assert not state.is_lost()
++
++def test_is_lost_false_if_freecell_can_move_to_foundation():
++    state = GameState()
++    # 8 columns filled with 5♠ -> no moves between columns
++    state.tableau = [[Card(Rank.FIVE, Suit.SPADES)] for _ in range(8)]
++    # FreeCells occupied, one contains Ace of Spades
++    state.free_cells = [
++        Card(Rank.KING, Suit.HEARTS),
++        Card(Rank.KING, Suit.HEARTS),
++        Card(Rank.KING, Suit.HEARTS),
++        Card(Rank.ACE, Suit.SPADES)  # Ace can go to foundation
++    ]
++    state.foundations = {suit: [] for suit in Suit}
++
++    # Not lost because Ace can go to empty Spades Foundation
++    assert not state.is_lost()
++
++
