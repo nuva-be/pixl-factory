@@ -127,3 +127,99 @@ def test_is_lost():
     # Thus, no legal moves are possible!
     assert state.is_lost()
 
+def test_execute_invalid_move_no_history():
+    state = GameState()
+    state.tableau = [[] for _ in range(8)]
+    state.free_cells = [None] * 4
+    state.tableau[0] = [Card(Rank.KING, Suit.HEARTS)]
+    state.tableau[1] = [Card(Rank.TEN, Suit.DIAMONDS)]
+
+    # Attempt invalid move (cannot place 10♦ on K♥)
+    move = Move('C', 1, 'C', 0, 1)
+    success, reason = state.execute_move(move)
+    assert not success
+    assert not state.history  # History should remain empty
+
+def test_multiple_undo_redo():
+    state = GameState()
+    state.tableau = [[] for _ in range(8)]
+    state.free_cells = [None] * 4
+    state.foundations = {suit: [] for suit in Suit}
+
+    # Set up some cards
+    state.tableau[0] = [Card(Rank.ACE, Suit.SPADES)]
+    state.tableau[1] = [Card(Rank.TWO, Suit.SPADES)]
+
+    # 1. Move Ace of Spades to foundation
+    success, _ = state.execute_move(Move('C', 0, 'A', 0, 1))
+    assert success
+    assert len(state.foundations[Suit.SPADES]) == 1
+
+    # 2. Move Two of Spades to foundation (will auto-home, but we move manually)
+    success, _ = state.execute_move(Move('C', 1, 'A', 0, 1))
+    assert success
+    assert len(state.foundations[Suit.SPADES]) == 2
+
+    # Check state before undo
+    assert not state.tableau[0]
+    assert not state.tableau[1]
+
+    # Undo 2nd move
+    assert state.undo()
+    assert len(state.foundations[Suit.SPADES]) == 1
+    assert state.tableau[1] == [Card(Rank.TWO, Suit.SPADES)]
+
+    # Undo 1st move
+    assert state.undo()
+    assert len(state.foundations[Suit.SPADES]) == 0
+    assert state.tableau[0] == [Card(Rank.ACE, Suit.SPADES)]
+
+    # No more history
+    assert not state.undo()
+
+    # Redo 1st move
+    assert state.redo()
+    assert len(state.foundations[Suit.SPADES]) == 1
+    assert not state.tableau[0]
+
+    # Redo 2nd move
+    assert state.redo()
+    assert len(state.foundations[Suit.SPADES]) == 2
+    assert not state.tableau[1]
+
+    # No more redo history
+    assert not state.redo()
+
+def test_is_lost_false_if_freecell_can_move_to_tableau():
+    state = GameState()
+    # 8 columns filled with 5♠ -> no moves between columns
+    state.tableau = [[Card(Rank.FIVE, Suit.SPADES)] for _ in range(8)]
+    # All FreeCells but one occupied by King of Hearts. One has Six of Hearts
+    state.free_cells = [
+        Card(Rank.KING, Suit.HEARTS),
+        Card(Rank.KING, Suit.HEARTS),
+        Card(Rank.KING, Suit.HEARTS),
+        Card(Rank.FOUR, Suit.HEARTS)  # Four of Hearts can go on Five of Spades!
+    ]
+    state.foundations = {suit: [] for suit in Suit}
+
+    # Not lost because 4♥ in FreeCell can move onto 5♠ on any Tableau column
+    assert not state.is_lost()
+
+def test_is_lost_false_if_freecell_can_move_to_foundation():
+    state = GameState()
+    # 8 columns filled with 5♠ -> no moves between columns
+    state.tableau = [[Card(Rank.FIVE, Suit.SPADES)] for _ in range(8)]
+    # FreeCells occupied, one contains Ace of Spades
+    state.free_cells = [
+        Card(Rank.KING, Suit.HEARTS),
+        Card(Rank.KING, Suit.HEARTS),
+        Card(Rank.KING, Suit.HEARTS),
+        Card(Rank.ACE, Suit.SPADES)  # Ace can go to foundation
+    ]
+    state.foundations = {suit: [] for suit in Suit}
+
+    # Not lost because Ace can go to empty Spades Foundation
+    assert not state.is_lost()
+
+

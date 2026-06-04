@@ -78,3 +78,89 @@ def test_validate_move_sequence():
     assert not valid
     assert "Insufficient empty FreeCells" in reason
 
+def test_validate_move_to_freecell():
+    state = GameState()
+    state.free_cells = [None] * 4
+    state.tableau[0] = [Card(Rank.ACE, Suit.SPADES)]
+    
+    # Valid move of single card to empty FreeCell
+    move_valid = Move('C', 0, 'F', 0, 1)
+    valid, reason = validate_move(state, move_valid)
+    assert valid
+
+    # Cannot move a sequence to a FreeCell
+    state.tableau[0] = [Card(Rank.TWO, Suit.HEARTS), Card(Rank.ACE, Suit.SPADES)]
+    move_seq = Move('C', 0, 'F', 1, 2)
+    valid, reason = validate_move(state, move_seq)
+    assert not valid
+    assert "Cannot move a sequence to a FreeCell" in reason
+
+    # Cannot move to an occupied FreeCell
+    state.free_cells[2] = Card(Rank.KING, Suit.CLUBS)
+    move_occ = Move('C', 0, 'F', 2, 1)
+    valid, reason = validate_move(state, move_occ)
+    assert not valid
+    assert "Target FreeCell is occupied" in reason
+
+def test_validate_move_to_foundation():
+    state = GameState()
+    state.free_cells = [None] * 4
+    state.foundations = {suit: [] for suit in Suit}
+    state.tableau[0] = [Card(Rank.ACE, Suit.SPADES)]
+    state.tableau[1] = [Card(Rank.TWO, Suit.SPADES)]
+
+    # Moving Ace of Spades to empty Foundation is valid
+    move_ace = Move('C', 0, 'A', 0, 1)
+    valid, reason = validate_move(state, move_ace)
+    assert valid
+
+    # Moving Two of Spades to empty Foundation is invalid
+    move_two_invalid = Move('C', 1, 'A', 0, 1)
+    valid, reason = validate_move(state, move_two_invalid)
+    assert not valid
+    assert "Foundations must start with an Ace" in reason
+
+    # Place Ace of Spades in foundation first
+    state.foundations[Suit.SPADES] = [Card(Rank.ACE, Suit.SPADES)]
+    # Now, moving Two of Spades to foundation is valid
+    move_two_valid = Move('C', 1, 'A', 0, 1)
+    valid, reason = validate_move(state, move_two_valid)
+    assert valid
+
+    # Moving a non-consecutive card (e.g. Four of Spades) is invalid
+    state.tableau[2] = [Card(Rank.FOUR, Suit.SPADES)]
+    move_four_invalid = Move('C', 2, 'A', 0, 1)
+    valid, reason = validate_move(state, move_four_invalid)
+    assert not valid
+    assert "Must be next rank up" in reason
+
+    # Cannot move a sequence to a Foundation
+    state.tableau[3] = [Card(Rank.THREE, Suit.HEARTS), Card(Rank.TWO, Suit.SPADES)]
+    move_seq = Move('C', 3, 'A', 0, 2)
+    valid, reason = validate_move(state, move_seq)
+    assert not valid
+    assert "Cannot move a sequence to a Foundation" in reason
+
+def test_validate_move_sequence_invalid_alternating_color():
+    state = GameState()
+    state.free_cells = [None] * 4
+    state.tableau[0] = [Card(Rank.JACK, Suit.HEARTS), Card(Rank.TEN, Suit.DIAMONDS)]
+    
+    # Hearts and Diamonds are both RED. Sequence J♥, 10♦ is invalid!
+    move = Move('C', 0, 'C', 1, 2)
+    valid, reason = validate_move(state, move)
+    assert not valid
+    assert "alternating color descending sequence" in reason
+
+def test_validate_move_sequence_invalid_ranks():
+    state = GameState()
+    state.free_cells = [None] * 4
+    state.tableau[0] = [Card(Rank.JACK, Suit.HEARTS), Card(Rank.NINE, Suit.SPADES)]
+    
+    # Jack (11) and Nine (9) is invalid sequence (should be Jack and Ten)
+    move = Move('C', 0, 'C', 1, 2)
+    valid, reason = validate_move(state, move)
+    assert not valid
+    assert "alternating color descending sequence" in reason
+
+
