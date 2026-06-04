@@ -68,6 +68,9 @@ class GameState:
         # Selection: tuple of (row, col, card_idx) or None
         self.selected: Optional[Tuple[int, int, int]] = None
         
+        # Undo / History stack
+        self.history: List[dict] = []
+        
         self.message = "Welcome to Solitaire! Use arrows to navigate, Space/Enter to select/move."
         self.reset()
 
@@ -99,12 +102,49 @@ class GameState:
         self.waste = []
         self.foundations = [[], [], [], []]
         
-        # Reset selection and cursor
+        # Reset selection, cursor and history
         self.cursor_row = 1
         self.cursor_col = 0
         self.cursor_card_idx = len(self.tableaus[0]) - 1 if self.tableaus[0] else 0
         self.selected = None
+        self.history = []
         self.message = "Game reset. New shuffle!"
+
+    def _save_state(self) -> dict:
+        return {
+            'stock': [Card(c.suit, c.rank, c.face_up) for c in self.stock],
+            'waste': [Card(c.suit, c.rank, c.face_up) for c in self.waste],
+            'foundations': [[Card(c.suit, c.rank, c.face_up) for c in f] for f in self.foundations],
+            'tableaus': [[Card(c.suit, c.rank, c.face_up) for c in t] for t in self.tableaus],
+            'message': self.message
+        }
+
+    def save_to_history(self):
+        self.history.append(self._save_state())
+        if len(self.history) > 100:
+            self.history.pop(0)
+
+    def pop_history(self):
+        if self.history:
+            self.history.pop()
+
+    def undo(self) -> bool:
+        """Restores the last saved state from the history stack."""
+        if not self.history:
+            self.message = "Nothing to undo!"
+            return False
+        state = self.history.pop()
+        self.stock = state['stock']
+        self.waste = state['waste']
+        self.foundations = state['foundations']
+        self.tableaus = state['tableaus']
+        self.message = "Undo successful."
+        self.selected = None
+        # Align cursor_card_idx with restored tableau size
+        if self.cursor_row == 1:
+            t_len = len(self.tableaus[self.cursor_col])
+            self.cursor_card_idx = max(0, t_len - 1)
+        return True
 
     def get_first_face_up_idx(self, tableau_idx: int) -> int:
         tableau = self.tableaus[tableau_idx]
@@ -271,8 +311,11 @@ class GameState:
 
     # --- Core Move Operations ---
     
-    def draw_card(self) -> bool:
+    def draw_card(self, push_history: bool = True) -> bool:
         """Draws a card from stock to waste, or recycles waste if stock is empty."""
+        if push_history:
+            self.save_to_history()
+            
         if self.stock:
             card = self.stock.pop()
             card.face_up = True
@@ -293,12 +336,17 @@ class GameState:
             self.message = "Recycled waste pile back to stock and drew first card."
             return True
         else:
+            if push_history:
+                self.pop_history()
             self.message = "No cards left in Stock or Waste!"
             return False
 
-    def move_waste_to_tableau(self, dest_idx: int) -> bool:
+    def move_waste_to_tableau(self, dest_idx: int, push_history: bool = True) -> bool:
         if not self.waste:
             return False
+        if push_history:
+            self.save_to_history()
+            
         card = self.waste[-1]
         dest_pile = self.tableaus[dest_idx]
         
@@ -312,16 +360,24 @@ class GameState:
             if dest_card.face_up and card.color != dest_card.color and card.rank == dest_card.rank - 1:
                 dest_pile.append(self.waste.pop())
                 return True
+                
+        if push_history:
+            self.pop_history()
         return False
 
-    def move_waste_to_foundation(self, f_idx: int) -> bool:
+    def move_waste_to_foundation(self, f_idx: int, push_history: bool = True) -> bool:
         if not self.waste:
             return False
+        if push_history:
+            self.save_to_history()
+            
         card = self.waste[-1]
         f_suit = self.foundation_suits[f_idx]
         dest_pile = self.foundations[f_idx]
         
         if card.suit != f_suit:
+            if push_history:
+                self.pop_history()
             return False
             
         if not dest_pile:
@@ -334,12 +390,18 @@ class GameState:
             if card.rank == top_card.rank + 1:
                 dest_pile.append(self.waste.pop())
                 return True
+                
+        if push_history:
+            self.pop_history()
         return False
 
-    def move_foundation_to_tableau(self, f_idx: int, dest_idx: int) -> bool:
+    def move_foundation_to_tableau(self, f_idx: int, dest_idx: int, push_history: bool = True) -> bool:
         f_pile = self.foundations[f_idx]
         if not f_pile:
             return False
+        if push_history:
+            self.save_to_history()
+            
         card = f_pile[-1]
         dest_pile = self.tableaus[dest_idx]
         
@@ -353,9 +415,12 @@ class GameState:
             if dest_card.face_up and card.color != dest_card.color and card.rank == dest_card.rank - 1:
                 dest_pile.append(f_pile.pop())
                 return True
+                
+        if push_history:
+            self.pop_history()
         return False
 
-    def move_tableau_to_tableau(self, src_idx: int, card_idx: int, dest_idx: int) -> bool:
+    def move_tableau_to_tableau(self, src_idx: int, card_idx: int, dest_idx: int, push_history: bool = True) -> bool:
         src_pile = self.tableaus[src_idx]
         dest_pile = self.tableaus[dest_idx]
         
@@ -366,6 +431,9 @@ class GameState:
         # Ensure all moving cards are face up
         if not all(c.face_up for c in moving_stack):
             return False
+            
+        if push_history:
+            self.save_to_history()
             
         first_moving_card = moving_stack[0]
         
@@ -383,17 +451,25 @@ class GameState:
                 del src_pile[card_idx:]
                 self.auto_flip_top(src_idx)
                 return True
+                
+        if push_history:
+            self.pop_history()
         return False
 
-    def move_tableau_to_foundation(self, src_idx: int, f_idx: int) -> bool:
+    def move_tableau_to_foundation(self, src_idx: int, f_idx: int, push_history: bool = True) -> bool:
         src_pile = self.tableaus[src_idx]
         if not src_pile:
             return False
+        if push_history:
+            self.save_to_history()
+            
         card = src_pile[-1]
         f_suit = self.foundation_suits[f_idx]
         dest_pile = self.foundations[f_idx]
         
         if card.suit != f_suit:
+            if push_history:
+                self.pop_history()
             return False
             
         if not dest_pile:
@@ -408,6 +484,9 @@ class GameState:
                 dest_pile.append(src_pile.pop())
                 self.auto_flip_top(src_idx)
                 return True
+                
+        if push_history:
+            self.pop_history()
         return False
 
     def auto_flip_top(self, tableau_idx: int):
@@ -419,3 +498,138 @@ class GameState:
     def check_win(self) -> bool:
         """The game is won if all four foundations have 13 cards."""
         return all(len(f) == 13 for f in self.foundations)
+
+    def auto_play_to_foundations(self) -> int:
+        """
+        Repeatedly scans the top of the waste and tableaus for cards that can be
+        moved to foundations. Moves them automatically.
+        Returns the number of moves made.
+        """
+        moves_made = 0
+        any_moved = True
+        
+        # Save a single history state before running the auto-play loop.
+        self.save_to_history()
+        
+        while any_moved:
+            any_moved = False
+            
+            # Try moving from waste
+            if self.waste:
+                for f_idx in range(4):
+                    if self.move_waste_to_foundation(f_idx, push_history=False):
+                        moves_made += 1
+                        any_moved = True
+                        break  # Break inner loop, restart scan
+            
+            if any_moved:
+                continue
+                
+            # Try moving from tableaus
+            for t_idx in range(7):
+                if self.tableaus[t_idx]:
+                    for f_idx in range(4):
+                        if self.move_tableau_to_foundation(t_idx, f_idx, push_history=False):
+                            moves_made += 1
+                            any_moved = True
+                            break  # Break inner loops, restart scan
+                    if any_moved:
+                        break
+                        
+        if moves_made > 0:
+            self.message = f"Auto-complete: moved {moves_made} card(s) to foundations."
+        else:
+            self.pop_history()  # Nothing changed, discard saved history state
+            self.message = "No eligible cards can be moved to foundations."
+            
+        return moves_made
+
+    def get_possible_moves(self) -> List[str]:
+        """Scans the board and returns a list of human-readable valid moves."""
+        moves = []
+        
+        # 1. Stock / Waste interaction
+        if self.stock:
+            moves.append("Draw card from Stock")
+        elif self.waste:
+            moves.append("Recycle Waste to Stock")
+            
+        # 2. Waste to Foundation / Tableau
+        if self.waste:
+            card = self.waste[-1]
+            # to foundation
+            for f_idx in range(4):
+                f_suit = self.foundation_suits[f_idx]
+                dest_pile = self.foundations[f_idx]
+                if card.suit == f_suit:
+                    if (not dest_pile and card.rank == 1) or (dest_pile and card.rank == dest_pile[-1].rank + 1):
+                        moves.append(f"Move {card.rank_symbol}{card.suit_symbol} from Waste to Foundation {f_idx + 1}")
+            # to tableau
+            for t_idx in range(7):
+                dest_pile = self.tableaus[t_idx]
+                if not dest_pile:
+                    if card.rank == 13:
+                        moves.append(f"Move King {card.rank_symbol}{card.suit_symbol} from Waste to empty Tableau {t_idx + 1}")
+                else:
+                    dest_card = dest_pile[-1]
+                    if dest_card.face_up and card.color != dest_card.color and card.rank == dest_card.rank - 1:
+                        moves.append(f"Move {card.rank_symbol}{card.suit_symbol} from Waste to Tableau {t_idx + 1}")
+                        
+        # 3. Foundation to Tableau
+        for f_idx in range(4):
+            f_pile = self.foundations[f_idx]
+            if f_pile:
+                card = f_pile[-1]
+                for t_idx in range(7):
+                    dest_pile = self.tableaus[t_idx]
+                    if not dest_pile:
+                        if card.rank == 13:
+                            moves.append(f"Move King {card.rank_symbol}{card.suit_symbol} from Foundation {f_idx + 1} to empty Tableau {t_idx + 1}")
+                    else:
+                        dest_card = dest_pile[-1]
+                        if dest_card.face_up and card.color != dest_card.color and card.rank == dest_card.rank - 1:
+                            moves.append(f"Move {card.rank_symbol}{card.suit_symbol} from Foundation {f_idx + 1} to Tableau {t_idx + 1}")
+                            
+        # 4. Tableau to Tableau
+        for src_idx in range(7):
+            src_pile = self.tableaus[src_idx]
+            if src_pile:
+                first_face_up = self.get_first_face_up_idx(src_idx)
+                if first_face_up != -1:
+                    for card_idx in range(first_face_up, len(src_pile)):
+                        card = src_pile[card_idx]
+                        is_king_on_empty = (card.rank == 13 and card_idx == 0)
+                        
+                        for dest_idx in range(7):
+                            if src_idx == dest_idx:
+                                continue
+                            dest_pile = self.tableaus[dest_idx]
+                            if not dest_pile:
+                                if card.rank == 13 and not is_king_on_empty:
+                                    moves.append(f"Move stack starting with King {card.rank_symbol}{card.suit_symbol} from Tableau {src_idx + 1} to empty Tableau {dest_idx + 1}")
+                            else:
+                                dest_card = dest_pile[-1]
+                                if dest_card.face_up and card.color != dest_card.color and card.rank == dest_card.rank - 1:
+                                    moves.append(f"Move stack starting with {card.rank_symbol}{card.suit_symbol} from Tableau {src_idx + 1} to Tableau {dest_idx + 1}")
+                                   
+        # 5. Tableau to Foundation
+        for src_idx in range(7):
+            src_pile = self.tableaus[src_idx]
+            if src_pile:
+                card = src_pile[-1]
+                for f_idx in range(4):
+                    f_suit = self.foundation_suits[f_idx]
+                    dest_pile = self.foundations[f_idx]
+                    if card.suit == f_suit:
+                        if (not dest_pile and card.rank == 1) or (dest_pile and card.rank == dest_pile[-1].rank + 1):
+                            moves.append(f"Move {card.rank_symbol}{card.suit_symbol} from Tableau {src_idx + 1} to Foundation {f_idx + 1}")
+                           
+        return moves
+
+    def request_hint(self):
+        """Finds possible moves and prints one to self.message."""
+        moves = self.get_possible_moves()
+        if moves:
+            self.message = f"Hint: {random.choice(moves)}"
+        else:
+            self.message = "No valid moves available. You are stuck!"

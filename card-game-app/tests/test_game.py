@@ -1,5 +1,5 @@
 import unittest
-from game import Card, GameState
+from card_game_tui.game import Card, GameState
 
 class TestSolitaireGame(unittest.TestCase):
     
@@ -143,6 +143,55 @@ class TestSolitaireGame(unittest.TestCase):
                 state.foundations[i].append(Card(suit, rank, face_up=True))
                 
         self.assertTrue(state.check_win())
+
+    def test_undo(self):
+        state = GameState(seed=123)
+        initial_stock = len(state.stock)
+        
+        # Draw a card
+        state.draw_card()
+        self.assertEqual(len(state.stock), initial_stock - 1)
+        self.assertEqual(len(state.waste), 1)
+        
+        # Undo draw
+        state.undo()
+        self.assertEqual(len(state.stock), initial_stock)
+        self.assertEqual(len(state.waste), 0)
+        
+        # Test undo when empty
+        self.assertFalse(state.undo())
+
+    def test_auto_play_to_foundations(self):
+        state = GameState(seed=456)
+        state.waste = [Card('H', 1, face_up=True)]  # Ace of Hearts
+        state.tableaus[0] = [Card('D', 1, face_up=True)]  # Ace of Diamonds
+        
+        # Auto play should move both Aces to their respective foundations (F0 and F1)
+        moves = state.auto_play_to_foundations()
+        self.assertEqual(moves, 2)
+        self.assertEqual(len(state.foundations[0]), 1)
+        self.assertEqual(len(state.foundations[1]), 1)
+        self.assertEqual(state.foundations[0][-1].rank, 1)
+        self.assertEqual(state.foundations[1][-1].rank, 1)
+
+    def test_get_possible_moves_and_hints(self):
+        state = GameState(seed=789)
+        # Clear out default setup for predictable testing
+        state.stock = []
+        state.waste = []
+        state.tableaus = [[] for _ in range(7)]
+        
+        # Setup tableaus
+        state.tableaus[0] = [Card('H', 12, face_up=True)] # Red Queen
+        state.tableaus[1] = [Card('S', 13, face_up=True)] # Black King
+        
+        moves = state.get_possible_moves()
+        # Expecting at least: Move Red Q onto Black K
+        self.assertTrue(any("Q" in m and "Tableau 2" in m for m in moves))
+        
+        # Test request hint sets message
+        state.request_hint()
+        self.assertTrue("Hint:" in state.message)
 
 if __name__ == '__main__':
     unittest.main()
