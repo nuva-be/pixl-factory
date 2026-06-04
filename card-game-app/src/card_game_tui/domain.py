@@ -376,3 +376,51 @@ class GameState:
     def check_win(self) -> bool:
         """Returns True if all 52 cards are in the Foundations."""
         return all(len(self.foundations[suit]) == 13 for suit in Suit)
+
+    def check_loss(self) -> bool:
+        """
+        Returns True if the game is lost (i.e. not won and no legal moves can be made).
+        """
+        if self.check_win():
+            return False
+
+        # Check all possible moves from freecells
+        for i in range(4):
+            if self.freecells[i] is not None:
+                from_pos = Position(LocationType.FREECELL, i)
+                # To tableau
+                for j in range(8):
+                    if self.validate_move(from_pos, Position(LocationType.TABLEAU, j), 1):
+                        return False
+                # To other freecells
+                for j in range(4):
+                    if i != j and self.validate_move(from_pos, Position(LocationType.FREECELL, j), 1):
+                        return False
+                # To foundations
+                for j in range(4):
+                    if self.validate_move(from_pos, Position(LocationType.FOUNDATION, j), 1):
+                        return False
+
+        # Check all possible moves from tableaus
+        for i in range(8):
+            col_len = len(self.tableaus[i])
+            if col_len > 0:
+                from_pos = Position(LocationType.TABLEAU, i)
+                # Check different move counts
+                for count in range(1, col_len + 1):
+                    # To other tableaus
+                    for j in range(8):
+                        if i != j and self.validate_move(from_pos, Position(LocationType.TABLEAU, j), count):
+                            return False
+                    # To freecells
+                    if count == 1:
+                        for j in range(4):
+                            if self.validate_move(from_pos, Position(LocationType.FREECELL, j), 1):
+                                return False
+                    # To foundations
+                    if count == 1:
+                        for j in range(4):
+                            if self.validate_move(from_pos, Position(LocationType.FOUNDATION, j), 1):
+                                return False
+
+        return True

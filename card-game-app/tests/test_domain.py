@@ -347,3 +347,41 @@ def test_win_detection():
     # Remove one card
     state.foundations[Suit.HEARTS].pop()
     assert state.check_win() is False
+
+def test_check_loss_not_lost():
+    # A standard freshly-dealt game should not be in a loss state (usually has legal moves)
+    state = GameState()
+    assert state.check_loss() is False
+
+def test_check_loss_won():
+    # A won game is not lost
+    state = GameState()
+    for suit in Suit:
+        state.foundations[suit] = [Card(suit, rank) for rank in Rank]
+    assert state.check_loss() is False
+
+def test_check_loss_is_lost():
+    state = GameState()
+    # Clear tableaus and freecells, and foundations
+    state.freecells = [None] * 4
+    state.tableaus = [[] for _ in range(8)]
+    state.foundations = {suit: [] for suit in Suit}
+
+    # Lock everything:
+    # Fill all 4 freecells with Kings of Diamonds
+    state.freecells = [Card(Suit.DIAMONDS, Rank.KING)] * 4
+
+    # Fill all 8 tableaus with at least one King of Diamonds
+    for i in range(8):
+        state.tableaus[i] = [Card(Suit.DIAMONDS, Rank.KING)]
+
+    # Now there are:
+    # - No empty tableaus
+    # - No empty freecells
+    # - No Aces on top of tableaus or in freecells (all are Kings of Diamonds)
+    # So:
+    # - Cannot move to freecells (all occupied)
+    # - Cannot move to foundations (only Kings, no Aces)
+    # - Cannot move to tableaus (all top cards are King of Diamonds, can't build King on King, and no empty columns)
+    # This state should be a lost/locked state!
+    assert state.check_loss() is True
