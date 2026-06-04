@@ -1,0 +1,1161 @@
+diff --git a/.ai/card-game-fast-plan.md b/.ai/card-game-fast-plan.md
+new file mode 100644
+index 000000000..dbb80d910
+--- /dev/null
++++ b/.ai/card-game-fast-plan.md
+@@ -0,0 +1,108 @@
++# Implementation Plan - Terminal FreeCell Solitaire in Python
++
++This document outlines the design and implementation details for a terminal-based FreeCell Solitaire game in Python using the `curses` standard library.
++
++## 1. Game Rules & Logic Constraints
++
++FreeCell is a standard 52-card solitaire game played with all cards dealt face-up.
++
++### Data Structures
++- **Card**:
++  - `suit`: `'C'` (Clubs), `'D'` (Diamonds), `'H'` (Hearts), `'S'` (Spades)
++  - `rank`: `1` (Ace) to `13` (King)
++  - `color`: `'R'` (Red) for `D`/`H`, `'B'` (Black) for `C`/`S`
++  - String representation: e.g., `"10♦"`, `"A♥"`, `"K♠"`, `"2♣"`
++- **GameState**:
++  - `tableaux`: 8 columns. Columns 1-4 start with 7 cards, columns 5-8 with 6 cards.
++  - `freecells`: 4 slots, initially empty (`None`).
++  - `foundations`: Dict mapping suit to current max rank (initially `0` for all suits).
++  - `history`: Undo stack storing snapshots or reverse-moves for full undo support.
++
++### Move Validation Rules
++1. **To FreeCell**: Any single card can be moved to an empty FreeCell.
++2. **To Foundation**: A card of rank $R$ and suit $S$ can be moved to its foundation if the foundation's current rank is $R-1$.
++3. **To Tableau**:
++   - A card (or sequence) can be moved to a tableau column if the target column is empty, OR if the target's bottom card is of opposite color and exactly 1 rank higher.
++   - **Multi-Card Moves**: Moving a sequence of $K$ cards is permitted if:
++     - The sequence is sorted descending and alternates colors.
++     - The maximum size $K$ does not exceed standard FreeCell storage constraints:
++       $$\text{Max Movable} = (1 + \text{Empty FreeCells}) \times 2^{\text{Empty Tableau Columns}}$$
++       *(If moving to an empty column, that destination column does not count as "empty" in the power exponent).*
++
++### Auto-Collect (Auto-Home) Rules
++To enhance playability, safe cards are automatically moved to foundations:
++- A card of suit $S$ and rank $R$ is safe to auto-collect if:
++  - All cards of opposite color and rank $< R$ are already in the foundations.
++  - *Example*: Hearts 3 (♥3) is safe if Spades 2 (♠2) and Clubs 2 (♣2) are in the foundations.
++
++---
++
++## 2. Terminal UI & Curses Rendering
++
++The interface uses standard-library `curses` with full color support.
++
++### UI Layout Grid
++- **Top Row**: 4 FreeCells on the left, 4 Foundation Piles on the right.
++- **Middle Divider**: Simple line showing current game seed or stats.
++- **Bottom Row**: 8 Tableau Columns rendered vertically.
++- **Status/Command Bar**: Highlights selected cards, prompts for inputs, and shows error messages/victory celebrations.
++
++### Color Coding
++- **Red suits (♦, ♥)**: Rendered in Red color pair.
++- **Black suits (♠, ♣)**: Rendered in White/Cyan color pair.
++- **UI Elements / Selection**: Highlighted using bold or distinct background/yellow colors.
++
++---
++
++## 3. Keyboard Input & Move Workflow
++
++We implement a two-step keyboard command sequence:
++1. **Source Selection**:
++   - `1` to `8`: Select Tableau column 1 to 8.
++   - `q`, `w`, `e`, `r`: Select FreeCell 1, 2, 3, or 4.
++2. **Destination Selection**:
++   - `1` to `8`: Select destination Tableau.
++   - `q`, `w`, `e`, `r`: Select destination FreeCell.
++   - `f` (or `space`): Move selected card to the appropriate Foundation pile automatically.
++3. **General Commands**:
++   - `u`: Undo last move.
++   - `s`: Force auto-collect safe cards.
++   - `n`: Start a new game (prompt for confirmation).
++   - `Esc` or `x`: Exit game.
++
++---
++
++## 4. Non-Interactive Demo Mode (`--smoke`)
++
++To support headless CI environment verification:
++- Running `python3 main.py --smoke` bypasses the `curses` interface entirely.
++- It instantiates a fixed seed game (using standard `random` seeding).
++- Simulates a predefined sequence of valid moves.
++- Validates game win-conditions/state-transitions.
++- Prints the intermediate states as ASCII text to stdout.
++- Exits with `0` on success, or non-zero on failure.
++
++---
++
++## 5. Directory Structure & App Files
++
++All files will be placed under `card-game-app/`:
++```
++card-game-app/
++├── main.py        # CLI entry point (handles --smoke vs curses UI)
++├── game.py        # Game mechanics, Card, Deck, GameState, and rule validator
++├── ui.py          # Curses layout drawing, keyboard inputs, and event loops
++└── test_game.py   # Automated unit tests for rules, state, and moves
++```
++
++---
++
++## 6. Testing Strategy
++
++- **Unit Tests**:
++  - Valid and invalid moves (to empty columns, correct color alternating, foundation stacking).
++  - Multi-card sequence calculations.
++  - Auto-collect safety checks.
++  - Win state verification.
++- **Smoke Tests**: Run via `python3 main.py --smoke` to verify the execution flow without curses.
++- **Format / Linting**: Checked and formatted before submission.
+diff --git a/card-game-app/game.py b/card-game-app/game.py
+new file mode 100644
+index 000000000..bfcbb5f4e
+--- /dev/null
++++ b/card-game-app/game.py
+@@ -0,0 +1,375 @@
++import random
++import copy
++
++class Card:
++    SUITS = ['C', 'D', 'H', 'S']  # Clubs, Diamonds, Hearts, Spades
++    SUIT_SYMBOLS = {
++        'C': '♣',
++        'D': '♦',
++        'H': '♥',
++        'S': '♠'
++    }
++    RANK_SYMBOLS = {
++        1: 'A',
++        2: '2',
++        3: '3',
++        4: '4',
++        5: '5',
++        6: '6',
++        7: '7',
++        8: '8',
++        9: '9',
++        10: '10',
++        11: 'J',
++        12: 'Q',
++        13: 'K'
++    }
++
++    def __init__(self, suit, rank):
++        if suit not in self.SUITS:
++            raise ValueError(f"Invalid suit: {suit}")
++        if not (1 <= rank <= 13):
++            raise ValueError(f"Invalid rank: {rank}")
++        self.suit = suit
++        self.rank = rank
++
++    @property
++    def color(self):
++        # Red ('R') for Diamonds/Hearts, Black ('B') for Clubs/Spades
++        return 'R' if self.suit in ['D', 'H'] else 'B'
++
++    @property
++    def symbol(self):
++        return self.SUIT_SYMBOLS[self.suit]
++
++    @property
++    def rank_str(self):
++        return self.RANK_SYMBOLS[self.rank]
++
++    def __repr__(self):
++        return f"{self.rank_str}{self.symbol}"
++
++    def __eq__(self, other):
++        if not isinstance(other, Card):
++            return False
++        return self.suit == other.suit and self.rank == other.rank
++
++
++class Deck:
++    def __init__(self):
++        self.cards = [Card(suit, rank) for suit in Card.SUITS for rank in range(1, 14)]
++
++    def shuffle(self, seed=None):
++        if seed is not None:
++            random.seed(seed)
++        random.shuffle(self.cards)
++
++
++class GameState:
++    def __init__(self):
++        self.tableaux = [[] for _ in range(8)]
++        self.freecells = [None] * 4
++        self.foundations = {suit: 0 for suit in Card.SUITS}
++        self.history = []
++
++    def deal(self, seed=None):
++        deck = Deck()
++        deck.shuffle(seed)
++        
++        self.tableaux = [[] for _ in range(8)]
++        self.freecells = [None] * 4
++        self.foundations = {suit: 0 for suit in Card.SUITS}
++        self.history = []
++
++        # Deal standard 52 cards: 8 columns.
++        # Columns 0-3 get 7 cards, columns 4-7 get 6 cards.
++        for i, card in enumerate(deck.cards):
++            col_idx = i % 8
++            self.tableaux[col_idx].append(card)
++
++    def is_won(self):
++        # Game is won when all 4 foundations reach King (13)
++        return all(rank == 13 for rank in self.foundations.values())
++
++    def push_history(self):
++        # Push deep copy of current state to history for undo
++        state_snapshot = {
++            'tableaux': copy.deepcopy(self.tableaux),
++            'freecells': copy.deepcopy(self.freecells),
++            'foundations': copy.deepcopy(self.foundations)
++        }
++        self.history.append(state_snapshot)
++
++    def undo(self):
++        if not self.history:
++            return False
++        snapshot = self.history.pop()
++        self.tableaux = snapshot['tableaux']
++        self.freecells = snapshot['freecells']
++        self.foundations = snapshot['foundations']
++        return True
++
++    def get_empty_freecells_count(self):
++        return sum(1 for card in self.freecells if card is None)
++
++    def get_empty_tableaux_count(self):
++        return sum(1 for col in self.tableaux if len(col) == 0)
++
++    def get_max_movable_size(self, moving_to_empty_tableau=False):
++        empty_fc = self.get_empty_freecells_count()
++        empty_tab = self.get_empty_tableaux_count()
++        
++        # If moving to an empty column, that column cannot count as a temporary column
++        if moving_to_empty_tableau:
++            empty_tab = max(0, empty_tab - 1)
++            
++        return (1 + empty_fc) * (2 ** empty_tab)
++
++    def get_longest_alternating_sequence_at_bottom(self, col_idx):
++        col = self.tableaux[col_idx]
++        if not col:
++            return []
++        
++        sequence = [col[-1]]
++        for i in range(len(col) - 2, -1, -1):
++            curr = col[i]
++            prev = sequence[-1]
++            if curr.color != prev.color and curr.rank == prev.rank + 1:
++                sequence.append(curr)
++            else:
++                break
++        
++        sequence.reverse()
++        return sequence
++
++    def move_card_to_freecell(self, src_type, src_idx, fc_idx):
++        """
++        src_type: 'tableau' or 'freecell'
++        src_idx: index of source tableau (0-7) or freecell (0-3)
++        fc_idx: index of destination freecell (0-3)
++        """
++        if fc_idx < 0 or fc_idx > 3:
++            return False, "Invalid FreeCell index."
++        if self.freecells[fc_idx] is not None:
++            return False, f"FreeCell {fc_idx+1} is already occupied."
++
++        if src_type == 'tableau':
++            if src_idx < 0 or src_idx > 7:
++                return False, "Invalid Tableau index."
++            col = self.tableaux[src_idx]
++            if not col:
++                return False, "Source Tableau is empty."
++            card = col[-1]
++            
++            # Valid move, record history
++            self.push_history()
++            col.pop()
++            self.freecells[fc_idx] = card
++            return True, f"Moved {card} to FreeCell {fc_idx+1}."
++
++        elif src_type == 'freecell':
++            if src_idx < 0 or src_idx > 3:
++                return False, "Invalid source FreeCell index."
++            if src_idx == fc_idx:
++                return False, "Cannot move FreeCell card to itself."
++            card = self.freecells[src_idx]
++            if card is None:
++                return False, f"Source FreeCell {src_idx+1} is empty."
++            
++            # Valid move, record history
++            self.push_history()
++            self.freecells[src_idx] = None
++            self.freecells[fc_idx] = card
++            return True, f"Moved {card} from FreeCell {src_idx+1} to FreeCell {fc_idx+1}."
++
++        return False, "Invalid source type."
++
++    def move_card_to_tableau(self, src_type, src_idx, dest_col_idx):
++        """
++        src_type: 'freecell' or 'tableau'
++        src_idx: index of source freecell (0-3) or tableau (0-7)
++        dest_col_idx: index of destination tableau (0-7)
++        """
++        if dest_col_idx < 0 or dest_col_idx > 7:
++            return False, "Invalid destination Tableau index."
++        
++        dest_col = self.tableaux[dest_col_idx]
++        dest_empty = (len(dest_col) == 0)
++
++        if src_type == 'freecell':
++            if src_idx < 0 or src_idx > 3:
++                return False, "Invalid FreeCell index."
++            card = self.freecells[src_idx]
++            if card is None:
++                return False, f"FreeCell {src_idx+1} is empty."
++
++            # Check destination compatibility
++            if not dest_empty:
++                target_card = dest_col[-1]
++                if card.color == target_card.color:
++                    return False, "Must alternate colors."
++                if card.rank != target_card.rank - 1:
++                    return False, f"Must build descending. Cannot place {card} on {target_card}."
++
++            # Perform single card move
++            self.push_history()
++            self.freecells[src_idx] = None
++            dest_col.append(card)
++            return True, f"Moved {card} from FreeCell {src_idx+1} to Tableau {dest_col_idx+1}."
++
++        elif src_type == 'tableau':
++            if src_idx < 0 or src_idx > 7:
++                return False, "Invalid source Tableau index."
++            if src_idx == dest_col_idx:
++                return False, "Source and destination Tableau columns are the same."
++            
++            src_col = self.tableaux[src_idx]
++            if not src_col:
++                return False, "Source Tableau is empty."
++
++            # Identify valid moving sequences
++            longest_seq = self.get_longest_alternating_sequence_at_bottom(src_idx)
++            
++            # Let's see what sequence length we can move
++            if dest_empty:
++                # We can move the longest sequence, capped by max movable size
++                max_movable = self.get_max_movable_size(moving_to_empty_tableau=True)
++                seq_size = min(len(longest_seq), max_movable)
++                if seq_size == 0:
++                    return False, "No cards available to move."
++                
++                # Perform sequence move
++                self.push_history()
++                move_start_idx = len(src_col) - seq_size
++                moving_cards = src_col[move_start_idx:]
++                self.tableaux[src_idx] = src_col[:move_start_idx]
++                dest_col.extend(moving_cards)
++                return True, f"Moved sequence of {seq_size} card(s) (bottom: {moving_cards[-1]}) to empty Tableau {dest_col_idx+1}."
++            else:
++                target_card = dest_col[-1]
++                # Find if any card in our longest sequence fits onto target_card
++                # To fit on target_card, card must have opposite color and rank target_card.rank - 1
++                fit_card_idx = -1
++                for i, card in enumerate(longest_seq):
++                    if card.color != target_card.color and card.rank == target_card.rank - 1:
++                        fit_card_idx = i
++                        break
++                
++                if fit_card_idx == -1:
++                    return False, f"No card in source sequence can be placed on {target_card}."
++                
++                # The sub-sequence to move starts at fit_card_idx in longest_seq
++                sub_seq = longest_seq[fit_card_idx:]
++                seq_size = len(sub_seq)
++                
++                max_movable = self.get_max_movable_size(moving_to_empty_tableau=False)
++                if seq_size > max_movable:
++                    return False, f"Cannot move {seq_size} cards (max movable is {max_movable} with current free space)."
++                
++                # Perform sequence move
++                self.push_history()
++                move_start_idx = len(src_col) - seq_size
++                moving_cards = src_col[move_start_idx:]
++                self.tableaux[src_idx] = src_col[:move_start_idx]
++                dest_col.extend(moving_cards)
++                return True, f"Moved sequence of {seq_size} card(s) to Tableau {dest_col_idx+1}."
++
++        return False, "Invalid source type."
++
++    def move_card_to_foundation(self, src_type, src_idx):
++        """
++        src_type: 'freecell' or 'tableau'
++        src_idx: index of source freecell (0-3) or tableau (0-7)
++        """
++        if src_type == 'freecell':
++            if src_idx < 0 or src_idx > 3:
++                return False, "Invalid FreeCell index."
++            card = self.freecells[src_idx]
++            if card is None:
++                return False, f"FreeCell {src_idx+1} is empty."
++            
++            # Check foundation
++            current_rank = self.foundations[card.suit]
++            if card.rank != current_rank + 1:
++                return False, f"Cannot move {card} to foundation. Expected rank {current_rank + 1}."
++            
++            # Perform move
++            self.push_history()
++            self.freecells[src_idx] = None
++            self.foundations[card.suit] = card.rank
++            return True, f"Moved {card} to Foundation."
++
++        elif src_type == 'tableau':
++            if src_idx < 0 or src_idx > 7:
++                return False, "Invalid Tableau index."
++            col = self.tableaux[src_idx]
++            if not col:
++                return False, "Tableau is empty."
++            card = col[-1]
++
++            # Check foundation
++            current_rank = self.foundations[card.suit]
++            if card.rank != current_rank + 1:
++                return False, f"Cannot move {card} to foundation. Expected rank {current_rank + 1}."
++            
++            # Perform move
++            self.push_history()
++            col.pop()
++            self.foundations[card.suit] = card.rank
++            return True, f"Moved {card} to Foundation."
++
++        return False, "Invalid source type."
++
++    def is_card_safe_to_auto_collect(self, card):
++        # Standard safety rule:
++        # A card is safe to auto-collect if its rank is <= 2,
++        # OR all cards of opposite color with lower rank are already in foundations.
++        if card.rank <= 2:
++            return True
++        
++        opposite_suits = ['S', 'C'] if card.color == 'R' else ['H', 'D']
++        # Check if all opposite suits have foundation rank >= card.rank - 1
++        return all(self.foundations[suit] >= card.rank - 1 for suit in opposite_suits)
++
++    def auto_collect(self):
++        """
++        Scans tableaux and freecells to find and automatically move safe cards to foundations.
++        Repeats until no more safe cards can be collected.
++        Returns the number of cards auto-collected.
++        """
++        collected_count = 0
++        while True:
++            moved_any = False
++            
++            # 1. Check freecells
++            for idx in range(4):
++                card = self.freecells[idx]
++                if card is not None:
++                    expected_rank = self.foundations[card.suit] + 1
++                    if card.rank == expected_rank and self.is_card_safe_to_auto_collect(card):
++                        # Move it!
++                        self.move_card_to_foundation('freecell', idx)
++                        moved_any = True
++                        collected_count += 1
++                        break # Break to recheck everything from scratch
++
++            if moved_any:
++                continue
++
++            # 2. Check tableaux bottom cards
++            for idx in range(8):
++                col = self.tableaux[idx]
++                if col:
++                    card = col[-1]
++                    expected_rank = self.foundations[card.suit] + 1
++                    if card.rank == expected_rank and self.is_card_safe_to_auto_collect(card):
++                        # Move it!
++                        self.move_card_to_foundation('tableau', idx)
++                        moved_any = True
++                        collected_count += 1
++                        break # Break to recheck everything from scratch
++
++            if not moved_any:
++                break
++                
++        return collected_count
+diff --git a/card-game-app/main.py b/card-game-app/main.py
+new file mode 100644
+index 000000000..14fa36c4f
+--- /dev/null
++++ b/card-game-app/main.py
+@@ -0,0 +1,124 @@
++#!/usr/bin/env python3
++import sys
++import os
++
++# Ensure the card-game-app directory is in the import path
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++
++from game import GameState, Card
++import ui
++
++def print_ascii_state(state):
++    print("\n" + "=" * 60)
++    print("FREECELLS: ", end="")
++    for i, card in enumerate(state.freecells):
++        val = repr(card) if card else "[   ]"
++        print(f"F{i+1}:{val} ", end="")
++    print("\nFOUNDATIONS: ", end="")
++    for suit in Card.SUITS:
++        symbol = Card.SUIT_SYMBOLS[suit]
++        rank = state.foundations[suit]
++        val = f"{Card.RANK_SYMBOLS[rank]}{symbol}" if rank > 0 else f"[ {symbol} ]"
++        print(f"{suit}:{val} ", end="")
++    print("\n" + "-" * 60)
++    print("TABLEAUX:")
++    max_len = max(len(col) for col in state.tableaux)
++    for row in range(max_len):
++        row_str = []
++        for col_idx in range(8):
++            col = state.tableaux[col_idx]
++            if row < len(col):
++                row_str.append(f"{repr(col[row]):<6}")
++            else:
++                row_str.append("      ")
++        print("  ".join(row_str))
++    print("=" * 60)
++
++def run_smoke_test():
++    print("Starting non-interactive FreeCell Solitaire smoke test...")
++    state = GameState()
++    
++    # Deal with deterministic seed
++    print("\nStep 1: Dealing game with seed 123...")
++    state.deal(seed=123)
++    print_ascii_state(state)
++    
++    # Assert initial sizes
++    assert len(state.tableaux[0]) == 7, "Tableau 1 should have 7 cards"
++    assert len(state.tableaux[7]) == 6, "Tableau 8 should have 6 cards"
++    
++    # Run auto-collect
++    print("\nStep 2: Running auto-collect...")
++    collected = state.auto_collect()
++    print(f"Auto-collected {collected} card(s).")
++    print_ascii_state(state)
++    
++    # Assert A♥ went to foundation
++    assert state.foundations['H'] == 1, "Hearts foundation should be 1 (Ace)"
++    assert len(state.tableaux[0]) == 6, "Tableau 1 should now have 6 cards"
++    
++    # Move bottom card of Tableau 1 (3♠) to FreeCell 1 (index 0)
++    print("\nStep 3: Moving bottom card of Tableau 1 (3♠) to FreeCell 1...")
++    success, msg = state.move_card_to_freecell('tableau', 0, 0)
++    print(f"Result: {success} - {msg}")
++    assert success, "Move to FreeCell should succeed"
++    assert state.freecells[0] == Card('S', 3), "Freecell 1 should contain 3♠"
++    print_ascii_state(state)
++    
++    # Move bottom card of Tableau 4 (4♣) to Tableau 3 (places on 5♦)
++    print("\nStep 4: Moving bottom card of Tableau 4 (4♣) to Tableau 3 (places on 5♦)...")
++    success, msg = state.move_card_to_tableau('tableau', 3, 2)
++    print(f"Result: {success} - {msg}")
++    assert success, "Move to Tableau should succeed"
++    assert state.tableaux[2][-1] == Card('C', 4), "Tableau 3 bottom should be 4♣"
++    print_ascii_state(state)
++    
++    # Move bottom card of Tableau 4 (9♥) to FreeCell 2 (index 1)
++    print("\nStep 5: Moving bottom card of Tableau 4 (9♥) to FreeCell 2...")
++    success, msg = state.move_card_to_freecell('tableau', 3, 1)
++    print(f"Result: {success} - {msg}")
++    assert success, "Move to FreeCell should succeed"
++    print_ascii_state(state)
++    
++    # Move bottom card of Tableau 4 (4♠) to FreeCell 3 (index 2)
++    print("\nStep 6: Moving bottom card of Tableau 4 (4♠) to FreeCell 3...")
++    success, msg = state.move_card_to_freecell('tableau', 3, 2)
++    print(f"Result: {success} - {msg}")
++    assert success, "Move to FreeCell should succeed"
++    print_ascii_state(state)
++    
++    # Move bottom card of Tableau 4 (7♠) to FreeCell 4 (index 3)
++    print("\nStep 7: Moving bottom card of Tableau 4 (7♠) to FreeCell 4...")
++    success, msg = state.move_card_to_freecell('tableau', 3, 3)
++    print(f"Result: {success} - {msg}")
++    assert success, "Move to FreeCell should succeed"
++    print_ascii_state(state)
++    
++    # Try to move another card to FreeCell 4 (should fail - fully occupied)
++    print("\nStep 8: Trying to move bottom card of Tableau 1 (K♥) to FreeCell 4 (expecting failure)...")
++    success, msg = state.move_card_to_freecell('tableau', 0, 3)
++    print(f"Result: {success} - {msg}")
++    assert not success, "Should fail as FreeCell 4 is occupied"
++    
++    # Test Undo
++    print("\nStep 9: Testing Undo...")
++    success = state.undo()
++    print(f"Undo result: {success}")
++    assert success, "Undo should succeed"
++    assert state.freecells[3] is None, "FreeCell 4 should be empty after undo"
++    assert state.tableaux[3][-1] == Card('S', 7), "7♠ should be back in Tableau 4"
++    print_ascii_state(state)
++
++    print("\nSmoke test PASSED successfully!")
++    sys.exit(0)
++
++if __name__ == "__main__":
++    if "--smoke" in sys.argv:
++        run_smoke_test()
++    else:
++        # Run normal interactive curses game
++        try:
++            ui.play_game()
++        except Exception as e:
++            print(f"An error occurred: {e}", file=sys.stderr)
++            sys.exit(1)
+diff --git a/card-game-app/test_game.py b/card-game-app/test_game.py
+new file mode 100644
+index 000000000..eca4bb047
+--- /dev/null
++++ b/card-game-app/test_game.py
+@@ -0,0 +1,200 @@
++import unittest
++import copy
++from game import Card, Deck, GameState
++
++class TestFreeCellGame(unittest.TestCase):
++    def test_card_properties(self):
++        c1 = Card('H', 1) # Ace of Hearts
++        self.assertEqual(c1.color, 'R')
++        self.assertEqual(c1.symbol, '♥')
++        self.assertEqual(c1.rank_str, 'A')
++        self.assertEqual(repr(c1), 'A♥')
++
++        c2 = Card('S', 10) # 10 of Spades
++        self.assertEqual(c2.color, 'B')
++        self.assertEqual(c2.symbol, '♠')
++        self.assertEqual(c2.rank_str, '10')
++        self.assertEqual(repr(c2), '10♠')
++
++    def test_deck_and_deal(self):
++        state = GameState()
++        state.deal(seed=42)
++
++        # Count total cards dealt
++        total_cards = sum(len(col) for col in state.tableaux)
++        self.assertEqual(total_cards, 52)
++
++        # Verify sizes: first 4 must have 7 cards, last 4 have 6 cards
++        for i in range(4):
++            self.assertEqual(len(state.tableaux[i]), 7)
++        for i in range(4, 8):
++            self.assertEqual(len(state.tableaux[i]), 6)
++
++    def test_move_to_freecell(self):
++        state = GameState()
++        state.deal(seed=42)
++
++        # Move bottom card of Tableau 0 to FreeCell 0
++        card_to_move = state.tableaux[0][-1]
++        success, msg = state.move_card_to_freecell('tableau', 0, 0)
++        self.assertTrue(success, msg)
++        self.assertEqual(state.freecells[0], card_to_move)
++        self.assertEqual(len(state.tableaux[0]), 6)
++
++        # Try to move another card to the same FreeCell (should fail)
++        success, msg = state.move_card_to_freecell('tableau', 1, 0)
++        self.assertFalse(success)
++        self.assertIn("already occupied", msg)
++
++    def test_move_to_foundation(self):
++        state = GameState()
++        # Create a manually controlled state for testing
++        state.tableaux = [[] for _ in range(8)]
++        state.freecells = [None] * 4
++        state.foundations = {suit: 0 for suit in Card.SUITS}
++
++        # Put an Ace in Tableau 0
++        ace_h = Card('H', 1)
++        state.tableaux[0].append(ace_h)
++
++        # Moving Ace to foundation should succeed
++        success, msg = state.move_card_to_foundation('tableau', 0)
++        self.assertTrue(success, msg)
++        self.assertEqual(state.foundations['H'], 1)
++        self.assertEqual(len(state.tableaux[0]), 0)
++
++        # Putting Hearts 2 in freecell 0
++        two_h = Card('H', 2)
++        state.freecells[0] = two_h
++        
++        # Moving Hearts 2 to foundation should succeed
++        success, msg = state.move_card_to_foundation('freecell', 0)
++        self.assertTrue(success, msg)
++        self.assertEqual(state.foundations['H'], 2)
++        self.assertIsNone(state.freecells[0])
++
++        # Trying to move Hearts 4 (skip 3) should fail
++        four_h = Card('H', 4)
++        state.freecells[1] = four_h
++        success, msg = state.move_card_to_foundation('freecell', 1)
++        self.assertFalse(success)
++        self.assertIn("Expected rank 3", msg)
++
++    def test_tableau_single_card_move(self):
++        state = GameState()
++        state.tableaux = [[] for _ in range(8)]
++        state.freecells = [None] * 4
++        
++        # Place red 10 on Tableau 0 and black 9 on Freecell 0
++        ten_h = Card('H', 10)
++        state.tableaux[0].append(ten_h)
++
++        nine_s = Card('S', 9)
++        state.freecells[0] = nine_s
++
++        # Move black 9 to Tableau 0 (valid: alternating colors and descending)
++        success, msg = state.move_card_to_tableau('freecell', 0, 0)
++        self.assertTrue(success, msg)
++        self.assertEqual(len(state.tableaux[0]), 2)
++        self.assertEqual(state.tableaux[0][-1], nine_s)
++        self.assertIsNone(state.freecells[0])
++
++        # Try to move a red 8 to Tableau 0 (valid: alternating color, descending)
++        eight_d = Card('D', 8)
++        state.freecells[1] = eight_d
++        success, msg = state.move_card_to_tableau('freecell', 1, 0)
++        self.assertTrue(success, msg)
++
++        # Try to move black 8 to Tableau 0 (invalid: same rank, invalid sequence)
++        eight_c = Card('C', 8)
++        state.freecells[2] = eight_c
++        success, msg = state.move_card_to_tableau('freecell', 2, 0)
++        self.assertFalse(success)
++        self.assertIn("Must build descending", msg or "")
++
++    def test_tableau_sequence_move_and_limits(self):
++        state = GameState()
++        state.tableaux = [[] for _ in range(8)]
++        state.freecells = [None] * 4
++
++        # Tableau 0: Jack♥, 10♠, 9♦, 8♣ (valid sequence of size 4)
++        state.tableaux[0] = [
++            Card('H', 11),
++            Card('S', 10),
++            Card('D', 9),
++            Card('C', 8)
++        ]
++
++        # Tableau 1: Queen♠
++        state.tableaux[1] = [Card('S', 12)]
++
++        # Max movable size:
++        # FreeCells empty: 4. Empty Tableau columns: 6.
++        # Moving to Tableau 1 (not empty):
++        # max size = (1 + 4) * 2^6 = 320.
++        # We can move all 4 cards of the sequence!
++        success, msg = state.move_card_to_tableau('tableau', 0, 1)
++        self.assertTrue(success, msg)
++        self.assertEqual(len(state.tableaux[0]), 0)
++        self.assertEqual(len(state.tableaux[1]), 5)
++
++        # Fill up freecells
++        state.freecells = [Card('S', 2), Card('D', 2), Card('H', 2), Card('C', 2)] # 0 free cells empty
++        
++        # Now reset
++        state.tableaux[0] = [
++            Card('H', 11),
++            Card('S', 10),
++            Card('D', 9),
++            Card('C', 8)
++        ]
++        state.tableaux[1] = [Card('S', 12)]
++
++        # Empty tableaux count: 6 (columns 2, 3, 4, 5, 6, 7 are empty).
++        # Max movable = (1 + 0) * 2^6 = 64.
++        # So we can still move it.
++        # Now let's fill up columns to eliminate empty columns.
++        for i in range(2, 8):
++            state.tableaux[i] = [Card('S', 13)] # Now 0 empty columns, 0 empty free cells
++        
++        # Max movable = (1 + 0) * 2^0 = 1.
++        # Trying to move sequence from 0 to 1 should fail because sequence size needed is 4 (Jack to Queen), and limit is 1.
++        success, msg = state.move_card_to_tableau('tableau', 0, 1)
++        self.assertFalse(success, msg)
++        self.assertIn("Cannot move 4 cards", msg)
++
++    def test_undo(self):
++        state = GameState()
++        state.deal(seed=42)
++
++        # Save initial state
++        initial_tableaux = copy.deepcopy(state.tableaux)
++
++        # Make a move
++        state.move_card_to_freecell('tableau', 0, 0)
++        self.assertNotEqual(state.tableaux, initial_tableaux)
++
++        # Undo
++        self.assertTrue(state.undo())
++        self.assertEqual(state.tableaux, initial_tableaux)
++
++        # Undo empty history
++        self.assertFalse(state.undo())
++
++    def test_auto_collect(self):
++        state = GameState()
++        state.tableaux = [[] for _ in range(8)]
++        state.freecells = [None] * 4
++        state.foundations = {suit: 0 for suit in Card.SUITS}
++
++        # Place Ace of Hearts and 2 of Hearts in Tableau 0
++        state.tableaux[0] = [Card('H', 2), Card('H', 1)]
++
++        # Run auto collect
++        collected = state.auto_collect()
++        self.assertEqual(collected, 2)
++        self.assertEqual(state.foundations['H'], 2)
++        self.assertEqual(len(state.tableaux[0]), 0)
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/card-game-app/ui.py b/card-game-app/ui.py
+new file mode 100644
+index 000000000..7a16302e6
+--- /dev/null
++++ b/card-game-app/ui.py
+@@ -0,0 +1,294 @@
++import curses
++import os
++import sys
++from game import GameState, Card
++
++def init_colors():
++    # Only initialize if color is supported
++    if curses.has_colors():
++        curses.start_color()
++        # Pair 1: Red cards on default background
++        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
++        # Pair 2: Black cards on default background
++        # Cyan is highly visible on both dark and light terminal backgrounds
++        curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
++        # Pair 3: Labels & headers (Yellow)
++        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
++        # Pair 4: Win message (Green)
++        curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)
++        # Pair 5: Selected/highlighted state (Black text on Yellow background)
++        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
++        # Pair 6: Title bar (White text on Blue background)
++        curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLUE)
++
++def draw_card(stdscr, card, y, x, is_selected=False):
++    if card is None:
++        stdscr.addstr(y, x, "[   ]")
++        return
++    
++    card_str = f"[{card.rank_str:>2}{card.symbol}]"
++    
++    # Pick color pair
++    if is_selected:
++        pair = 5
++    else:
++        pair = 1 if card.color == 'R' else 2
++        
++    stdscr.addstr(y, x, card_str, curses.color_pair(pair) | (curses.A_BOLD if not is_selected else 0))
++
++def draw_board(stdscr, state, selected_src, message):
++    stdscr.clear()
++    y_max, x_max = stdscr.getmaxyx()
++    
++    # Check minimum window size
++    if y_max < 24 or x_max < 80:
++        stdscr.addstr(0, 0, f"Terminal window is too small ({y_max}x{x_max}).")
++        stdscr.addstr(1, 0, "Please enlarge your terminal to at least 24 lines and 80 columns.")
++        stdscr.addstr(3, 0, "Press any key to retry or 'x' to exit.")
++        stdscr.refresh()
++        return False
++
++    # 1. Title bar
++    title = " --- FREECELL SOLITAIRE --- "
++    stdscr.addstr(0, 0, title.center(80), curses.color_pair(6) | curses.A_BOLD)
++    
++    # 2. FreeCells and Foundations Headers
++    stdscr.addstr(2, 2, "FREECELLS (q, w, e, r)", curses.color_pair(3) | curses.A_BOLD)
++    stdscr.addstr(2, 42, "FOUNDATIONS (auto-collected or via 'f')", curses.color_pair(3) | curses.A_BOLD)
++
++    # 3. Draw FreeCells
++    fc_keys = ['q', 'w', 'e', 'r']
++    for i in range(4):
++        x = 2 + (i * 8)
++        # Label below FreeCell
++        stdscr.addstr(5, x + 2, fc_keys[i], curses.color_pair(3))
++        
++        # Check if selected
++        is_sel = (selected_src is not None and selected_src[0] == 'freecell' and selected_src[1] == i)
++        card = state.freecells[i]
++        draw_card(stdscr, card, 3, x, is_selected=is_sel)
++
++    # 4. Draw Foundations
++    # Let's draw empty foundations with suit symbol placeholders for clarity
++    suits = ['C', 'D', 'H', 'S']
++    for i, suit in enumerate(suits):
++        x = 42 + (i * 8)
++        current_rank = state.foundations[suit]
++        if current_rank == 0:
++            # Empty placeholder
++            symbol = Card.SUIT_SYMBOLS[suit]
++            color_pair = 1 if suit in ['D', 'H'] else 2
++            stdscr.addstr(3, x, f"[ {symbol} ]", curses.color_pair(color_pair))
++        else:
++            card = Card(suit, current_rank)
++            draw_card(stdscr, card, 3, x, is_selected=False)
++        stdscr.addstr(5, x + 2, suit, curses.color_pair(3))
++
++    # Divider
++    stdscr.addstr(6, 0, "=" * 80, curses.color_pair(3))
++
++    # 5. Draw Tableaux (Columns 1-8)
++    stdscr.addstr(7, 2, "TABLEAUX (1-8)", curses.color_pair(3) | curses.A_BOLD)
++    
++    # Column labels
++    for col_idx in range(8):
++        x = 2 + (col_idx * 9)
++        stdscr.addstr(8, x + 2, str(col_idx + 1), curses.color_pair(3) | curses.A_BOLD)
++
++    # Draw card stacks
++    # We display up to 14 cards vertically. If a column is empty, show empty space placeholder.
++    for col_idx in range(8):
++        col = state.tableaux[col_idx]
++        x = 2 + (col_idx * 9)
++        if not col:
++            stdscr.addstr(9, x, "[   ]", curses.A_DIM)
++        else:
++            longest_seq = state.get_longest_alternating_sequence_at_bottom(col_idx)
++            seq_start_idx = len(col) - len(longest_seq)
++            
++            for card_idx, card in enumerate(col):
++                y = 9 + card_idx
++                if y >= y_max - 4:
++                    # Prevent drawing past screen boundary
++                    stdscr.addstr(y_max - 5, x, "[...]", curses.A_DIM)
++                    break
++                
++                # Check selection status:
++                # Is this column selected as source?
++                is_sel = False
++                if selected_src is not None and selected_src[0] == 'tableau' and selected_src[1] == col_idx:
++                    # If this column is the selected source, we highlight the entire movable bottom sequence!
++                    if card_idx >= seq_start_idx:
++                        is_sel = True
++                
++                draw_card(stdscr, card, y, x, is_selected=is_sel)
++
++    # 6. Commands and Instructions at the bottom
++    divider_y = y_max - 4
++    stdscr.addstr(divider_y, 0, "=" * 80, curses.color_pair(3))
++    
++    cmd_y = y_max - 3
++    stdscr.addstr(cmd_y, 2, "Commands: [1-8]/[q-r] to select source, then [1-8]/[q-r]/[f] to move.", curses.A_BOLD)
++    stdscr.addstr(cmd_y + 1, 2, "[u] Undo  |  [s] Auto-Collect  |  [n] New Game  |  [x] Exit", curses.color_pair(3))
++
++    # 7. Status / Prompt message
++    status_y = y_max - 1
++    if state.is_won():
++        stdscr.addstr(status_y, 2, "🎉 CONGRATULATIONS! YOU WON! Press 'n' for a new game or 'x' to exit. 🎉", curses.color_pair(4) | curses.A_BOLD)
++    else:
++        # Standard status bar showing current instruction or outcome
++        stdscr.addstr(status_y, 2, f"Status: {message}", curses.A_BOLD)
++
++    stdscr.refresh()
++    return True
++
++
++def play_game():
++    def main_loop(stdscr):
++        # Set up screen
++        curses.curs_set(0) # Hide cursor
++        init_colors()
++        
++        state = GameState()
++        state.deal()
++        
++        # Initial auto-collect to grab any instant Aces
++        state.auto_collect()
++
++        selected_src = None # Stores ('tableau', idx) or ('freecell', idx)
++        message = "Game started! Select a source card."
++
++        # Key mappings
++        tab_keys = {str(i): i - 1 for i in range(1, 9)} # '1'-'8' -> 0-7
++        fc_keys = {'q': 0, 'w': 1, 'e': 2, 'r': 3}     # 'q'-'r' -> 0-3
++
++        while True:
++            # Draw board
++            if not draw_board(stdscr, state, selected_src, message):
++                # Window too small, wait for key and re-evaluate
++                ch = stdscr.getch()
++                if ch == ord('x') or ch == ord('X'):
++                    break
++                continue
++
++            # Read keyboard input
++            try:
++                ch = stdscr.getch()
++            except KeyboardInterrupt:
++                break
++
++            if ch == -1:
++                continue
++
++            key_char = chr(ch).lower() if 0 <= ch < 256 else ""
++
++            # Check general commands first
++            if key_char == 'x' or ch == 27: # 'x' or Escape
++                # Confirm exit
++                stdscr.addstr(stdscr.getmaxyx()[0] - 1, 2, "Are you sure you want to exit? (y/n): ", curses.color_pair(3) | curses.A_BOLD)
++                stdscr.refresh()
++                confirm = stdscr.getch()
++                if chr(confirm).lower() == 'y':
++                    break
++                else:
++                    message = "Exit cancelled."
++                    continue
++
++            elif key_char == 'n':
++                # Confirm restart
++                stdscr.addstr(stdscr.getmaxyx()[0] - 1, 2, "Start a new game? (y/n): ", curses.color_pair(3) | curses.A_BOLD)
++                stdscr.refresh()
++                confirm = stdscr.getch()
++                if chr(confirm).lower() == 'y':
++                    state.deal()
++                    state.auto_collect()
++                    selected_src = None
++                    message = "New game started!"
++                else:
++                    message = "Restart cancelled."
++                continue
++
++            elif key_char == 'u':
++                if state.undo():
++                    selected_src = None
++                    message = "Undo successful."
++                else:
++                    message = "Nothing to undo."
++                continue
++
++            elif key_char == 's':
++                collected = state.auto_collect()
++                if collected > 0:
++                    message = f"Auto-collected {collected} card(s) to foundations."
++                else:
++                    message = "No safe cards to auto-collect."
++                continue
++
++            # Check game won state (only allow commands like restart or exit)
++            if state.is_won():
++                message = "You won! Start a new game with [n] or exit with [x]."
++                continue
++
++            # Source/Destination Selection Flow
++            if selected_src is None:
++                # Selecting source
++                if key_char in tab_keys:
++                    idx = tab_keys[key_char]
++                    if not state.tableaux[idx]:
++                        message = f"Tableau {idx+1} is empty! Cannot select as source."
++                    else:
++                        selected_src = ('tableau', idx)
++                        top_card = state.tableaux[idx][-1]
++                        message = f"Selected column {idx+1} (bottom card: {top_card}). Choose destination."
++                elif key_char in fc_keys:
++                    idx = fc_keys[key_char]
++                    if state.freecells[idx] is None:
++                        message = f"FreeCell {idx+1} is empty! Cannot select as source."
++                    else:
++                        selected_src = ('freecell', idx)
++                        card = state.freecells[idx]
++                        message = f"Selected {card} from FreeCell {idx+1}. Choose destination."
++                else:
++                    message = "Invalid key. Select a source: [1-8] for Tableaux, [q-r] for FreeCells."
++            
++            else:
++                # Selecting destination
++                src_type, src_idx = selected_src
++                
++                if key_char in tab_keys:
++                    dest_idx = tab_keys[key_char]
++                    success, msg = state.move_card_to_tableau(src_type, src_idx, dest_idx)
++                    message = msg
++                    if success:
++                        # Auto-collect after successful move
++                        collected = state.auto_collect()
++                        if collected > 0:
++                            message += f" (Auto-collected {collected} card(s) to foundations.)"
++                    selected_src = None # Clear selection
++                    
++                elif key_char in fc_keys:
++                    dest_idx = fc_keys[key_char]
++                    success, msg = state.move_card_to_freecell(src_type, src_idx, dest_idx)
++                    message = msg
++                    if success:
++                        collected = state.auto_collect()
++                        if collected > 0:
++                            message += f" (Auto-collected {collected} card(s) to foundations.)"
++                    selected_src = None
++                    
++                elif key_char == 'f':
++                    # Move to foundation
++                    success, msg = state.move_card_to_foundation(src_type, src_idx)
++                    message = msg
++                    if success:
++                        collected = state.auto_collect()
++                        if collected > 0:
++                            message += f" (Auto-collected {collected} card(s) to foundations.)"
++                    selected_src = None
++                    
++                else:
++                    # Cancel selection if any other key pressed
++                    selected_src = None
++                    message = "Selection cancelled."
++
++    curses.wrapper(main_loop)
+diff --git a/main.py b/main.py
+new file mode 100644
+index 000000000..08b9c6c31
+--- /dev/null
++++ b/main.py
+@@ -0,0 +1,15 @@
++#!/usr/bin/env python3
++import os
++import sys
++
++if __name__ == "__main__":
++    # Get the directory of this script and point to card-game-app/main.py
++    current_dir = os.path.dirname(os.path.abspath(__file__))
++    app_main = os.path.join(current_dir, "card-game-app", "main.py")
++    
++    if not os.path.exists(app_main):
++        print(f"Error: {app_main} not found.", file=sys.stderr)
++        sys.exit(1)
++        
++    # Execute card-game-app/main.py with the same arguments
++    os.execv(sys.executable, [sys.executable, app_main] + sys.argv[1:])
+diff --git a/status.json b/status.json
+new file mode 100644
+index 000000000..905fb370f
+--- /dev/null
++++ b/status.json
+@@ -0,0 +1,3 @@
++{
++  "outcome": "succeeded"
++}
