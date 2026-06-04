@@ -177,15 +177,7 @@ pub(crate) fn remote_run_summary_json(
             "origin_url": null,
             "provider": "unknown"
         },
-        "created_by": {
-            "kind": "user",
-            "identity": {
-                "issuer": "fabro:test",
-                "subject": "test-user"
-            },
-            "login": "test",
-            "auth_method": "dev_token"
-        },
+        "created_by": fabro_types::test_support::test_principal(),
         "origin": {
             "kind": "api"
         },

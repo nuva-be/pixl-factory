@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import TestRenderer, { act } from "react-test-renderer";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import type { PaginatedRunList, Principal, Run } from "@qltysh/fabro-api-client";
+import type { PaginatedRunList, Run } from "@qltysh/fabro-api-client";
 
 import { ToastProvider } from "../components/toast";
 import { CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY } from "../components/runs-list/preferences";
+import { testPrincipal } from "../lib/test-fixtures";
 import { setupReactTestEnv } from "../lib/test-utils";
 
 class MemoryStorage {
@@ -26,15 +27,6 @@ let hadWindow = false;
 let previousElement: unknown;
 let hadElement = false;
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = [];
-
-function testPrincipal(): Principal {
-  return {
-    kind:        "user",
-    identity:    { issuer: "fabro:test", subject: "test-user" },
-    login:       "test",
-    auth_method: "dev_token",
-  };
-}
 
 function run(id: string, repo = "qlty/fabro", workflow = "release"): Run {
   return {

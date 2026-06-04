@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BoardColumn, Principal, Run } from "@qltysh/fabro-api-client";
+import type { BoardColumn, Run } from "@qltysh/fabro-api-client";
 
 import {
   buildBoardColumns,
@@ -11,15 +11,7 @@ import {
   shouldRefreshBoardForEvent,
 } from "./runs";
 import { summarizeBatchLifecycleAction } from "../components/runs-list/batch-lifecycle";
-
-function testPrincipal(): Principal {
-  return {
-    kind:        "user",
-    identity:    { issuer: "fabro:test", subject: "test-user" },
-    login:       "test",
-    auth_method: "dev_token",
-  };
-}
+import { testPrincipal } from "../lib/test-fixtures";
 
 function boardRun(id: string, column: BoardColumn, questionText?: string): Run {
   const status =

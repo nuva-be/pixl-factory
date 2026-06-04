@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Principal, Run, RunStatus as ApiRunStatus } from "@qltysh/fabro-api-client";
+import type { Run, RunStatus as ApiRunStatus } from "@qltysh/fabro-api-client";
 import {
   columnForStatus,
   columnStatusDisplay,
@@ -8,15 +8,7 @@ import {
   mapRunToRunItem,
   runStatusDisplay,
 } from "./runs";
-
-function testPrincipal(): Principal {
-  return {
-    kind:        "user",
-    identity:    { issuer: "fabro:test", subject: "test-user" },
-    login:       "test",
-    auth_method: "dev_token",
-  };
-}
+import { testPrincipal } from "../lib/test-fixtures";
 
 function makeRun(overrides: Partial<Run> = {}): Run {
   return {

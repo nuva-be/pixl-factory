@@ -6,6 +6,7 @@ import {
   RunSummaryPanelView,
   type RunSummaryPanelViewProps,
 } from "./run-summary-panel";
+import { testPrincipal } from "../lib/test-fixtures";
 
 function instanceText(instance: TestRenderer.ReactTestInstance): string {
   const parts: string[] = [];
@@ -52,15 +53,10 @@ function cellAfterLabel(
 
 function makeRun(overrides: Record<string, any> = {}) {
   return {
-    id: "run_1",
-    created_by: {
-      kind:        "user",
-      identity:    { issuer: "fabro:test", subject: "test-user" },
-      login:       "test",
-      auth_method: "dev_token",
-    },
-    diff:    null,
-    billing: null,
+    id:         "run_1",
+    created_by: testPrincipal(),
+    diff:       null,
+    billing:    null,
     ...overrides,
   } as any;
 }
