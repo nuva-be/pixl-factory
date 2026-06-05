@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import sys
 import argparse
-from game import SpiderGame, Card
+from pathlib import Path
+
+# Add src/ directory to the library path
+src_path = Path(__file__).parent / "src"
+sys.path.insert(0, str(src_path))
+
+from card_game_tui.game import SpiderGame, Card
 
 def run_smoke_test():
     """Runs a non-interactive verification suite to confirm game rules and states."""
@@ -84,6 +90,18 @@ def run_smoke_test():
     assert game.tableau[0][0].face_up == True, "Remaining facedown card should be flipped face-up"
     print("[PASSED] Run-clearing logic successfully validated.")
 
+    # 7. Print a simple terminal layout simulation for smoke-test
+    print("\nSimulated Terminal Layout Render:")
+    print("---------------------------------")
+    cols_render = []
+    for c_idx in range(10):
+        col_cards = game.tableau[c_idx]
+        cards_str = ", ".join(repr(card) for card in col_cards)
+        print(f"Col {c_idx}: {cards_str}")
+    print(f"Stock size: {len(game.stock)}")
+    print(f"Completed runs: {game.completed_runs}/8")
+    print("---------------------------------")
+
     print("\n====================================================")
     print("ALL SMOKE TESTS PASSED!")
     print("====================================================")
@@ -100,7 +118,7 @@ def main():
     else:
         # Import UI here to avoid curses import issues if running in non-terminal environments
         try:
-            from ui import SpiderSolitaireUI
+            from card_game_tui.ui import SpiderSolitaireUI
         except ImportError as e:
             print(f"Error: Could not import curses UI. Make sure you are in a terminal environment. Details: {e}", file=sys.stderr)
             sys.exit(1)

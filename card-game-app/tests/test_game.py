@@ -1,5 +1,5 @@
 import unittest
-from game import Card, SpiderGame
+from card_game_tui.game import Card, SpiderGame
 
 class TestSpiderGame(unittest.TestCase):
     def test_card_init(self):

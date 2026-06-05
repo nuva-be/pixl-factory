@@ -1,6 +1,6 @@
 import curses
 import sys
-from game import SpiderGame, Card
+from card_game_tui.game import SpiderGame, Card
 
 class SpiderSolitaireUI:
     def __init__(self, suits_count=1):
