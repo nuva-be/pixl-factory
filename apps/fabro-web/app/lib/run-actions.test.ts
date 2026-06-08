@@ -24,6 +24,7 @@ import {
   unarchiveRuns,
 } from "./run-actions";
 import { generatedAxios } from "./api-client";
+import { TEST_PRINCIPAL } from "./test-fixtures";
 
 type StubResponseInit = {
   status: number;
@@ -36,8 +37,6 @@ type CapturedRequest = {
   method?: string;
   data?: unknown;
 };
-
-import { TEST_PRINCIPAL } from "./test-fixtures";
 
 const originalAdapter = generatedAxios.defaults.adapter;
 
