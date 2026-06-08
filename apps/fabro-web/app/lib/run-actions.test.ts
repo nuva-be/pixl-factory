@@ -37,15 +37,9 @@ type CapturedRequest = {
   data?: unknown;
 };
 
-const originalAdapter = generatedAxios.defaults.adapter;
+import { TEST_PRINCIPAL } from "./test-fixtures";
 
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
+const originalAdapter = generatedAxios.defaults.adapter;
 
 function makeRun(status: RunStatus, archived = false): Run {
   return {

@@ -1443,7 +1443,8 @@ mod tests {
                 "settings": WorkflowSettings::default(),
                 "graph": Graph::new("test"),
                 "labels": {},
-                "run_dir": "/tmp/run"
+                "run_dir": "/tmp/run",
+                "provenance": test_support::test_run_provenance()
             }),
             None,
         );
@@ -1471,7 +1472,8 @@ mod tests {
                 "graph": Graph::new("test"),
                 "automation": automation,
                 "labels": {},
-                "run_dir": "/tmp/run"
+                "run_dir": "/tmp/run",
+                "provenance": test_support::test_run_provenance()
             }),
             None,
         );
@@ -1494,7 +1496,8 @@ mod tests {
                 "settings": WorkflowSettings::default(),
                 "graph": Graph::new("test"),
                 "labels": {},
-                "run_dir": "/tmp/run"
+                "run_dir": "/tmp/run",
+                "provenance": test_support::test_run_provenance()
             }),
             None,
         )])
@@ -1516,7 +1519,8 @@ mod tests {
                 "settings": WorkflowSettings::default(),
                 "graph": Graph::new("test"),
                 "labels": {},
-                "run_dir": "/tmp/run"
+                "run_dir": "/tmp/run",
+                "provenance": test_support::test_run_provenance()
             }),
             None,
         )])
@@ -1593,7 +1597,8 @@ mod tests {
                     "settings": WorkflowSettings::default(),
                     "graph": Graph::new("test"),
                     "labels": {},
-                    "run_dir": "/tmp/run"
+                    "run_dir": "/tmp/run",
+                    "provenance": test_support::test_run_provenance()
                 }),
                 None,
             ),
@@ -1640,7 +1645,6 @@ mod tests {
         properties: &serde_json::Value,
         node_id: Option<&str>,
     ) -> EventEnvelope {
-        let properties = run_created_properties(event, properties);
         EventEnvelope {
             seq,
             event: RunEvent::from_value(json!({
@@ -1662,7 +1666,6 @@ mod tests {
         properties: &serde_json::Value,
         node_id: Option<&str>,
     ) -> EventEnvelope {
-        let properties = run_created_properties(event, properties);
         EventEnvelope {
             seq,
             event: RunEvent::from_value(json!({
@@ -1675,19 +1678,6 @@ mod tests {
             }))
             .unwrap(),
         }
-    }
-
-    fn run_created_properties(event: &str, properties: &serde_json::Value) -> serde_json::Value {
-        let mut properties = properties.clone();
-        if event == "run.created" && properties.get("provenance").is_none() {
-            if let Some(object) = properties.as_object_mut() {
-                object.insert(
-                    "provenance".to_string(),
-                    serde_json::to_value(test_support::test_run_provenance()).unwrap(),
-                );
-            }
-        }
-        properties
     }
 
     #[test]
@@ -2927,7 +2917,8 @@ mod tests {
                     "attrs": { "goal": { "String": "Goal title" } }
                 },
                 "labels": {},
-                "run_dir": "/tmp/run"
+                "run_dir": "/tmp/run",
+                "provenance": test_support::test_run_provenance()
             }),
             None,
         );
@@ -2954,7 +2945,8 @@ mod tests {
                     "attrs": { "goal": { "String": "## Plan: Legacy title\n\nDetails" } }
                 },
                 "labels": {},
-                "run_dir": "/tmp/run"
+                "run_dir": "/tmp/run",
+                "provenance": test_support::test_run_provenance()
             }),
             None,
         );
@@ -2983,7 +2975,8 @@ mod tests {
                         "attrs": { "goal": { "String": "Goal title" } }
                     },
                     "labels": {},
-                    "run_dir": "/tmp/run"
+                    "run_dir": "/tmp/run",
+                    "provenance": test_support::test_run_provenance()
                 }),
                 None,
             ),

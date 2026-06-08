@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { ToastProvider } from "../components/toast";
 import { setupReactTestEnv } from "../lib/test-utils";
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 let currentRun: any = null;
 let currentRunError: unknown = null;
@@ -100,14 +101,6 @@ mock.module("swr", () => ({
 
 const { default: AutomationsNew } = await import("./automations-new");
 mock.restore();
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
 
 function makeRun(overrides: Record<string, unknown> = {}) {
   return {

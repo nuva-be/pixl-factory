@@ -13,20 +13,13 @@ import {
 
 import { ToastProvider } from "../components/toast";
 import { DemoModeProvider } from "../lib/demo-mode";
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 let currentRunSummary: any = null;
 let currentRunState: any = null;
 let currentQuestions: any[] = [];
 let deleteRunApiResult: Promise<unknown> | null = null;
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = [];
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
 
 const deleteRunApiMock = mock((_id: string) =>
   deleteRunApiResult ?? Promise.resolve({}),

@@ -11,14 +11,7 @@ import {
   shouldRefreshBoardForEvent,
 } from "./runs";
 import { summarizeBatchLifecycleAction } from "../components/runs-list/batch-lifecycle";
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 function boardRun(id: string, column: BoardColumn, questionText?: string): Run {
   const status =

@@ -6,6 +6,7 @@ import {
   RunSummaryPanelView,
   type RunSummaryPanelViewProps,
 } from "./run-summary-panel";
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 function instanceText(instance: TestRenderer.ReactTestInstance): string {
   const parts: string[] = [];
@@ -33,14 +34,6 @@ function render(props: Partial<RunSummaryPanelViewProps> = {}) {
   });
   return tree!;
 }
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
 
 function cellAfterLabel(
   tree: TestRenderer.ReactTestRenderer,
@@ -79,9 +72,8 @@ describe("RunSummaryPanelView", () => {
     }
   });
 
-  test("shows unavailable copy for missing optional run fields after load", () => {
+  test("shows unavailable copy for missing run fields after load", () => {
     const tree = render({ run: makeRun() });
-    expect(instanceText(cellAfterLabel(tree, "Created by"))).toBe("Ttest");
     expect(instanceText(cellAfterLabel(tree, "Changes"))).toBe(EMPTY_VALUE);
     expect(instanceText(cellAfterLabel(tree, "Cost"))).toBe(EMPTY_VALUE);
   });

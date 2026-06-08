@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { toast as sonnerToast } from "sonner";
 
 import { ToastProvider } from "../components/toast";
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 let currentFilesPayload: any = null;
 let currentCommitsPayload: any = null;
@@ -17,14 +18,6 @@ let patchDiffMountSeq = 0;
 const virtualizerCalls: any[] = [];
 const providerCalls: any[] = [];
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = [];
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
 
 mock.module("@pierre/diffs/react", () => ({
   MultiFileDiff: (props: any) => {

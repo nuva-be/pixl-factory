@@ -8,14 +8,7 @@ import {
   mapRunToRunItem,
   runStatusDisplay,
 } from "./runs";
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 function makeRun(overrides: Partial<Run> = {}): Run {
   return {

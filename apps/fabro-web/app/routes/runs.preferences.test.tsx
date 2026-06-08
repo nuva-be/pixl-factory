@@ -6,14 +6,7 @@ import type { PaginatedRunList, Run } from "@qltysh/fabro-api-client";
 import { ToastProvider } from "../components/toast";
 import { CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY } from "../components/runs-list/preferences";
 import { setupReactTestEnv } from "../lib/test-utils";
-
-const TEST_PRINCIPAL = {
-  kind:        "user" as const,
-  identity:    { issuer: "fabro:test", subject: "test-user" },
-  login:       "test",
-  auth_method: "dev_token" as const,
-  avatar_url:  null,
-};
+import { TEST_PRINCIPAL } from "../lib/test-fixtures";
 
 class MemoryStorage {
   values = new Map<string, string>();
