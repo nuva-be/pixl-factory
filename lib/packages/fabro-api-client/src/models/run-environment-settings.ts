@@ -32,6 +32,10 @@ import type { EnvironmentResourcesSettings } from './environment-resources-setti
 export interface RunEnvironmentSettings {
     'id': string;
     'provider': EnvironmentProvider;
+    /**
+     * Local-provider command working directory for this environment. Docker and Daytona ignore this value.
+     */
+    'cwd'?: string | null;
     'image': EnvironmentImageSettings;
     'resources': EnvironmentResourcesSettings;
     'network': EnvironmentNetworkSettings;

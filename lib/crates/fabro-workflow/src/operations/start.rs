@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -11,6 +11,7 @@ use fabro_model::{Catalog, FallbackTarget, ProviderId};
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::from_environment::{
     daytona_config_from_environment, docker_config_from_environment,
+    local_working_directory_from_environment,
 };
 use fabro_sandbox::{DockerSandboxOptions, SandboxSpec};
 use fabro_static::EnvVars;
@@ -348,10 +349,6 @@ impl RunSession {
     async fn new(persisted: &Persisted, services: StartServices) -> Result<Self, Error> {
         let record = persisted.run_spec();
         let settings = &record.settings;
-        let working_directory = record
-            .source_directory
-            .as_deref()
-            .map_or_else(|| PathBuf::from("."), PathBuf::from);
         let state = services
             .run_store
             .state()
@@ -372,7 +369,6 @@ impl RunSession {
             accepted_definition.map(|definition| Arc::new(definition.workflow_bundle()));
 
         let resolved = &settings.run;
-
         let sandbox_provider =
             resolve_sandbox_provider(resolved).effective_for(resolved.execution.mode);
         let catalog = Arc::clone(&services.catalog);
@@ -387,9 +383,19 @@ impl RunSession {
             .collect();
 
         let sandbox = match sandbox_provider {
-            SandboxProviderKind::Local => SandboxSpec::Local {
-                working_directory: working_directory.clone(),
-            },
+            SandboxProviderKind::Local => {
+                let working_directory = local_working_directory_from_environment(
+                    &resolved.environment,
+                    record.source_directory.as_deref().map(Path::new),
+                )
+                .map_err(|err| {
+                    Error::engine_with_source(
+                        "Failed to resolve local environment working directory",
+                        err,
+                    )
+                })?;
+                SandboxSpec::Local { working_directory }
+            }
             SandboxProviderKind::Docker => SandboxSpec::Docker {
                 config:           resolve_docker_config(resolved),
                 github_app:       services.github_app.clone(),
@@ -1121,6 +1127,7 @@ async fn persist_detached_failure(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
