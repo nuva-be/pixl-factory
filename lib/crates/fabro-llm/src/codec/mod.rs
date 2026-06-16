@@ -11,6 +11,7 @@
 //! methods, never extend the contract.
 
 pub(crate) mod anthropic_messages;
+pub(crate) mod bedrock_converse;
 pub(crate) mod gemini_generate;
 pub(crate) mod openai_compatible;
 pub(crate) mod openai_responses;
@@ -19,6 +20,35 @@ use fabro_model::Model;
 
 use crate::error::{Error, error_from_status_code};
 use crate::types::{Message, RateLimitInfo, Request, Response, Role, StreamEvent};
+
+/// Parse a streamed/generated tool-argument JSON string, defaulting malformed
+/// or absent arguments to the canonical no-argument object.
+pub(crate) fn parse_tool_arguments_or_empty(raw_arguments: &str) -> serde_json::Value {
+    serde_json::from_str(raw_arguments).unwrap_or_else(|_| serde_json::json!({}))
+}
+
+/// Merge `provider_options.<provider_name>` fields into an encoded request
+/// body. Used by codecs whose provider-options namespace is adapter-name keyed
+/// rather than a single fixed provider.
+pub(crate) fn merge_named_provider_options(
+    body: &mut serde_json::Value,
+    provider_options: Option<&serde_json::Value>,
+    provider_name: &str,
+) {
+    let Some(opts) = provider_options.and_then(|opts| opts.get(provider_name)) else {
+        return;
+    };
+    let Some(body_map) = body.as_object_mut() else {
+        return;
+    };
+    let Some(opts_map) = opts.as_object() else {
+        return;
+    };
+
+    for (key, value) in opts_map {
+        body_map.insert(key.clone(), value.clone());
+    }
+}
 
 /// Per-request context. Borrowed — the codec reads what it needs and returns.
 pub(crate) struct CodecCtx<'a> {

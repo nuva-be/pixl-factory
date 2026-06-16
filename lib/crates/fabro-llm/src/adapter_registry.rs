@@ -90,7 +90,9 @@ fn apply_primary_auth_header(
             extra_headers.insert(name, value);
             None
         }
-        None => None,
+        // SigV4 is not a static header; only the Bedrock adapter consumes
+        // the marker (it signs at request time).
+        Some(ApiKeyHeader::AwsSigv4) | None => None,
     }
 }
 
@@ -213,6 +215,7 @@ pub fn factory_for(adapter_kind: AdapterKind) -> AdapterFactory {
         AdapterKind::OpenAi => build_openai,
         AdapterKind::Gemini => build_gemini,
         AdapterKind::OpenAiCompatible => build_openai_compatible,
+        AdapterKind::Bedrock => providers::bedrock::build,
     }
 }
 
