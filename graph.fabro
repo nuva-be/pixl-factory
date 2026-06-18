@@ -1,0 +1,15 @@
+digraph KbHello {
+  graph [goal="Prove ACP Claude Code on subscription works end-to-end"]
+
+  start  [shape=Mdiamond, label="Start"]
+  exit   [shape=Msquare,  label="Exit"]
+
+  recall [
+    label="Recall",
+    backend="acp",
+    acp.command="npx --yes @zed-industries/claude-code-acp",
+    prompt="Say hello from Claude Code, then run the shell command `pwd` and report the directory. Keep your reply under 3 lines."
+  ]
+
+  start -> recall -> exit
+}
