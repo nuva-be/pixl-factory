@@ -1,26 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-teal-300: #B5DDEF;
-  --color-teal-500: #67B2D7;
-  --color-teal-700: #357F9E;
+  /* pixl — CRT terminal green */
+  --color-teal-300: #7CFF7C;
+  --color-teal-500: #00FF00;
+  --color-teal-700: #00B300;
 
-  --color-navy-950: #0F1729;
-  --color-navy-900: #141C2F;
-  --color-navy-800: #252C3D;
-  --color-navy-600: #4B5768;
+  /* near-black */
+  --color-navy-950: #0A0A0A;
+  --color-navy-900: #0F0F0F;
+  --color-navy-800: #1A1A1A;
+  --color-navy-600: #404040;
 
-  --color-ice-50: #F7F9FB;
-  --color-ice-100: #E8EDF3;
-  --color-ice-300: #A8B5C5;
+  /* off-white */
+  --color-ice-50: #F2F2F2;
+  --color-ice-100: #E6E6E6;
+  --color-ice-300: #8C8C8C;
 
-  --color-mint: #5AC8A8;
-  --color-amber: #F0A45B;
+  --color-mint: #00FF88;
+  --color-amber: #FFBF00;
   --color-coral: #E86B6B;
 
-  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Lexend", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Fira Code", ui-monospace, monospace;
+  --font-display: "Jersey 15", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --animate-float: float 8s ease-in-out infinite;
   --animate-pulse-glow: pulse-glow 4s ease-in-out infinite;
@@ -89,8 +92,8 @@
   transition: border-color 0.4s ease, box-shadow 0.4s ease, transform 0.4s ease;
 }
 .glow-card:hover {
-  border-color: rgba(103, 178, 215, 0.25);
-  box-shadow: 0 0 40px -8px rgba(103, 178, 215, 0.12), inset 0 1px 0 rgba(103, 178, 215, 0.06);
+  border-color: rgba(0, 255, 0, 0.25);
+  box-shadow: 0 0 40px -8px rgba(0, 255, 0, 0.18), inset 0 1px 0 rgba(0, 255, 0, 0.08);
   transform: translateY(-2px);
 }
 

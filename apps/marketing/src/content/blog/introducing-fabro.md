@@ -1,11 +1,11 @@
 ---
-title: "Introducing Fabro"
-description: "Fabro is an open-source workflow orchestration platform that lets expert engineers define their process as a graph and let AI agents execute it."
+title: "Introducing pixl-factory"
+description: "pixl-factory is an open-source workflow orchestration platform that lets expert engineers define their process as a graph and let AI agents execute it."
 date: 2026-03-16
 author: "Bryan Helmkamp"
 ---
 
-Today, we're introducing Fabro, an open-source platform for orchestrating AI coding agents with workflow graphs. We built Fabro to help expert engineers define their process once, verify it at every step, and walk away while agents do the work.
+Today, we're introducing pixl-factory, an open-source platform for orchestrating AI coding agents with workflow graphs. We built pixl-factory to help expert engineers define their process once, verify it at every step, and walk away while agents do the work.
 
 ## The problem with AI coding today
 
@@ -20,7 +20,7 @@ The result is that engineers babysit their agents instead of using them. You spe
 
 ## Workflow graphs: your engineering process as code
 
-Fabro takes a fundamentally different approach. Instead of prompting an agent and watching it work, you define your engineering process as a Graphviz graph — diffable, reviewable, and version-controlled just like the code it produces.
+pixl-factory takes a fundamentally different approach. Instead of prompting an agent and watching it work, you define your engineering process as a Graphviz graph — diffable, reviewable, and version-controlled just like the code it produces.
 
 ```dot
 digraph PlanImplement {
@@ -52,7 +52,7 @@ Each node is a stage with a specific role. Edges define the flow. Node shapes de
 
 ## Multi-model by design
 
-Not every stage needs a frontier model. Fabro's model stylesheets use CSS-like selectors to route each node to the right model and provider:
+Not every stage needs a frontier model. pixl-factory's model stylesheets use CSS-like selectors to route each node to the right model and provider:
 
 ```
 *        { model: claude-haiku-4-5; reasoning_effort: low; }
@@ -64,7 +64,7 @@ Selectors follow CSS specificity rules — universal (`*`), shape, class (`.codi
 
 ## Verification gates and human checkpoints
 
-AI agents are confident — even when they're wrong. Fabro addresses this with two layers of control.
+AI agents are confident — even when they're wrong. pixl-factory addresses this with two layers of control.
 
 **Deterministic verification.** Goal gates confirm that the code compiles, tests pass, and linting is clean before the workflow advances. These aren't LLM judgments — they're shell commands with pass/fail exit codes.
 
@@ -76,11 +76,11 @@ The combination lets deterministic checks catch what linters and tests can catch
 
 Every stage is checkpointed to Git. If a run fails at stage 7 of 12, you don't start over — you fix the issue and resume from the checkpoint. Runs execute in isolated Git worktrees, so your working directory stays untouched while agents work in parallel.
 
-Fabro supports six sandbox environments — local, Docker, SSH, Daytona cloud VMs, and more — so you can develop on your laptop and move to isolated cloud sandboxes for production workflows.
+pixl-factory supports six sandbox environments — local, Docker, SSH, Daytona cloud VMs, and more — so you can develop on your laptop and move to isolated cloud sandboxes for production workflows.
 
 ## Get started
 
-Fabro is open source and ships as a single Rust binary with zero runtime dependencies.
+pixl-factory is open source and ships as a single Rust binary with zero runtime dependencies.
 
 ```bash
 # Install
