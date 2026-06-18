@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { navSections } from "./settings";
 
 export function meta() {
-  return [{ title: "Settings — Fabro" }];
+  return [{ title: "Settings — pixl-factory" }];
 }
 
 export default function SettingsIndex() {

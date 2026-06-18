@@ -165,7 +165,7 @@ function initialInstallState(): InstallState {
     tokenForm:        { token: "", username: "" },
     appForm:          {
       owner:           { kind: "personal" },
-      appName:         "Fabro",
+      appName:         "pixl-factory",
       allowedUsername: "",
     },
     saveError:        null,
@@ -188,7 +188,7 @@ function hydrateInstallState(
     githubStrategy = "app";
     appForm = {
       owner:           session.github.owner ?? { kind: "personal" },
-      appName:         session.github.app_name || "Fabro",
+      appName:         session.github.app_name || "pixl-factory",
       allowedUsername: session.github.allowed_username || "",
     };
   } else if (session.github?.strategy === "token") {
@@ -703,7 +703,7 @@ function ServerStep({
   return (
     <StepPanel
       title="Confirm the public URL"
-      description="This is where operators will reach Fabro after setup. It's also the redirect target for the GitHub App callback."
+      description="This is where operators will reach pixl-factory after setup. It's also the redirect target for the GitHub App callback."
       error={saveError}
       submitting={submitting}
       backHref="/install/welcome"
@@ -773,7 +773,7 @@ function ObjectStoreStep({
   return (
     <StepPanel
       title="Choose the shared object store"
-      description="This configures the shared backend for both SlateDB and run artifacts. Fabro still keeps its local storage root on disk."
+      description="This configures the shared backend for both SlateDB and run artifacts. pixl-factory still keeps its local storage root on disk."
       error={saveError}
       submitting={submitting}
       submittingLabel={
@@ -960,7 +960,7 @@ function ObjectStoreStep({
             </div>
           ) : (
             <p className="text-xs/5 text-fg-muted">
-              Fabro will use AWS credentials already provided by the runtime,
+              pixl-factory will use AWS credentials already provided by the runtime,
               such as EC2, ECS, or IRSA-based auth.
             </p>
           )}
@@ -989,7 +989,7 @@ function ObjectStoreStep({
             />
           </Field>
           <p className="rounded-lg bg-overlay px-4 py-3 text-sm/6 text-fg-3 outline-1 -outline-offset-1 outline-white/10">
-            Fabro will store SlateDB and run artifacts under this directory.
+            pixl-factory will store SlateDB and run artifacts under this directory.
           </p>
         </div>
       )}
@@ -1084,7 +1084,7 @@ function SandboxStep({
           </span>
           <span className="mt-1 block text-xs/5 text-fg-3">
             Permit runs that use the local provider, which executes directly on
-            the Fabro host. The runtime selected above stays the default.
+            the pixl-factory host. The runtime selected above stays the default.
           </span>
         </span>
       </label>
@@ -1119,7 +1119,7 @@ function SandboxStep({
         </div>
       ) : (
         <p className="rounded-lg bg-overlay px-4 py-3 text-sm/6 text-fg-3 outline-1 -outline-offset-1 outline-white/10">
-          Fabro will use the host Docker daemon. Make sure the server has
+          pixl-factory will use the host Docker daemon. Make sure the server has
           access to <code className="font-mono text-fg-2">/var/run/docker.sock</code>.
         </p>
       )}
@@ -1151,7 +1151,7 @@ function GithubStep({
   return (
     <StepPanel
       title="Connect GitHub"
-      description="Choose how Fabro should authenticate. Tokens are stored in the vault; apps hand off to GitHub and return here."
+      description="Choose how pixl-factory should authenticate. Tokens are stored in the vault; apps hand off to GitHub and return here."
       error={saveError}
       submitting={submitting}
       submitLabel={githubStrategy === "app" ? "Continue on GitHub" : "Continue"}
@@ -1348,12 +1348,12 @@ function TokenEntryScreen({
     <main className="min-h-dvh bg-atmosphere px-4 py-16 text-fg-2 antialiased sm:py-20">
       <div className="relative mx-auto max-w-md">
         <div className="flex items-center gap-3">
-          <img src="/images/logo.svg" alt="Fabro" className="size-8" draggable={false} />
+          <img src="/images/logo.svg" alt="pixl-factory" className="size-8" draggable={false} />
           <span className="text-sm font-medium text-fg-3">Install</span>
         </div>
         <div className="mt-10">
           <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-[1.75rem]">
-            Finish configuring this Fabro server
+            Finish configuring this pixl-factory server
           </h1>
           <p className="mt-3 max-w-[56ch] text-sm/6 text-fg-3 text-pretty">
             Find the one-time install token in your terminal, Docker logs, or
@@ -1438,7 +1438,7 @@ function InstallLayout({
     <main className="min-h-dvh bg-atmosphere px-4 py-12 text-fg-2 antialiased sm:py-16">
       <div className="relative mx-auto max-w-xl">
         <div className="flex items-center gap-3">
-          <img src="/images/logo.svg" alt="Fabro" className="size-8" draggable={false} />
+          <img src="/images/logo.svg" alt="pixl-factory" className="size-8" draggable={false} />
           <span className="text-sm font-medium text-fg-3">Install</span>
         </div>
         {showStepper ? (
@@ -1549,11 +1549,11 @@ function WelcomeScreen() {
       <p className="mt-4 max-w-[56ch] text-base/7 text-fg-3 text-pretty sm:text-[0.9375rem]/7">
         A short walkthrough to confirm the public server URL, choose the shared
         object store and sandbox runtime, validate your LLM credentials, and
-        connect GitHub. When you finish, Fabro restarts into normal mode.
+        connect GitHub. When you finish, pixl-factory restarts into normal mode.
       </p>
       <ol className="mt-10 divide-y divide-line border-y border-line">
         {[
-          ["Server URL", "Confirm where operators will reach Fabro."],
+          ["Server URL", "Confirm where operators will reach pixl-factory."],
           [
             "Object store",
             "Choose local disk or AWS S3 for SlateDB and artifacts.",
@@ -1689,7 +1689,7 @@ function ReviewScreen({
           Review and install
         </h1>
         <p className="mt-3 max-w-[56ch] text-sm/6 text-fg-3 text-pretty">
-          Confirm the plan below. Fabro writes the configuration to disk, then
+          Confirm the plan below. pixl-factory writes the configuration to disk, then
           restarts into normal mode.
         </p>
       </header>

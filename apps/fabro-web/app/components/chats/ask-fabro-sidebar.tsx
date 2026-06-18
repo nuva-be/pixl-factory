@@ -23,7 +23,7 @@ export const SIDEBAR_WIDTH = 420;
 const SIDEBAR_MAX_WIDTH = SIDEBAR_WIDTH * 2;
 
 /**
- * Right-docked "Ask Fabro" assistant panel. An animated-width column that
+ * Right-docked "Ask pixl-factory" assistant panel. An animated-width column that
  * collapses to zero when closed; renders assistant-ui's `<Thread>` with a
  * stripped composer scoped to the narrow column via the `.ask-fabro-sidebar`
  * CSS in app.css.
@@ -93,7 +93,7 @@ export default function AskFabroSidebar({
 
   return (
     <aside
-      aria-label="Ask Fabro"
+      aria-label="Ask pixl-factory"
       aria-hidden={!isOpen}
       style={{ width: isOpen ? width : 0 }}
       className={`h-full shrink-0 overflow-hidden ${
@@ -112,7 +112,7 @@ export default function AskFabroSidebar({
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize Ask Fabro panel"
+          aria-label="Resize Ask pixl-factory panel"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endDrag}

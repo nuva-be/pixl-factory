@@ -11,7 +11,7 @@ import {
 } from "../components/settings-panel";
 
 export function meta() {
-  return [{ title: "Security — Fabro" }];
+  return [{ title: "Security — pixl-factory" }];
 }
 
 const DESCRIPTION = (

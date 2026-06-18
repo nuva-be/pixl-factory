@@ -71,7 +71,7 @@ type LifecycleTrigger = () => Promise<LifecycleMutationResult | undefined>;
 
 export function meta({ data }: any) {
   const run = data?.run;
-  return [{ title: run ? `${run.title} — Fabro` : "Run — Fabro" }];
+  return [{ title: run ? `${run.title} — pixl-factory` : "Run — pixl-factory" }];
 }
 
 export default function RunDetail({ params }: { params: { id: string } }) {

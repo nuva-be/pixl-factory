@@ -4,7 +4,7 @@ function FabroLogo({ className }: { className?: string }) {
   return (
     <img
       src="/images/logo.svg"
-      alt="Fabro"
+      alt="pixl-factory"
       className={className}
       draggable={false}
     />

@@ -3,7 +3,7 @@ import { FabroToaster, ToastProvider } from "../components/toast";
 import { useDocumentTitle } from "../hooks/effects";
 
 export default function RunTerminal({ params }: { params: { id: string } }) {
-  useDocumentTitle(`Terminal · ${params.id} · Fabro`);
+  useDocumentTitle(`Terminal · ${params.id} · pixl-factory`);
 
   return (
     <ToastProvider>

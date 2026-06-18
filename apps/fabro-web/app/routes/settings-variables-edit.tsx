@@ -16,7 +16,7 @@ import { useToast } from "../components/toast";
 import { useVariable } from "../lib/queries";
 
 export function meta() {
-  return [{ title: "Edit variable — Fabro" }];
+  return [{ title: "Edit variable — pixl-factory" }];
 }
 
 export default function SettingsVariablesEdit() {

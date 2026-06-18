@@ -76,7 +76,7 @@ export function useToast(): ToastContextValue {
 }
 
 /**
- * App-themed Sonner host. Renders toasts on the Fabro dark panel surface with
+ * App-themed Sonner host. Renders toasts on the pixl-factory dark panel surface with
  * accent-colored type icons (coral errors, mint success, teal info, amber
  * warning) instead of Sonner's default green/red palette. The `group`/`toaster`
  * + `group`/`toast` class pairing lets the `group-[.toaster]:` and

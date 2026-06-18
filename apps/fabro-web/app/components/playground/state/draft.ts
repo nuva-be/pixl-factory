@@ -9,7 +9,7 @@
  * dragging fabro-web's app shell along.
  */
 
-/** All Graphviz shape names Fabro recognises. Each shape picks a handler. */
+/** All Graphviz shape names pixl-factory recognises. Each shape picks a handler. */
 export type Shape =
   | "box" // default agent (multi-turn LLM with tools)
   | "tab" // single LLM call
@@ -108,7 +108,7 @@ export function isValidWorkflowName(name: string): boolean {
   return /^[a-z][a-z0-9_]*$/.test(name);
 }
 
-/** Whether a value is one of Fabro's recognised shapes. */
+/** Whether a value is one of pixl-factory's recognised shapes. */
 export function isValidShape(value: unknown): value is Shape {
   return typeof value === "string" && (ALL_SHAPES as readonly string[]).includes(value);
 }

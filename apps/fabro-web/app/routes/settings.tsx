@@ -15,7 +15,7 @@ import { Fragment } from "react";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
 
 export function meta({}: any) {
-  return [{ title: "Settings — Fabro" }];
+  return [{ title: "Settings — pixl-factory" }];
 }
 
 export const handle = { hideHeader: true };

@@ -14,7 +14,7 @@ import {
 } from "../components/settings-panel";
 
 export function meta() {
-  return [{ title: "Integrations — Fabro" }];
+  return [{ title: "Integrations — pixl-factory" }];
 }
 
 const DESCRIPTION = (

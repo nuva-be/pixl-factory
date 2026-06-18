@@ -18,11 +18,11 @@ import { useToast } from "../components/toast";
 import { formatAbsoluteTs, formatRelativeTime } from "../lib/format";
 
 export function meta() {
-  return [{ title: "Secrets — Fabro" }];
+  return [{ title: "Secrets — pixl-factory" }];
 }
 
 const DESCRIPTION =
-  "Secrets are values stored on this Fabro server and made available to workflow runs. Values are write-only — they can be replaced or deleted, but never read back through the UI.";
+  "Secrets are values stored on this pixl-factory server and made available to workflow runs. Values are write-only — they can be replaced or deleted, but never read back through the UI.";
 
 export default function SettingsSecrets() {
   const query = useSecrets();

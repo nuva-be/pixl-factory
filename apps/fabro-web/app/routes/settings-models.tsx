@@ -31,7 +31,7 @@ import { formatContextWindow, formatTokensPerSecond } from "../lib/format";
 import { useDebouncedValue } from "../hooks/effects";
 
 export function meta() {
-  return [{ title: "Models — Fabro" }];
+  return [{ title: "Models — pixl-factory" }];
 }
 
 export default function SettingsModels() {
@@ -39,7 +39,7 @@ export default function SettingsModels() {
 
   return (
     <div className="space-y-8">
-      <SettingsPageIntro description="LLM providers configured on this Fabro server." />
+      <SettingsPageIntro description="LLM providers configured on this pixl-factory server." />
       {query.data ? (
         <>
           <ProvidersPanel providers={query.data.data} />

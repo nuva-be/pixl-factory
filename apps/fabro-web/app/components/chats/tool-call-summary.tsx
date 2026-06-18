@@ -9,7 +9,7 @@ import { WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 const EMPTY_PARTS: readonly ThreadAssistantMessagePart[] = [];
 
 /**
- * Tool-call renderer for the narrow Ask Fabro sidebar. Tool calls are collapsed
+ * Tool-call renderer for the narrow Ask pixl-factory sidebar. Tool calls are collapsed
  * to a single unobtrusive count ("3 tool calls", or "7 tool calls, 2 with
  * errors") instead of dumping each call's arguments and results into the
  * thread.

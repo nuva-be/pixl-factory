@@ -21,7 +21,7 @@ import {
 import { useToast } from "../components/toast";
 
 export function meta() {
-  return [{ title: "New environment — Fabro" }];
+  return [{ title: "New environment — pixl-factory" }];
 }
 
 export default function SettingsEnvironmentsNew() {

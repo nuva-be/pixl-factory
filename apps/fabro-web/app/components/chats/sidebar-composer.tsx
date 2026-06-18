@@ -3,7 +3,7 @@ import { ArrowUpIcon } from "@heroicons/react/24/solid";
 import { StopIcon } from "@heroicons/react/24/outline";
 
 /**
- * Compact single-line composer for the Ask-Fabro sidebar. Stripped of the
+ * Compact single-line composer for the Ask-pixl-factory sidebar. Stripped of the
  * project/branch/model chips; textarea + send button live on one row inside
  * a rounded pill.
  */
@@ -13,7 +13,7 @@ export default function SidebarComposer() {
       <ComposerPrimitive.Input
         rows={1}
         autoFocus
-        placeholder="Ask Fabro…"
+        placeholder="Ask pixl-factory…"
         className="block max-h-40 min-w-0 flex-1 resize-none bg-transparent py-1 text-sm text-fg placeholder:text-fg-muted focus:outline-none"
       />
       <ThreadPrimitive.If running>

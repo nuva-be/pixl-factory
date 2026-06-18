@@ -8,7 +8,7 @@ import Playground from "../components/playground/playground";
 export const handle = { hideHeader: true, fullHeight: true, wide: true };
 
 export function meta() {
-  return [{ title: "Playground — Fabro" }];
+  return [{ title: "Playground — pixl-factory" }];
 }
 
 export default function PlaygroundRoute() {

@@ -23,7 +23,7 @@ import {
 import { useToast } from "../components/toast";
 
 export function meta() {
-  return [{ title: "Edit automation — Fabro" }];
+  return [{ title: "Edit automation — pixl-factory" }];
 }
 
 export const handle = { hideHeader: true };

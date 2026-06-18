@@ -50,7 +50,7 @@ const defaultPersistedSessionState: PersistedSessionState = {
 };
 
 export interface AskFabroAdapterOptions {
-  /** Run ID this Ask Fabro session is scoped to. */
+  /** Run ID this Ask pixl-factory session is scoped to. */
   runId: string;
   /** Catalog model id used when creating a fresh session. */
   defaultModel?: string | null;
@@ -237,7 +237,7 @@ function lastUserText(
 }
 
 /**
- * Build an assistant-ui `ChatModelAdapter` that talks to the Fabro Sessions
+ * Build an assistant-ui `ChatModelAdapter` that talks to the pixl-factory Sessions
  * API. The adapter is parameterized by a `runId`; the session is created
  * lazily on the first turn (reusing a `sessionStorage`-cached id on reopen)
  * and turns are submitted via streamed SSE.
@@ -254,7 +254,7 @@ export function createAskFabroAdapter(
 
   async function ensureSession(): Promise<string> {
     if (sessionId) return sessionId;
-    const body: { title?: string; model?: string } = { title: "Ask Fabro" };
+    const body: { title?: string; model?: string } = { title: "Ask pixl-factory" };
     if (options.defaultModel) body.model = options.defaultModel;
     const created = await createSession(options.runId, body);
     sessionId = created.id;

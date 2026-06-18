@@ -19,7 +19,7 @@ const EMPTY_PARTS: readonly ThreadAssistantMessagePart[] = [];
  * `workflow.fabro` DOT; this renderer parses that content at render
  * time and surfaces compact, informative counts —
  * `Wrote workflow.fabro (6 nodes, 7 edges)` — instead of the generic
- * "N tool calls" aggregate the Ask Fabro chat uses.
+ * "N tool calls" aggregate the Ask pixl-factory chat uses.
  *
  * Like `app/components/chats/tool-call-summary.tsx`, this renders once
  * per assistant message anchored to the first tool-call part, so the

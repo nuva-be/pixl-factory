@@ -14,7 +14,7 @@ import {
 } from "../components/settings-panel";
 
 export function meta() {
-  return [{ title: "Storage — Fabro" }];
+  return [{ title: "Storage — pixl-factory" }];
 }
 
 const DESCRIPTION = (
@@ -65,10 +65,10 @@ function StorageRootPanel({
       <Row title="Path" help="Filesystem path for run state and logs.">
         <Mono>{storage.root}</Mono>
       </Row>
-      <Row title="Fabro managed" help="Bytes currently tracked under Fabro storage.">
+      <Row title="pixl-factory managed" help="Bytes currently tracked under pixl-factory storage.">
         {formatBytesAsMemory(disk.fabro_managed_bytes, 0)}
       </Row>
-      <Row title="Reclaimable" help="Bytes Fabro can reclaim by pruning inactive data.">
+      <Row title="Reclaimable" help="Bytes pixl-factory can reclaim by pruning inactive data.">
         {formatBytesAsMemory(disk.fabro_reclaimable_bytes, 0)}
       </Row>
     </Panel>

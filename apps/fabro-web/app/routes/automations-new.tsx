@@ -22,7 +22,7 @@ import {
 import { useToast } from "../components/toast";
 
 export function meta() {
-  return [{ title: "New automation — Fabro" }];
+  return [{ title: "New automation — pixl-factory" }];
 }
 
 export const handle = { hideHeader: true };
@@ -159,7 +159,7 @@ function PageHeader() {
       </nav>
       <h2 className="text-xl font-semibold text-fg">New automation</h2>
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-fg-3">
-        Define a workflow that Fabro can run on demand, on a schedule, or via the API.
+        Define a workflow that pixl-factory can run on demand, on a schedule, or via the API.
         You can refine the graph and per-stage prompts after it's created.
       </p>
     </div>

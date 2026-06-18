@@ -4,7 +4,7 @@
  * Given a draft + a cursor (which node is "active" right now and which have
  * been "done"), `nextStep` returns the next node to visit. The semantics
  * are intentionally lightweight — the goal is to give the canvas something
- * to animate, not to faithfully replay every Fabro engine behaviour:
+ * to animate, not to faithfully replay every pixl-factory engine behaviour:
  *
  * - Diamond / multiple-out branches → pick the first outgoing edge with a
  *   `condition`, falling back to the first non-self-loop edge.
@@ -142,7 +142,7 @@ function pickNext(
   const candidates = conditional.length > 0 ? conditional : outgoing;
 
   // Skip any candidate whose target node has been visited at or past its
-  // declared `max_visits`. This implements the common Fabro pattern
+  // declared `max_visits`. This implements the common pixl-factory pattern
   // `impl [max_visits=3]` for bounded retry loops.
   for (const edge of candidates) {
     if (!isTargetCapped(draft, edge.to, visitCounts)) return edge.to;

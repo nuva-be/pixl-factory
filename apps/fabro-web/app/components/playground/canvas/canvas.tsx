@@ -51,7 +51,7 @@ function applySelectionHighlight(svg: SVGSVGElement, selectedId: string | null) 
 /**
  * Canvas for the playground. Re-renders whenever the draft changes by piping
  * a themed DOT (see `render-canvas`) through `@viz-js/viz` — the same
- * Graphviz layout engine Fabro uses, so what the user sees here is exactly
+ * Graphviz layout engine pixl-factory uses, so what the user sees here is exactly
  * what their downloaded `.fabro` graph will lay out as.
  */
 export default function PlaygroundCanvas({

@@ -5,7 +5,7 @@ import { timeAgo } from "../lib/time";
 import type { PaginatedSavedQueryList, PaginatedHistoryEntryList } from "@qltysh/fabro-api-client";
 
 export function meta({}: any) {
-  return [{ title: "Insights — Fabro" }];
+  return [{ title: "Insights — pixl-factory" }];
 }
 
 export const handle = {

@@ -21,10 +21,10 @@ const SIDEBAR_WIDTH = 420;
 const SIDEBAR_MAX_WIDTH = SIDEBAR_WIDTH * 2;
 
 /**
- * Playground-flavoured Ask Fabro sidebar. Mirrors `AskFabroSidebar`'s
+ * Playground-flavoured Ask pixl-factory sidebar. Mirrors `AskFabroSidebar`'s
  * look and feel (left-edge drag handle, animated width, stripped composer),
  * but talks to `/api/v1/playground/chat` via `createPlaygroundAdapter`
- * instead of the session-scoped Ask Fabro runtime.
+ * instead of the session-scoped Ask pixl-factory runtime.
  *
  * Each turn the model emits one `write_workflow_file` tool call with the
  * full new DOT contents; the adapter parses, diffs against the current
@@ -130,7 +130,7 @@ export default function PlaygroundChatSidebar({
 
   return (
     <aside
-      aria-label="Ask Fabro"
+      aria-label="Ask pixl-factory"
       aria-hidden={!isOpen}
       style={{ width: isOpen ? width : 0 }}
       className={`h-full shrink-0 overflow-hidden ${
@@ -149,7 +149,7 @@ export default function PlaygroundChatSidebar({
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize Ask Fabro panel"
+          aria-label="Resize Ask pixl-factory panel"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endDrag}

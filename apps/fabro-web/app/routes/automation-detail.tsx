@@ -55,7 +55,7 @@ export const handle = { hideHeader: true, wide: true };
 
 export function meta({ data }: any) {
   const title = data?.automation?.name ?? "Automation";
-  return [{ title: `${title} — Fabro` }];
+  return [{ title: `${title} — pixl-factory` }];
 }
 
 export default function AutomationDetail() {

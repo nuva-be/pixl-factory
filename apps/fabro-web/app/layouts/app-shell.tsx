@@ -79,7 +79,7 @@ export default function AppShell() {
             <div className="flex items-center">
               <div className="shrink-0">
                 <Link to={demoMode ? "/start" : "/runs"}>
-                  <img alt="Fabro" src="/images/logotype.svg" className="h-8 w-auto" />
+                  <img alt="pixl-factory" src="/images/logotype.svg" className="h-8 w-auto" />
                 </Link>
               </div>
               <div className="hidden md:block">
@@ -257,7 +257,7 @@ export default function AppShell() {
 }
 
 /**
- * The scrollable content region. Inset on the right by the docked Ask Fabro
+ * The scrollable content region. Inset on the right by the docked Ask pixl-factory
  * sidebar's width so opening the sidebar shifts the page content left rather
  * than covering it.
  */

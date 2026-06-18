@@ -162,7 +162,7 @@ function buildNode(id: string, attrs: Record<string, AttrValue>): Node {
 function coerceShape(raw: AttrValue | undefined, nodeId: string): Shape {
   if (typeof raw !== "string") {
     // Shape omitted: default to start/exit terminals if id matches,
-    // otherwise `box` (Fabro's agent default).
+    // otherwise `box` (pixl-factory's agent default).
     if (nodeId === "start") return "mdiamond";
     if (nodeId === "exit") return "msquare";
     return "box";

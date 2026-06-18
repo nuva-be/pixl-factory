@@ -25,13 +25,13 @@ const INSTALL_GITHUB_ERROR_MESSAGES: Record<string, string> = {
   "missing-install-github-app-state":
     "GitHub App setup could not resume because the install state was missing. Continue again to create a fresh handoff.",
   "missing-install-github-app-code":
-    "GitHub did not return the manifest conversion code Fabro needed. Continue again to retry the GitHub App handoff.",
+    "GitHub did not return the manifest conversion code pixl-factory needed. Continue again to retry the GitHub App handoff.",
   "expired-install-github-app-state":
     "GitHub App setup took too long and the temporary install state expired. Continue again to create a fresh handoff.",
   "invalid-install-github-app-state":
     "GitHub App setup returned with the wrong install state. Continue again to restart the secure handoff.",
   "github-app-manifest-conversion-failed":
-    "GitHub App setup failed before Fabro could save the app credentials. Continue again to retry the callback.",
+    "GitHub App setup failed before pixl-factory could save the app credentials. Continue again to retry the callback.",
 };
 
 export function shouldConsumeInstallGithubErrorForPath(pathname: string): boolean {

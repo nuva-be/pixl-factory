@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 /**
  * Synchronizes a DOM container with a Graphviz-rendered SVG. Pipes the
- * supplied DOT string through `@viz-js/viz` (the same layout engine Fabro
+ * supplied DOT string through `@viz-js/viz` (the same layout engine pixl-factory
  * uses on the server) and mounts the resulting `<svg>` into `containerRef`,
  * stripping Graphviz's auto-inserted graph `<title>` so it doesn't surface
  * as a browser tooltip. Re-renders whenever `dot` changes; re-applies the

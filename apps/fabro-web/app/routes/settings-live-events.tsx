@@ -23,7 +23,7 @@ import {
 } from "../lib/live-events";
 
 export function meta() {
-  return [{ title: "Live Events — Fabro" }];
+  return [{ title: "Live Events — pixl-factory" }];
 }
 
 export const handle = { wide: true, fullHeight: true };

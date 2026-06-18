@@ -23,7 +23,7 @@ import {
 import { useToast } from "../components/toast";
 
 export function meta() {
-  return [{ title: "Edit environment — Fabro" }];
+  return [{ title: "Edit environment — pixl-factory" }];
 }
 
 export default function SettingsEnvironmentsEdit() {

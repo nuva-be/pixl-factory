@@ -115,11 +115,11 @@ function AskFabroTriggerButton({
       )}
     >
       <SparklesIcon className="size-4 text-teal-300" aria-hidden="true" />
-      Ask Fabro
+      Ask pixl-factory
     </button>
   );
   if (!available && unavailableReason) {
-    const tooltip = ASK_FABRO_UNAVAILABLE_TOOLTIPS[unavailableReason] ?? "Ask Fabro is unavailable";
+    const tooltip = ASK_FABRO_UNAVAILABLE_TOOLTIPS[unavailableReason] ?? "Ask pixl-factory is unavailable";
     return <Tooltip label={tooltip}>{button}</Tooltip>;
   }
   return button;

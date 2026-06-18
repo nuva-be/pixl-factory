@@ -17,11 +17,11 @@ import {
 } from "../components/settings-panel";
 
 export function meta() {
-  return [{ title: "Monitoring — Fabro" }];
+  return [{ title: "Monitoring — pixl-factory" }];
 }
 
 const DESCRIPTION =
-  "Server-visible run concurrency, CPU, memory, and storage filesystem usage for this Fabro process.";
+  "Server-visible run concurrency, CPU, memory, and storage filesystem usage for this pixl-factory process.";
 
 export default function SettingsMonitoring() {
   const resourcesQuery = useSystemResources();
@@ -131,7 +131,7 @@ function DiskPanel({ disk }: { disk: SystemDiskResources }) {
     return (
       <Panel title="Disk">
         <UnsupportedRows reason={disk.unavailable_reason} />
-        <Row title="Storage path" help="Configured Fabro storage directory.">
+        <Row title="Storage path" help="Configured pixl-factory storage directory.">
           <Mono>{disk.storage_path}</Mono>
         </Row>
       </Panel>

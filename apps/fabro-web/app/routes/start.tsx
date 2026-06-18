@@ -20,7 +20,7 @@ import {
 export const handle = { hideHeader: true, wide: true };
 
 export function meta({}: any) {
-  return [{ title: "Start — Fabro" }];
+  return [{ title: "Start — pixl-factory" }];
 }
 
 const projects = [

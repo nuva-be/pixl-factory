@@ -89,7 +89,7 @@ export default function RunForRealModal({
         </header>
 
         <p className="mb-4 text-sm text-fg-2">
-          This launches your workflow as a real Fabro run, redirecting you to
+          This launches your workflow as a real pixl-factory run, redirecting you to
           its run page when it starts. The run executes in a fresh local
           sandbox for now — project, repo, and folder selection are coming
           soon.

@@ -26,7 +26,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/state";
 import { useToast } from "../components/toast";
 
 export function meta({}: any) {
-  return [{ title: "Automations — Fabro" }];
+  return [{ title: "Automations — pixl-factory" }];
 }
 
 export const handle = { hideHeader: true };

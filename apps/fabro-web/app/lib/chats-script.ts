@@ -2,7 +2,7 @@ import type { ChatMessage } from "./chats-types";
 
 /**
  * Scripted assistant replies cycled through per chat. Generic content,
- * intentionally not Fabro-specific. Each entry is a single assistant
+ * intentionally not pixl-factory-specific. Each entry is a single assistant
  * ChatMessage; tool calls and their results are siblings in the content
  * array so the renderer can pair them.
  */

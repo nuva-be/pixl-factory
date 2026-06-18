@@ -14,7 +14,7 @@ import {
 import { plural } from "../lib/plural";
 
 export function meta() {
-  return [{ title: "Sandboxes — Fabro" }];
+  return [{ title: "Sandboxes — pixl-factory" }];
 }
 
 type SandboxProviderId = "local" | "docker" | "daytona";
@@ -48,7 +48,7 @@ function ProvidersPanel({ settings }: { settings: ServerSandboxProvidersSettings
       {
         id: "local",
         name: "Local",
-        description: "Run stages directly on the Fabro host.",
+        description: "Run stages directly on the pixl-factory host.",
         enabled: settings.local.enabled,
       },
       {

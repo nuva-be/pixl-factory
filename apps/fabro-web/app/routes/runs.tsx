@@ -55,7 +55,7 @@ export {
   RUNS_PREFERENCES_STORAGE_KEY,
 } from "../components/runs-list/preferences";
 export function meta({}: any) {
-  return [{ title: "Runs — Fabro" }];
+  return [{ title: "Runs — pixl-factory" }];
 }
 
 interface ColumnStyle {

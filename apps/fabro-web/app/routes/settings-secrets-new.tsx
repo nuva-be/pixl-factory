@@ -16,7 +16,7 @@ import {
 import { useToast } from "../components/toast";
 
 export function meta() {
-  return [{ title: "New secret — Fabro" }];
+  return [{ title: "New secret — pixl-factory" }];
 }
 
 // The create form only offers Token and File. OAuth secrets are written by

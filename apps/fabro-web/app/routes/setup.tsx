@@ -10,7 +10,7 @@ const firstTimeSteps = [
       <p className="text-sm/6 text-fg-3">
         Run{" "}
         <code className="font-mono text-fg-2">fabro install</code> on the same
-        host that runs the Fabro server.
+        host that runs the pixl-factory server.
       </p>
     ),
   },
@@ -35,7 +35,7 @@ const firstTimeSteps = [
 
 const githubInstallReturnSteps = [
   {
-    title: "Return to Fabro",
+    title: "Return to pixl-factory",
     body: (
       <p className="text-sm/6 text-fg-3">
         The GitHub App is installed for the selected account or repositories.
@@ -47,7 +47,7 @@ const githubInstallReturnSteps = [
     title: "Use the new installation",
     body: (
       <p className="text-sm/6 text-fg-3">
-        Sign in and start a run or preflight. Fabro can now clone repositories
+        Sign in and start a run or preflight. pixl-factory can now clone repositories
         and push checkpoint branches using the new installation.
       </p>
     ),
@@ -59,10 +59,10 @@ export function setupContentForSearch(search: string) {
   if (params.has("installation_id") || params.get("setup_action") === "install") {
     return {
       footer:
-        "GitHub redirected here after installing the app. Fabro is already configured locally.",
+        "GitHub redirected here after installing the app. pixl-factory is already configured locally.",
       title: "GitHub App installed",
       description:
-        "GitHub finished installing the app. Fabro can now request repository-scoped tokens for runs that use that installation.",
+        "GitHub finished installing the app. pixl-factory can now request repository-scoped tokens for runs that use that installation.",
       steps: githubInstallReturnSteps,
       cta: "Continue to sign in",
     };
@@ -70,7 +70,7 @@ export function setupContentForSearch(search: string) {
 
   return {
     footer: "GitHub App setup is managed from the terminal, not the browser.",
-    title: "Set up Fabro",
+    title: "Set up pixl-factory",
     description:
       "Run the installer on the server host to register a GitHub App and write local configuration.",
     steps: firstTimeSteps,

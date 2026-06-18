@@ -6,7 +6,7 @@ import { useChatsActions } from "../lib/chats-store";
 import ComposerChips from "../components/chats/composer-chips";
 
 export function meta() {
-  return [{ title: "New chat — Fabro" }];
+  return [{ title: "New chat — pixl-factory" }];
 }
 
 export default function ChatsNew() {

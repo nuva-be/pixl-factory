@@ -15,7 +15,7 @@ import {
 import { useToast } from "../components/toast";
 
 export function meta() {
-  return [{ title: "New variable — Fabro" }];
+  return [{ title: "New variable — pixl-factory" }];
 }
 
 export default function SettingsVariablesNew() {

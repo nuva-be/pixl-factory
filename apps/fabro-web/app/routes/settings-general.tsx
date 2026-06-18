@@ -21,7 +21,7 @@ import {
 } from "../components/settings-panel";
 
 export function meta() {
-  return [{ title: "Server settings — Fabro" }];
+  return [{ title: "Server settings — pixl-factory" }];
 }
 
 const DESCRIPTION = (
@@ -95,7 +95,7 @@ function SystemPanel() {
   }
   return (
     <Panel title="System">
-      <Row title="Fabro version" help="Version of the running Fabro server.">
+      <Row title="pixl-factory version" help="Version of the running pixl-factory server.">
         {info.version ? info.version : <Muted>Unknown</Muted>}
       </Row>
       <Row

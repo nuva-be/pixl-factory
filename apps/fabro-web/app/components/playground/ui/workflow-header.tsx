@@ -18,7 +18,7 @@ export default function WorkflowHeader({ draft }: { draft: WorkflowDraft }) {
         </h1>
         {!named && (
           <span className="font-mono text-[10.5px] uppercase tracking-wider text-fg-muted">
-            (Ask Fabro will name it)
+            (Ask pixl-factory will name it)
           </span>
         )}
       </div>

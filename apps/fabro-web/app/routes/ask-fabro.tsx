@@ -12,11 +12,11 @@ import AskFabroSidebar, {
 } from "../components/chats/ask-fabro-sidebar";
 
 // hideHeader/fullHeight/wide mirror the chats layout so the demo workspace and
-// the docked Ask-Fabro sidebar bleed edge-to-edge below the top nav.
+// the docked Ask-pixl-factory sidebar bleed edge-to-edge below the top nav.
 export const handle = { hideHeader: true, fullHeight: true, wide: true };
 
 /**
- * `/ask-fabro` — prototype page for the right-docked "Ask Fabro" assistant.
+ * `/ask-fabro` — prototype page for the right-docked "Ask pixl-factory" assistant.
  * The workspace content is placeholder; its only purpose is to host the
  * trigger button. The assistant streams scripted, fake replies — no real AI.
  */
@@ -63,7 +63,7 @@ function DemoWorkspace({
           className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-overlay px-2.5 py-1.5 text-sm font-medium text-fg-2 ring-1 ring-line-strong transition-colors hover:bg-overlay-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <SparklesIcon className="size-4 text-teal-300" />
-          Ask Fabro
+          Ask pixl-factory
         </button>
       </header>
 

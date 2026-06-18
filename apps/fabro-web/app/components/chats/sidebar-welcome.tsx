@@ -7,7 +7,7 @@ import {
 } from "@heroicons/react/16/solid";
 
 /**
- * Example prompts shown on the empty Ask-Fabro thread. Each `prompt` is sent
+ * Example prompts shown on the empty Ask-pixl-factory thread. Each `prompt` is sent
  * verbatim as the first message; `heading`/`description` are display-only.
  */
 const EXAMPLE_PROMPTS = [
@@ -42,7 +42,7 @@ const EXAMPLE_PROMPTS = [
 ];
 
 /**
- * Empty-state for the Ask-Fabro sidebar. Wrapped in `ThreadPrimitive.Empty` so
+ * Empty-state for the Ask-pixl-factory sidebar. Wrapped in `ThreadPrimitive.Empty` so
  * it renders only before the first message; clicking an example sends its
  * prompt, which starts the session.
  */

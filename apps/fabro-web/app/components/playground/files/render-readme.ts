@@ -2,8 +2,8 @@
  * Render the README that ships in the downloaded zip.
  *
  * The downloaded artifact is meant to be dropped straight into any repo, so
- * the README explains what the user got, how to run it, and what Fabro is
- * (in case they're handing the folder to a teammate who hasn't seen Fabro
+ * the README explains what the user got, how to run it, and what pixl-factory is
+ * (in case they're handing the folder to a teammate who hasn't seen pixl-factory
  * yet). No link back to the playground session, by design.
  */
 
@@ -14,7 +14,7 @@ import {
 } from "../state/draft";
 
 const FABRO_BLURB = [
-  "Fabro turns a Graphviz file into a runnable AI workflow. The shape of",
+  "pixl-factory turns a Graphviz file into a runnable AI workflow. The shape of",
   "each node picks the handler (agent / shell / human / branch / sub-",
   "workflow). Edit the `.fabro/` directory, commit it to git, re-run forever.",
 ].join("\n");
@@ -27,7 +27,7 @@ export function renderReadme(draft: WorkflowDraft): string {
   return [
     `# ${title}`,
     "",
-    `${goalLine}Generated with the Fabro playground.`,
+    `${goalLine}Generated with the pixl-factory playground.`,
     "",
     "## Run it",
     "",
