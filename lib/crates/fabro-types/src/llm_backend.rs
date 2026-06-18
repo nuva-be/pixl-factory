@@ -21,6 +21,9 @@ use strum::{Display, EnumString, IntoStaticStr, VariantArray, VariantNames};
 pub enum AgentBackend {
     Api,
     Acp,
+    /// Native pixl-kb node: calls the pixl-kb MCP gateway over HTTP with no
+    /// LLM in the loop. Deterministic, cheap recall/write as a graph step.
+    Kb,
 }
 
 impl AgentBackend {
@@ -35,10 +38,11 @@ mod tests {
     use super::AgentBackend;
 
     #[test]
-    fn agent_backend_accepts_only_api_and_acp() {
+    fn agent_backend_accepts_only_api_acp_and_kb() {
         assert_eq!("api".parse::<AgentBackend>().unwrap(), AgentBackend::Api);
         assert_eq!("acp".parse::<AgentBackend>().unwrap(), AgentBackend::Acp);
+        assert_eq!("kb".parse::<AgentBackend>().unwrap(), AgentBackend::Kb);
         assert!("cli".parse::<AgentBackend>().is_err());
-        assert_eq!(AgentBackend::expected_values(), "api, acp");
+        assert_eq!(AgentBackend::expected_values(), "api, acp, kb");
     }
 }

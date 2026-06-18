@@ -1,0 +1,37 @@
+// Native pixl-kb node — backend="kb".
+//
+// The "recall" node hits the pixl-kb MCP gateway directly (no LLM, no agent):
+// it sends the node prompt as the search query and returns the tool's text as
+// the node response, which the "report" node then summarizes. This is a
+// deterministic, LLM-free graph step.
+//
+//   fabro run examples/pixl/kb-node.toml --auto-approve
+//
+// Set kb.workspace to a real workspace and deliver a pixl-kb bearer token via
+// the kb.token attr (best as a fabro vault secret) — e.g. kb.token="<jwt>" on
+// the recall node. PIXL_KB_TOKEN env also works when the run executor inherits
+// the environment (CLI-local runs). kb.endpoint defaults to
+// http://localhost:8421/api/mcp/call.
+digraph KbNode {
+  graph [goal="Recall from pixl-kb with a native kb node, then summarize"]
+
+  start  [shape=Mdiamond, label="Start"]
+  exit   [shape=Msquare,  label="Exit"]
+
+  recall [
+    label="Recall",
+    backend="kb",
+    kb.tool="pixl_search",
+    kb.workspace="42e3f37a-bfe2-41e2-9ea2-e05b24586b46",
+    prompt="overview"
+  ]
+
+  report [
+    label="Report",
+    backend="acp",
+    acp.command="npx --yes @zed-industries/claude-code-acp",
+    prompt="The previous step recalled documents from pixl-kb. Summarize the recalled titles in 3 bullet points. If the input is empty, say 'NO RESULTS'."
+  ]
+
+  start -> recall -> report -> exit
+}

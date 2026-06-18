@@ -7,6 +7,7 @@ use fabro_types::AgentBackend;
 use super::super::agent::{CodergenBackend, CodergenResult, CodergenRunRequest, OneShotRequest};
 use super::acp::AgentAcpBackend;
 use super::api::EffectiveRequestControls;
+use super::kb::AgentKbBackend;
 use super::routing;
 use crate::error::Error;
 use crate::event::Emitter;
@@ -16,6 +17,7 @@ use crate::handler::NodeTimeoutPolicy;
 pub struct BackendRouter {
     api: Box<dyn CodergenBackend>,
     acp: AgentAcpBackend,
+    kb:  AgentKbBackend,
 }
 
 impl BackendRouter {
@@ -24,6 +26,7 @@ impl BackendRouter {
         Self {
             api: api_backend,
             acp: acp_backend,
+            kb:  AgentKbBackend::new(),
         }
     }
 
@@ -42,14 +45,15 @@ impl CodergenBackend for BackendRouter {
         match Self::select_backend(request.node)? {
             AgentBackend::Api => self.api.run(request).await,
             AgentBackend::Acp => self.acp.run(request).await,
+            AgentBackend::Kb => self.kb.run(request).await,
         }
     }
 
     async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
         match Self::select_one_shot_backend(request.node)? {
             AgentBackend::Api => self.api.one_shot(request).await,
-            AgentBackend::Acp => {
-                unreachable!("ACP one-shot is rejected by select_one_shot_backend")
+            AgentBackend::Acp | AgentBackend::Kb => {
+                unreachable!("ACP/KB one-shot is rejected by select_one_shot_backend")
             }
         }
     }
@@ -62,6 +66,7 @@ impl CodergenBackend for BackendRouter {
         match Self::select_backend(node)? {
             AgentBackend::Api => self.api.effective_request_controls(node),
             AgentBackend::Acp => self.acp.effective_request_controls(node),
+            AgentBackend::Kb => self.kb.effective_request_controls(node),
         }
     }
 
@@ -69,6 +74,7 @@ impl CodergenBackend for BackendRouter {
         match Self::select_backend(node) {
             Ok(AgentBackend::Api) => self.api.node_timeout_policy(node),
             Ok(AgentBackend::Acp) => self.acp.node_timeout_policy(node),
+            Ok(AgentBackend::Kb) => self.kb.node_timeout_policy(node),
             Err(_) => NodeTimeoutPolicy::ExecutorEnforced,
         }
     }
@@ -107,7 +113,7 @@ mod tests {
         let err = BackendRouter::select_backend(&node).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "Validation error: unsupported agent backend \"cli\"; expected one of: api, acp"
+            "Validation error: unsupported agent backend \"cli\"; expected one of: api, acp, kb"
         );
     }
 

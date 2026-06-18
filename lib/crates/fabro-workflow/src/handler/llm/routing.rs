@@ -19,6 +19,9 @@ pub(crate) fn select_one_shot_backend(node: &Node) -> Result<AgentBackend, Error
         Some(Ok(AgentBackend::Acp)) => Err(Error::Validation(
             "backend=\"acp\" is only valid on agent nodes; prompt nodes are API-only".to_string(),
         )),
+        Some(Ok(AgentBackend::Kb)) => Err(Error::Validation(
+            "backend=\"kb\" is only valid on agent nodes; prompt nodes are API-only".to_string(),
+        )),
         Some(Ok(AgentBackend::Api)) | None => Ok(AgentBackend::Api),
         Some(Err(_)) => Err(unsupported_backend_error(
             node.backend().unwrap_or_default(),

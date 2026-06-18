@@ -287,6 +287,38 @@ impl Node {
         self.str_attr("acp.config")
     }
 
+    /// pixl-kb node: MCP tool to invoke (e.g. `pixl_search`, `pixl_add_document`).
+    #[must_use]
+    pub fn kb_tool_attr(&self) -> Option<&str> {
+        self.str_attr("kb.tool")
+    }
+
+    /// pixl-kb node: full gateway URL. Defaults to the local kb when absent.
+    #[must_use]
+    pub fn kb_endpoint_attr(&self) -> Option<&str> {
+        self.str_attr("kb.endpoint")
+    }
+
+    /// pixl-kb node: workspace id scoping the call (sent as `X-Workspace-Id`
+    /// and injected into the tool arguments as `workspace_id`).
+    #[must_use]
+    pub fn kb_workspace_attr(&self) -> Option<&str> {
+        self.str_attr("kb.workspace")
+    }
+
+    /// pixl-kb node: JSON object of tool arguments. When absent, the node's
+    /// prompt becomes `{"query": <prompt>}`.
+    #[must_use]
+    pub fn kb_args_attr(&self) -> Option<&str> {
+        self.str_attr("kb.args")
+    }
+
+    /// pixl-kb node: bearer token override. Falls back to `$PIXL_KB_TOKEN`.
+    #[must_use]
+    pub fn kb_token_attr(&self) -> Option<&str> {
+        self.str_attr("kb.token")
+    }
+
     #[must_use]
     pub fn selection(&self) -> &str {
         self.str_attr("selection").unwrap_or("deterministic")
