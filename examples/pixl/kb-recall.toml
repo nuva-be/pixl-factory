@@ -1,0 +1,8 @@
+[workflow]
+graph = "kb-recall.fabro"
+
+[run.environment]
+id = "local"
+
+[environments.local]
+provider = "local"

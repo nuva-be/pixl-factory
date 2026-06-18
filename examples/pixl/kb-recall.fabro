@@ -1,0 +1,15 @@
+digraph KbRecall {
+  graph [goal="Prove pixl-kb tools work inside the ACP Claude Code session"]
+
+  start  [shape=Mdiamond, label="Start"]
+  exit   [shape=Msquare,  label="Exit"]
+
+  recall [
+    label="Recall",
+    backend="acp",
+    acp.command="npx --yes @zed-industries/claude-code-acp",
+    prompt="You have a pixl-kb MCP server connected. Call the tool mcp__pixl-kb__pixl_search with query \"overview\" (the workspace is preset via env). Report exactly: (1) whether the tool call succeeded, (2) how many results returned, (3) the title of the first result. If the pixl-kb tool is not available, say 'PIXL-KB TOOL UNAVAILABLE'. Keep it under 6 lines."
+  ]
+
+  start -> recall -> exit
+}
