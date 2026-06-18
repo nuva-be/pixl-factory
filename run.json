@@ -205,14 +205,107 @@
     }
   },
   "web_url": "http://127.0.0.1:32276/runs/01KVEDTAVAHBVQ2GS1HFN3NRSS",
-  "start": null,
-  "status": {
-    "kind": "starting"
+  "start": {
+    "start_time": "2026-06-18T22:32:40.326136Z",
+    "run_branch": "fabro/run/01KVEDTAVAHBVQ2GS1HFN3NRSS",
+    "base_sha": "fbaf50cee986e0eacb30a7d1272fba109ee9fcde"
   },
-  "status_updated_at": "2026-06-18T22:32:22.735154Z",
-  "last_event_at": "2026-06-18T22:32:39.847351Z",
+  "status": {
+    "kind": "running"
+  },
+  "status_updated_at": "2026-06-18T22:32:40.326185Z",
+  "last_event_at": "2026-06-18T22:32:42.657050Z",
   "pending_control": null,
-  "checkpoints": [],
+  "checkpoints": [
+    {
+      "seq": 20,
+      "checkpoint": {
+        "timestamp": "2026-06-18T22:32:42.654889Z",
+        "current_node": "start",
+        "completed_nodes": [
+          "start"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "failure_class": "",
+          "graph.goal": "Prove ACP Claude Code on subscription works end-to-end",
+          "current_node": "start",
+          "internal.retry_count.start": 0,
+          "internal.run_id": "01KVEDTAVAHBVQ2GS1HFN3NRSS",
+          "internal.fidelity": "compact",
+          "internal.node_visit_count": 1,
+          "internal.thread_id": null,
+          "outcome": "succeeded",
+          "failure_signature": "",
+          "internal.work_dir": "/workspace/pixl-factory"
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          }
+        },
+        "next_node_id": "recall",
+        "node_visits": {
+          "start": 1
+        }
+      },
+      "diff": {}
+    },
+    {
+      "seq": 0,
+      "checkpoint": {
+        "timestamp": "2026-06-18T22:32:42.857226Z",
+        "current_node": "recall",
+        "completed_nodes": [
+          "start",
+          "recall"
+        ],
+        "node_retries": {},
+        "context_values": {
+          "internal.run_id": "01KVEDTAVAHBVQ2GS1HFN3NRSS",
+          "outcome": "failed",
+          "internal.work_dir": "/workspace/pixl-factory",
+          "internal.thread_id": "start",
+          "graph.goal": "Prove ACP Claude Code on subscription works end-to-end",
+          "failure_signature": "recall|deterministic|acp turn failed",
+          "internal.retry_count.start": 0,
+          "current_node": "recall",
+          "internal.fidelity": "compact",
+          "thread.start.current_node": "recall",
+          "internal.node_visit_count": 1,
+          "failure_class": "deterministic",
+          "internal.retry_count.recall": 0
+        },
+        "node_outcomes": {
+          "start": {
+            "status": "succeeded",
+            "usage": null
+          },
+          "recall": {
+            "status": "failed",
+            "failure": {
+              "message": "ACP turn failed",
+              "causes": [
+                "ACP process exited before protocol completed: termination=exited, exit_code=127"
+              ],
+              "category": "deterministic",
+              "exec_output_tail": {
+                "stderr": "/bin/bash: line 1: npx: command not found\n"
+              }
+            },
+            "usage": null
+          }
+        },
+        "next_node_id": "exit",
+        "node_visits": {
+          "start": 1,
+          "recall": 1
+        }
+      },
+      "diff": {}
+    }
+  ],
   "conclusion": null,
   "sandbox": {
     "kind": "ready",
@@ -239,5 +332,66 @@
   "pull_request": null,
   "superseded_by": null,
   "pending_interviews": {},
-  "stages": {}
+  "stages": {
+    "recall@1": {
+      "first_event_seq": 21,
+      "prompt": null,
+      "response": null,
+      "completion": null,
+      "provider_used": {
+        "mode": "acp",
+        "provider": "acp"
+      },
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-06-18T22:32:42.655147Z",
+      "handler": "agent",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "running"
+    },
+    "start@1": {
+      "first_event_seq": 17,
+      "prompt": null,
+      "response": null,
+      "completion": {
+        "outcome": "succeeded",
+        "notes": null,
+        "failure_reason": null,
+        "timestamp": "2026-06-18T22:32:42.654275Z"
+      },
+      "provider_used": null,
+      "diff": null,
+      "script_invocation": null,
+      "script_timing": null,
+      "parallel_results": null,
+      "output": null,
+      "started_at": "2026-06-18T22:32:42.652342Z",
+      "handler": "start",
+      "timing": {
+        "wall_time_ms": 1,
+        "inference_time_ms": 0,
+        "tool_time_ms": 0,
+        "active_time_ms": 0
+      },
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "state": "succeeded"
+    }
+  }
 }
