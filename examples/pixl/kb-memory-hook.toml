@@ -1,0 +1,27 @@
+# Demo: automatic memory. On run_complete, a command hook writes a run report
+# into pixl-kb (workspace-scoped, non-blocking). Memory becomes automatic
+# instead of depending on the agent choosing to call a tool.
+#
+#   fabro run examples/pixl/kb-memory-hook.toml --auto-approve
+#
+# Requires pixl-kb running (:8421) and PIXL_KB_WORKSPACE_ID below set to a real
+# workspace. Adjust the absolute paths to your checkout.
+[workflow]
+graph = "acp-subscription.fabro"
+
+[run.environment]
+id = "local"
+
+[environments.local]
+provider = "local"
+
+# The hook runs the kb-memory script via pixl-kb's own venv python so
+# `knowledge_api` is importable. PIXL_KB_WORKSPACE_ID scopes the write; HOME is
+# set because the command hook runs with a scrubbed environment in the local
+# sandbox. The script always exits 0 (kb being down must never fail a run).
+[[run.hooks]]
+event = "run_complete"
+command = [
+  "sh", "-c",
+  "HOME=/Users/hamzamounir PIXL_KB_WORKSPACE_ID=42e3f37a-bfe2-41e2-9ea2-e05b24586b46 /Users/hamzamounir/code/nuva/pixl/pixl-kb/.venv/bin/python /Users/hamzamounir/code/nuva/fabro/scripts/pixl/kb_memory_hook.py",
+]

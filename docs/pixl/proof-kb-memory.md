@@ -41,10 +41,29 @@ The ACP node inherits the host's Claude Code config: the **pixl-crew plugin** (a
 **pixl-kb MCP** (memory). So a single work node has execution orchestration (pixl-factory), expertise (crew),
 and compounding memory (kb) — on the subscription. No other agent platform composes all three.
 
+## P4 memory hooks — proven (2026-06-19)
+
+Memory is now **automatic**, not at the model's discretion. A `run_complete` command hook
+(`examples/pixl/kb-memory-hook.toml` → `scripts/pixl/kb_memory_hook.py`) writes a run report into
+pixl-kb after every run, with no agent involvement:
+
+```
+fabro run examples/pixl/kb-memory-hook.toml --auto-approve
+  Running hooks event=run_complete hooks_matched=1
+  Hooks complete decision=Proceed
+  → kb-memory-hook: wrote run report for 01KVEFAEJK6TQE9XP2R2STW07B -> workspace 42e3f37a
+```
+
+Verified by `pixl_search` in the feen workspace: `doc-925b8649` "Run report — AcpSubscription"
+(run_id `01KVEFAEJK6TQE9XP2R2STW07B`, `event: run_complete`) is live in kb.
+
+**Recipe notes (local sandbox):** the command hook runs with a scrubbed environment, so the hook
+command sets `HOME` and `PIXL_KB_WORKSPACE_ID` inline and invokes pixl-kb's own venv python directly
+(so `knowledge_api` imports). The script reads `FABRO_*` env + `$FABRO_HOOK_CONTEXT` and always exits
+0 — a down kb degrades gracefully and never fails a run.
+
 ## Next
 
-- **P4 memory hooks**: auto-call `pixl_wakeup` at run-start and `pixl_diary_write` at stage-end via
-  `fabro-hooks`, so memory isn't left to the model's discretion.
 - **P3 Memory panel**: surface the kb recall/write in run detail.
 - **Sandbox/cloud**: for non-local runs, bake pixl-kb's MCP (or the HTTP gateway `/api/mcp/call`) into the
   sandbox image so the ACP agent reaches kb from inside the container.
