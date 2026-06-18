@@ -3,13 +3,7 @@ import { useParams } from "react-router";
 
 import { EmptyState, ErrorState, LoadingState } from "../components/state";
 import { useRun } from "../lib/queries";
-
-const LS_ENDPOINT = "pixl.kb.endpoint";
-const LS_TOKEN = "pixl.kb.token";
-const LS_WORKSPACE = "pixl.kb.workspace";
-
-const DEFAULT_ENDPOINT = "http://localhost:8421/api/mcp/call";
-const DEFAULT_WORKSPACE = "42e3f37a-bfe2-41e2-9ea2-e05b24586b46";
+import { kbCall, getKbConfig, setKbConfig, KbError } from "../lib/kb";
 
 interface MemoryResult {
   title: string;
@@ -24,107 +18,54 @@ type SearchState =
   | { kind: "error"; message: string; status?: number }
   | { kind: "results"; items: MemoryResult[] };
 
-function readLS(key: string, fallback: string): string {
-  try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeLS(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // ignore quota errors
-  }
-}
-
 export default function RunMemory() {
   const { id } = useParams();
   // useRun so the tab can react to run lifecycle (mirrors run-logs.tsx pattern)
   useRun(id);
 
-  const [endpoint, setEndpoint] = useState(() =>
-    readLS(LS_ENDPOINT, DEFAULT_ENDPOINT),
-  );
-  const [token, setToken] = useState(() => readLS(LS_TOKEN, ""));
-  const [workspace, setWorkspace] = useState(() =>
-    readLS(LS_WORKSPACE, DEFAULT_WORKSPACE),
-  );
+  const cfg = getKbConfig();
+  const [endpoint, setEndpoint] = useState(cfg.endpoint);
+  const [token, setToken] = useState(cfg.token);
+  const [workspace, setWorkspace] = useState(cfg.workspace);
   const [query, setQuery] = useState("overview");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
 
   // Persist settings to localStorage whenever they change
-  useEffect(() => writeLS(LS_ENDPOINT, endpoint), [endpoint]);
-  useEffect(() => writeLS(LS_TOKEN, token), [token]);
-  useEffect(() => writeLS(LS_WORKSPACE, workspace), [workspace]);
+  useEffect(() => setKbConfig({ endpoint }), [endpoint]);
+  useEffect(() => setKbConfig({ token }), [token]);
+  useEffect(() => setKbConfig({ workspace }), [workspace]);
 
   const search = useCallback(async () => {
     if (!query.trim()) return;
     setState({ kind: "loading" });
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          "X-Workspace-Id": workspace,
-        },
-        body: JSON.stringify({
-          name: "pixl_search",
-          arguments: { query: query.trim(), workspace_id: workspace },
-        }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        setState({
-          kind: "error",
-          status: res.status,
-          message: text || res.statusText || "Request failed",
-        });
-        return;
-      }
-
-      const json = (await res.json()) as {
-        content?: { type: string; text: string }[];
-      };
-
-      const textEntry = json.content?.find((c) => c.type === "text");
-      if (!textEntry) {
-        setState({ kind: "results", items: [] });
-        return;
-      }
-
+      const parsed = await kbCall<unknown>("pixl_search", { query: query.trim() });
       let items: MemoryResult[] = [];
-      try {
-        const parsed = JSON.parse(textEntry.text) as unknown;
-        if (Array.isArray(parsed)) {
-          items = parsed.filter(
-            (x): x is MemoryResult =>
-              x !== null &&
-              typeof x === "object" &&
-              "title" in x &&
-              "content" in x,
-          );
-        }
-      } catch {
-        setState({
-          kind: "error",
-          message: `Could not parse pixl-kb response: ${textEntry.text.slice(0, 120)}`,
-        });
-        return;
+      if (Array.isArray(parsed)) {
+        items = parsed.filter(
+          (x): x is MemoryResult =>
+            x !== null &&
+            typeof x === "object" &&
+            "title" in x &&
+            "content" in x,
+        );
       }
-
       setState({ kind: "results", items });
     } catch (err) {
-      setState({
-        kind: "error",
-        message: err instanceof Error ? err.message : "Network error",
-      });
+      if (err instanceof KbError) {
+        setState({
+          kind: "error",
+          status: err.status,
+          message: err.message,
+        });
+      } else {
+        setState({
+          kind: "error",
+          message: err instanceof Error ? err.message : "Network error",
+        });
+      }
     }
-  }, [endpoint, token, workspace, query]);
+  }, [query]);
 
   return (
     <div className="space-y-4">
@@ -135,7 +76,7 @@ export default function RunMemory() {
       </p>
 
       {/* Settings row */}
-      <div className="rounded-md border border-line bg-panel-alt p-3">
+      <div className="border border-line bg-panel-alt p-3">
         <p className="mb-2 text-xs font-medium text-fg-3">Connection</p>
         <div className="flex flex-wrap gap-2">
           <label className="flex flex-col gap-1">
@@ -145,7 +86,7 @@ export default function RunMemory() {
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
               className="w-72 bg-navy-950 border border-line px-2 py-1 text-sm text-fg font-mono focus:outline-none focus:border-teal-500"
-              placeholder={DEFAULT_ENDPOINT}
+              placeholder="http://localhost:8421/api/mcp/call"
               aria-label="pixl-kb MCP endpoint"
             />
           </label>
@@ -167,7 +108,7 @@ export default function RunMemory() {
               value={workspace}
               onChange={(e) => setWorkspace(e.target.value)}
               className="w-72 bg-navy-950 border border-line px-2 py-1 text-sm text-fg font-mono focus:outline-none focus:border-teal-500"
-              placeholder={DEFAULT_WORKSPACE}
+              placeholder="42e3f37a-bfe2-41e2-9ea2-e05b24586b46"
               aria-label="pixl-kb workspace ID"
             />
           </label>
@@ -250,7 +191,7 @@ function MemoryCard({ item }: { item: MemoryResult }) {
       : item.content;
 
   return (
-    <div className="rounded-md border border-line bg-panel-alt p-4 hover:bg-overlay transition-colors">
+    <div className="border border-line bg-panel-alt p-4 hover:bg-overlay transition-colors">
       <p className="text-sm font-medium text-fg">{item.title}</p>
       <p className="mt-1 text-sm text-fg-2 leading-relaxed">{snippet}</p>
       <div className="mt-2 flex items-center gap-3">

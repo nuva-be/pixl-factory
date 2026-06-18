@@ -30,6 +30,7 @@ import * as RunSandbox from "./routes/run-sandbox";
 import * as RunTerminal from "./routes/run-terminal";
 import * as RunMemory from "./routes/run-memory";
 import * as RunBilling from "./routes/run-billing";
+import * as Knowledge from "./routes/knowledge";
 import * as Insights from "./routes/insights";
 import * as InsightsEditor from "./routes/insights-editor";
 import * as InsightsNew from "./routes/insights-new";
@@ -140,6 +141,7 @@ export const routes: RouteObject[] = [
               route("billing", RunBilling),
             ],
           }),
+          route("knowledge", Knowledge),
           route("insights", Insights, {
             children: [
               indexRoute(InsightsEditor),
