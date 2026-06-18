@@ -34,7 +34,7 @@ export default function AuthLogin() {
   return (
     <AuthLayout>
       <h1 className="text-center text-2xl font-semibold tracking-tight text-fg text-balance sm:text-[1.75rem]">
-        Sign in to Fabro
+        Sign in to pixl-factory
       </h1>
       <p className="mt-3 text-center text-sm/6 text-fg-3 text-pretty">
         {hasGitHub

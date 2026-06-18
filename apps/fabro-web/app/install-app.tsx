@@ -1544,7 +1544,7 @@ function WelcomeScreen() {
   return (
     <div>
       <h1 className="text-3xl font-semibold tracking-tight text-fg text-balance sm:text-4xl">
-        Set up your Fabro server
+        Set up your pixl-factory server
       </h1>
       <p className="mt-4 max-w-[56ch] text-base/7 text-fg-3 text-pretty sm:text-[0.9375rem]/7">
         A short walkthrough to confirm the public server URL, choose the shared

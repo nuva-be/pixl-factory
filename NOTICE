@@ -1,0 +1,10 @@
+pixl-factory
+============
+
+This product is a fork of Fabro (https://github.com/fabro-sh/fabro),
+licensed under the MIT License, Copyright Qlty Software Inc.
+See LICENSE.md for the full upstream license text, which is retained.
+
+Modifications in this fork — branding, design system, and integrations
+with the pixl platform (pixl-kb knowledge engine, pixl-crew agents/skills) —
+are Copyright nuva-be / pixldev.

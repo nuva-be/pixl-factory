@@ -37,45 +37,57 @@
 }
 
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif,
+  /* pixl brand fonts */
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Jersey 15", "Space Grotesk", sans-serif;
 
-  /* Primary — Teal */
-  --color-teal-300: #B5DDEF;
-  --color-teal-500: #67B2D7;
-  --color-teal-700: #357F9E;
+  /* pixl signature — sharp corners, never rounded */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 
-  /* Neutrals Dark — Navy */
-  --color-navy-950: #0F1729;
-  --color-navy-800: #252C3D;
-  --color-navy-600: #4B5768;
+  /* Primary — CRT terminal green (token name kept; value is pixl green) */
+  --color-teal-300: #7CFF7C;
+  --color-teal-500: #00FF00;
+  --color-teal-700: #00B300;
 
-  /* Neutrals Light — Ice */
-  --color-ice-50: #F7F9FB;
-  --color-ice-100: #E8EDF3;
-  --color-ice-300: #A8B5C5;
+  /* Neutrals Dark — near-black */
+  --color-navy-950: #0A0A0A;
+  --color-navy-800: #141414;
+  --color-navy-600: #262626;
+
+  /* Neutrals Light — off-white */
+  --color-ice-50: #F2F2F2;
+  --color-ice-100: #E6E6E6;
+  --color-ice-300: #8C8C8C;
 
   /* Accent */
-  --color-mint: #5AC8A8;
-  --color-amber: #F0A45B;
+  --color-mint: #00FF88;
+  --color-amber: #FFBF00;
   --color-coral: #E86B6B;
 
   /* ── Semantic tokens ── */
-  --color-page: #0F1729;
-  --color-panel: #252C3D;
-  --color-panel-alt: #1a2133;
-  --color-overlay: rgba(255, 255, 255, 0.04);
-  --color-overlay-strong: rgba(255, 255, 255, 0.10);
-  --color-fg: #ffffff;
-  --color-fg-2: #E8EDF3;
-  --color-fg-3: #A8B5C5;
-  --color-fg-muted: #4B5768;
-  --color-line: rgba(255, 255, 255, 0.06);
-  --color-line-strong: rgba(255, 255, 255, 0.12);
-  --color-focus: rgba(103, 178, 215, 0.4);
+  --color-page: #0A0A0A;
+  --color-panel: #141414;
+  --color-panel-alt: #0F0F0F;
+  --color-overlay: rgba(0, 255, 0, 0.04);
+  --color-overlay-strong: rgba(0, 255, 0, 0.10);
+  --color-fg: #F2F2F2;
+  --color-fg-2: #E6E6E6;
+  --color-fg-3: #8C8C8C;
+  --color-fg-muted: #555555;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(0, 255, 0, 0.20);
+  --color-focus: rgba(0, 255, 0, 0.4);
   /* Text color that sits on --color-teal-500 primary fills. */
-  --color-on-primary: #0F1729;
+  --color-on-primary: #000000;
 }
 
 /* ── Chart variables ── */
@@ -90,8 +102,8 @@
 .bg-atmosphere {
   background-color: var(--color-page);
   background-image:
-    radial-gradient(ellipse 120% 60% at 15% 5%, rgba(53, 127, 158, 0.12) 0%, transparent 50%),
-    radial-gradient(ellipse 80% 50% at 85% 90%, rgba(90, 200, 168, 0.07) 0%, transparent 45%);
+    radial-gradient(ellipse 120% 60% at 15% 5%, rgba(0, 255, 0, 0.10) 0%, transparent 50%),
+    radial-gradient(ellipse 80% 50% at 85% 90%, rgba(0, 255, 0, 0.05) 0%, transparent 45%);
   background-attachment: fixed;
 }
 
@@ -116,17 +128,17 @@
   --diffs-line-height: 20px;
 
   /* Surfaces */
-  --diffs-bg-buffer-override: #0F1729;
-  --diffs-bg-context-override: #161d2e;
-  --diffs-bg-hover-override: #1c2438;
-  --diffs-bg-separator-override: #252C3D;
+  --diffs-bg-buffer-override: #0A0A0A;
+  --diffs-bg-context-override: #111111;
+  --diffs-bg-hover-override: #1a1a1a;
+  --diffs-bg-separator-override: #262626;
 
   /* Line numbers */
-  --diffs-fg-number-override: #4B5768;
+  --diffs-fg-number-override: #555555;
 
-  /* Additions — mint */
-  --diffs-addition-color-override: #5AC8A8;
-  --diffs-fg-number-addition-override: rgba(90, 200, 168, 0.5);
+  /* Additions — terminal green */
+  --diffs-addition-color-override: #00FF88;
+  --diffs-fg-number-addition-override: rgba(0, 255, 136, 0.5);
 
   /* Deletions — coral */
   --diffs-deletion-color-override: #E86B6B;
@@ -137,16 +149,16 @@
 /* The server injects @media (prefers-color-scheme: dark) which won't reliably
    fire when the OS is in light mode, so we apply dark graph colors always. */
 
-.graph-svg text { fill: #c6d4e0; }
-.graph-svg [stroke="#357f9e"] { stroke: #67B2D7; }
-.graph-svg [stroke="#666666"] { stroke: #5a7a94; }
-.graph-svg polygon[fill="#357f9e"] { fill: #67B2D7; }
-.graph-svg polygon[fill="#666666"] { fill: #5a7a94; }
+.graph-svg text { fill: #E6E6E6; }
+.graph-svg [stroke="#357f9e"] { stroke: #00FF00; }
+.graph-svg [stroke="#666666"] { stroke: #4d7a4d; }
+.graph-svg polygon[fill="#357f9e"] { fill: #00FF00; }
+.graph-svg polygon[fill="#666666"] { fill: #4d7a4d; }
 .graph-svg ellipse[fill="#ffffff"],
-.graph-svg polygon[fill="#ffffff"] { fill: #1a2b3c; }
+.graph-svg polygon[fill="#ffffff"] { fill: #141414; }
 .graph-svg ellipse[stroke="#357f9e"],
-.graph-svg polygon[stroke="#357f9e"] { stroke: #67B2D7; }
-.graph-svg [fill="#1a1a1a"] { fill: #c6d4e0; }
+.graph-svg polygon[stroke="#357f9e"] { stroke: #00FF00; }
+.graph-svg [fill="#1a1a1a"] { fill: #E6E6E6; }
 
 /* ---------------------------------------------------------------------------
  * assistant-ui theme overrides (--aui-* variables) — mapped to Fabro tokens.
@@ -163,26 +175,26 @@
  *   ice-300  #A8B5C5 = 213 22% 72%
  * ------------------------------------------------------------------------- */
 .fabro-chat {
-  --aui-background: 220 47% 11%;
-  --aui-foreground: 0 0% 100%;
-  --aui-card: 222 24% 19%;
-  --aui-card-foreground: 0 0% 100%;
-  --aui-popover: 222 24% 19%;
-  --aui-popover-foreground: 0 0% 100%;
-  --aui-primary: 200 60% 62%;
-  --aui-primary-foreground: 220 47% 11%;
-  --aui-secondary: 223 33% 15%;
-  --aui-secondary-foreground: 0 0% 100%;
-  --aui-muted: 223 33% 15%;
-  --aui-muted-foreground: 213 22% 72%;
-  --aui-accent: 163 49% 57%;
-  --aui-accent-foreground: 220 47% 11%;
+  --aui-background: 0 0% 4%;
+  --aui-foreground: 0 0% 95%;
+  --aui-card: 0 0% 8%;
+  --aui-card-foreground: 0 0% 95%;
+  --aui-popover: 0 0% 8%;
+  --aui-popover-foreground: 0 0% 95%;
+  --aui-primary: 120 100% 50%;
+  --aui-primary-foreground: 0 0% 0%;
+  --aui-secondary: 0 0% 10%;
+  --aui-secondary-foreground: 0 0% 95%;
+  --aui-muted: 0 0% 10%;
+  --aui-muted-foreground: 0 0% 55%;
+  --aui-accent: 120 100% 45%;
+  --aui-accent-foreground: 0 0% 0%;
   --aui-destructive: 0 76% 66%;
   --aui-destructive-foreground: 0 0% 100%;
-  --aui-border: 218 28% 17%;
-  --aui-input: 218 28% 17%;
-  --aui-ring: 200 60% 62%;
-  --aui-radius: 0.5rem;
+  --aui-border: 0 0% 20%;
+  --aui-input: 0 0% 20%;
+  --aui-ring: 120 100% 50%;
+  --aui-radius: 0rem;
   --aui-thread-max-width: 44rem;
 }
 
