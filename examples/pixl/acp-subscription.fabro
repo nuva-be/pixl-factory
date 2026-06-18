@@ -1,0 +1,22 @@
+// pixl-factory keystone: drive Claude Code over ACP on the Claude subscription.
+// Run with the sibling acp-subscription.toml (selects the local environment so the
+// ACP adapter runs on the host where `claude` is authenticated):
+//   fabro run examples/pixl/acp-subscription.toml --auto-approve
+//
+// No LLM API key required — the ACP backend lets Claude Code own its model auth
+// (your Max/Pro subscription). Proven 2026-06-19.
+digraph AcpSubscription {
+  graph [goal="Drive Claude Code over ACP on the Claude subscription"]
+
+  start  [shape=Mdiamond, label="Start"]
+  exit   [shape=Msquare,  label="Exit"]
+
+  recall [
+    label="Recall",
+    backend="acp",
+    acp.command="npx --yes @zed-industries/claude-code-acp",
+    prompt="Say hello from Claude Code, then run the shell command `pwd` and report the directory. Keep your reply under 3 lines."
+  ]
+
+  start -> recall -> exit
+}

@@ -1,0 +1,12 @@
+# Run config for acp-subscription.fabro.
+# Selects a LOCAL environment so the ACP adapter (npx @zed-industries/claude-code-acp)
+# runs on the host, where `claude` is logged in with your subscription.
+# Docker/Daytona environments would run the adapter inside a container without node/claude.
+[workflow]
+graph = "acp-subscription.fabro"
+
+[run.environment]
+id = "local"
+
+[environments.local]
+provider = "local"
