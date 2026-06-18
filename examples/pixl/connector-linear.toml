@@ -1,0 +1,8 @@
+[workflow]
+graph = "connector-linear.fabro"
+
+[run.environment]
+id = "local"
+
+[environments.local]
+provider = "local"

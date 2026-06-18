@@ -1,0 +1,28 @@
+// pixl-factory connector: Notion over ACP.
+//
+// The "notion" node drives Claude Code over ACP. Claude Code inherits the
+// host's MCP servers, so if a Notion MCP server is registered (see
+// docs/pixl/connectors.md), the agent sees mcp__notion__* tools and can call
+// them. No engine code — the connector is a host-side MCP registration that
+// backend="acp" nodes inherit automatically, exactly like the pixl-kb path.
+//
+//   fabro run examples/pixl/connector-notion.toml --auto-approve
+//
+// Register first (user scope, inherited by ACP sessions):
+//   claude mcp add --transport sse notion https://mcp.notion.com/sse
+// Verify:  claude mcp list   (should list "notion")
+digraph ConnectorNotion {
+  graph [goal="Search a Notion workspace via a Notion MCP tool over ACP"]
+
+  start  [shape=Mdiamond, label="Start"]
+  exit   [shape=Msquare,  label="Exit"]
+
+  notion [
+    label="Notion",
+    backend="acp",
+    acp.command="npx --yes @zed-industries/claude-code-acp",
+    prompt="You have a Notion MCP server connected (tools named mcp__notion__*). Call the search tool (e.g. mcp__notion__search) for the query \"roadmap\". Report exactly: (1) whether the tool call succeeded, (2) how many results returned, (3) the title of the first result. If no mcp__notion__* tool is available, reply on a single line: 'CONNECTOR UNAVAILABLE: notion'. Keep it under 6 lines."
+  ]
+
+  start -> notion -> exit
+}

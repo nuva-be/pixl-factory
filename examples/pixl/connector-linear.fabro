@@ -1,0 +1,28 @@
+// pixl-factory connector: Linear over ACP.
+//
+// The "linear" node drives Claude Code over ACP. Claude Code inherits the
+// host's MCP servers, so if a Linear MCP server is registered (see
+// docs/pixl/connectors.md), the agent sees mcp__linear__* tools and can call
+// them. No engine code — the connector is a host-side MCP registration that
+// backend="acp" nodes inherit automatically, exactly like the pixl-kb path.
+//
+//   fabro run examples/pixl/connector-linear.toml --auto-approve
+//
+// Register first (user scope, inherited by ACP sessions):
+//   claude mcp add --transport sse linear https://mcp.linear.app/sse
+// Verify:  claude mcp list   (should list "linear")
+digraph ConnectorLinear {
+  graph [goal="Pull my assigned Linear issues via a Linear MCP tool over ACP"]
+
+  start  [shape=Mdiamond, label="Start"]
+  exit   [shape=Msquare,  label="Exit"]
+
+  linear [
+    label="Linear",
+    backend="acp",
+    acp.command="npx --yes @zed-industries/claude-code-acp",
+    prompt="You have a Linear MCP server connected (tools named mcp__linear__*). Call the tool that lists issues (e.g. mcp__linear__list_issues) for the issues assigned to me. Report exactly: (1) whether the tool call succeeded, (2) how many issues returned, (3) the identifier and title of the first issue. If no mcp__linear__* tool is available, reply on a single line: 'CONNECTOR UNAVAILABLE: linear'. Keep it under 6 lines."
+  ]
+
+  start -> linear -> exit
+}

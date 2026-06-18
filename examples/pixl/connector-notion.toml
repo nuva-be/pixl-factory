@@ -1,0 +1,8 @@
+[workflow]
+graph = "connector-notion.fabro"
+
+[run.environment]
+id = "local"
+
+[environments.local]
+provider = "local"
