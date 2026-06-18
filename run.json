@@ -1,0 +1,243 @@
+{
+  "title": "Prove ACP Claude Code on subscription works end-to-end",
+  "spec": {
+    "run_id": "01KVEDTAVAHBVQ2GS1HFN3NRSS",
+    "settings": {
+      "project": {
+        "name": null,
+        "description": null,
+        "metadata": {}
+      },
+      "workflow": {
+        "name": null,
+        "description": null,
+        "graph": "workflow.fabro",
+        "metadata": {}
+      },
+      "run": {
+        "goal": {
+          "type": "inline",
+          "value": "Prove ACP Claude Code on subscription works end-to-end"
+        },
+        "working_dir": null,
+        "metadata": {},
+        "inputs": {},
+        "model": {
+          "provider": "anthropic",
+          "name": "claude-sonnet-4-6",
+          "fallbacks": [],
+          "controls": {
+            "reasoning_effort": null,
+            "speed": null
+          }
+        },
+        "git": {
+          "author": null
+        },
+        "prepare": {
+          "commands": [],
+          "timeout_ms": 300000
+        },
+        "execution": {
+          "mode": "normal",
+          "approval": "auto"
+        },
+        "checkpoint": {
+          "exclude_globs": [],
+          "skip_git_hooks": false
+        },
+        "clone": {
+          "enabled": true
+        },
+        "run_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "meta_branch": {
+          "enabled": true,
+          "push": true
+        },
+        "environment": {
+          "id": "default",
+          "provider": "docker",
+          "image": {
+            "docker": "buildpack-deps:noble",
+            "dockerfile": null
+          },
+          "resources": {
+            "cpu": 2,
+            "memory": "4GB",
+            "disk": null
+          },
+          "network": {
+            "mode": "allow_all",
+            "allow": []
+          },
+          "lifecycle": {
+            "preserve": false,
+            "stop_on_terminal": true,
+            "auto_stop": null
+          },
+          "labels": {},
+          "env": {}
+        },
+        "notifications": {},
+        "interviews": {
+          "provider": null,
+          "slack": null
+        },
+        "agent": {
+          "fabro_tools": false,
+          "permissions": null,
+          "mcps": {}
+        },
+        "hooks": [],
+        "scm": {
+          "provider": null,
+          "owner": null,
+          "repository": null,
+          "github": null
+        },
+        "pull_request": null,
+        "artifacts": {
+          "include": []
+        },
+        "integrations": {
+          "github": {
+            "permissions": {}
+          }
+        }
+      }
+    },
+    "graph": {
+      "name": "KbHello",
+      "nodes": {
+        "exit": {
+          "id": "exit",
+          "attrs": {
+            "label": {
+              "String": "Exit"
+            },
+            "shape": {
+              "String": "Msquare"
+            }
+          }
+        },
+        "start": {
+          "id": "start",
+          "attrs": {
+            "shape": {
+              "String": "Mdiamond"
+            },
+            "label": {
+              "String": "Start"
+            }
+          }
+        },
+        "recall": {
+          "id": "recall",
+          "attrs": {
+            "backend": {
+              "String": "acp"
+            },
+            "prompt": {
+              "String": "Say hello from Claude Code, then run the shell command `pwd` and report the directory. Keep your reply under 3 lines."
+            },
+            "label": {
+              "String": "Recall"
+            },
+            "acp.command": {
+              "String": "npx --yes @zed-industries/claude-code-acp"
+            }
+          }
+        }
+      },
+      "edges": [
+        {
+          "from": "start",
+          "to": "recall",
+          "attrs": {}
+        },
+        {
+          "from": "recall",
+          "to": "exit",
+          "attrs": {}
+        }
+      ],
+      "attrs": {
+        "goal": {
+          "String": "Prove ACP Claude Code on subscription works end-to-end"
+        }
+      }
+    },
+    "graph_source": "digraph KbHello {\n  graph [goal=\"Prove ACP Claude Code on subscription works end-to-end\"]\n\n  start  [shape=Mdiamond, label=\"Start\"]\n  exit   [shape=Msquare,  label=\"Exit\"]\n\n  recall [\n    label=\"Recall\",\n    backend=\"acp\",\n    acp.command=\"npx --yes @zed-industries/claude-code-acp\",\n    prompt=\"Say hello from Claude Code, then run the shell command `pwd` and report the directory. Keep your reply under 3 lines.\"\n  ]\n\n  start -> recall -> exit\n}\n",
+    "workflow_slug": "kb-hello",
+    "source_directory": "/Users/hamzamounir/code/nuva/fabro",
+    "provenance": {
+      "server": {
+        "version": "0.267.0-nightly.0"
+      },
+      "client": {
+        "user_agent": "fabro-cli/0.267.0-nightly.0",
+        "name": "fabro-cli",
+        "version": "0.267.0-nightly.0"
+      },
+      "subject": {
+        "kind": "user",
+        "identity": {
+          "issuer": "fabro:dev",
+          "subject": "dev"
+        },
+        "login": "dev",
+        "auth_method": "dev_token"
+      }
+    },
+    "manifest_blob": "ee5d8cc0b108a804ab473fe9a67e940d10eeb24b0262445cf0f968945e117374",
+    "definition_blob": "4b59b0baa6e7aeb6371dba4ed1d03a9a94f327cbe14c6f6f05b8e909e1a7939c",
+    "git": {
+      "origin_url": "https://github.com/nuva-be/pixl-factory",
+      "branch": "main",
+      "sha": "fbaf50cee986e0eacb30a7d1272fba109ee9fcde",
+      "dirty": "clean",
+      "push_outcome": {
+        "type": "not_attempted"
+      }
+    }
+  },
+  "web_url": "http://127.0.0.1:32276/runs/01KVEDTAVAHBVQ2GS1HFN3NRSS",
+  "start": null,
+  "status": {
+    "kind": "starting"
+  },
+  "status_updated_at": "2026-06-18T22:32:22.735154Z",
+  "last_event_at": "2026-06-18T22:32:39.847351Z",
+  "pending_control": null,
+  "checkpoints": [],
+  "conclusion": null,
+  "sandbox": {
+    "kind": "ready",
+    "plan": {
+      "provider": "docker",
+      "image": "buildpack-deps:noble"
+    },
+    "instance": {
+      "provider": "docker",
+      "image": "buildpack-deps:noble",
+      "runtime": {
+        "id": "9b58e543ef0bfc0f042d7f2f317b9e37d0ef4a23c2b321552cac11f8d7f0ccc4",
+        "working_directory": "/workspace/pixl-factory",
+        "repo_cloned": true,
+        "clone_origin_url": "https://github.com/nuva-be/pixl-factory",
+        "clone_branch": "main",
+        "workspace_root": "/workspace",
+        "repos_root": "/repos",
+        "primary_repo_path": "/repos/nuva-be/pixl-factory",
+        "primary_repo_link": "/workspace/pixl-factory"
+      }
+    }
+  },
+  "pull_request": null,
+  "superseded_by": null,
+  "pending_interviews": {},
+  "stages": {}
+}
