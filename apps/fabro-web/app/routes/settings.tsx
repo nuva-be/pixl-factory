@@ -1,5 +1,6 @@
 import {
   BoltIcon,
+  BookOpenIcon,
   ChartBarSquareIcon,
   CircleStackIcon,
   CodeBracketIcon,
@@ -59,6 +60,13 @@ export const navSections: NavSection[] = [
         icon: CubeTransparentIcon,
         description: "Where workflow stages execute.",
         match: (p) => p.startsWith("/settings/sandboxes"),
+      },
+      {
+        name: "Knowledge Base",
+        href: "/settings/knowledge",
+        icon: BookOpenIcon,
+        description: "pixl-kb connection — endpoint, token, workspace.",
+        match: (p) => p.startsWith("/settings/knowledge"),
       },
     ],
   },

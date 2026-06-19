@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useCallback, useState } from "react";
+import { Link, useParams } from "react-router";
 
 import { EmptyState, ErrorState, LoadingState } from "../components/state";
 import { useRun } from "../lib/queries";
-import { kbCall, getKbConfig, setKbConfig, KbError } from "../lib/kb";
+import { kbCall, KbError } from "../lib/kb";
 
 interface MemoryResult {
   title: string;
@@ -23,17 +23,8 @@ export default function RunMemory() {
   // useRun so the tab can react to run lifecycle (mirrors run-logs.tsx pattern)
   useRun(id);
 
-  const cfg = getKbConfig();
-  const [endpoint, setEndpoint] = useState(cfg.endpoint);
-  const [token, setToken] = useState(cfg.token);
-  const [workspace, setWorkspace] = useState(cfg.workspace);
   const [query, setQuery] = useState("overview");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
-
-  // Persist settings to localStorage whenever they change
-  useEffect(() => setKbConfig({ endpoint }), [endpoint]);
-  useEffect(() => setKbConfig({ token }), [token]);
-  useEffect(() => setKbConfig({ workspace }), [workspace]);
 
   const search = useCallback(async () => {
     if (!query.trim()) return;
@@ -70,49 +61,17 @@ export default function RunMemory() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <p className="text-sm text-fg-2">
-        Live recall from pixl-kb. Every run also auto-writes a run report here
-        via the memory hook.
-      </p>
-
-      {/* Settings row */}
-      <div className="border border-line bg-panel-alt p-3">
-        <p className="mb-2 text-xs font-medium text-fg-3">Connection</p>
-        <div className="flex flex-wrap gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-fg-muted">Endpoint</span>
-            <input
-              type="text"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              className="w-72 bg-navy-950 border border-line px-2 py-1 text-sm text-fg font-mono focus:outline-none focus:border-teal-500"
-              placeholder="http://localhost:8421/api/mcp/call"
-              aria-label="pixl-kb MCP endpoint"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-fg-muted">Bearer token</span>
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              className="w-52 bg-navy-950 border border-line px-2 py-1 text-sm text-fg font-mono focus:outline-none focus:border-teal-500"
-              placeholder="sk-…"
-              aria-label="pixl-kb bearer token"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-fg-muted">Workspace ID</span>
-            <input
-              type="text"
-              value={workspace}
-              onChange={(e) => setWorkspace(e.target.value)}
-              className="w-72 bg-navy-950 border border-line px-2 py-1 text-sm text-fg font-mono focus:outline-none focus:border-teal-500"
-              placeholder="42e3f37a-bfe2-41e2-9ea2-e05b24586b46"
-              aria-label="pixl-kb workspace ID"
-            />
-          </label>
-        </div>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm text-fg-2">
+          Live recall from pixl-kb. Every run also auto-writes a run report here
+          via the memory hook.
+        </p>
+        <Link
+          to="/settings/knowledge"
+          className="shrink-0 text-xs text-fg-muted hover:text-teal-500 transition-colors"
+        >
+          Connection settings →
+        </Link>
       </div>
 
       {/* Query row */}
@@ -156,7 +115,7 @@ function MemoryBody({ state }: { state: SearchState }) {
   }
   if (state.kind === "error") {
     const hint =
-      "set a pixl-kb bearer token; ensure kb CORS allows this origin";
+      "check connection settings or set a pixl-kb bearer token";
     const detail = state.status
       ? `HTTP ${state.status}: ${state.message}`
       : state.message;
@@ -171,7 +130,7 @@ function MemoryBody({ state }: { state: SearchState }) {
     return (
       <EmptyState
         title="No memory found"
-        description="Try a different query or check your connection settings above."
+        description="Try a different query or check your connection settings."
       />
     );
   }

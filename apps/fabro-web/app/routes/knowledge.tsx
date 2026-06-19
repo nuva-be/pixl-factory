@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Settings2 } from "lucide-react";
+import { Link } from "react-router";
 
 import { EmptyState, ErrorState } from "../components/state";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
 import { Separator } from "../components/ui/separator";
-import { kbCall, getKbConfig, setKbConfig, KbError } from "../lib/kb";
+import { kbCall, KbError } from "../lib/kb";
 
 export function meta() {
   return [{ title: "Knowledge — pixl-factory" }];
@@ -36,91 +36,18 @@ type AsyncState<T> =
 
 // ── Error hint ──
 
-const KB_ERROR_HINT = "set a pixl-kb token in config; ensure kb CORS allows this origin";
+const KB_ERROR_HINT = "check connection settings or set a pixl-kb token";
 
-// ── Config panel ──
+// ── Connection settings link ──
 
-function ConfigPanel({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const cfg = getKbConfig();
-  const [endpoint, setEndpoint] = useState(cfg.endpoint);
-  const [token, setToken] = useState(cfg.token);
-  const [workspace, setWorkspace] = useState(cfg.workspace);
-
-  function save() {
-    setKbConfig({ endpoint, token, workspace });
-    onClose();
-  }
-
-  if (!open) return null;
-
+function ConnectionLink() {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-sm border border-line-strong bg-panel shadow-2xl shadow-black/60 mt-16 mr-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="border-b border-line px-4 py-3">
-          <p className="text-sm font-medium text-fg">KB Connection</p>
-          <p className="mt-0.5 text-xs text-fg-muted">Saved to localStorage</p>
-        </div>
-        <div className="space-y-3 p-4">
-          <div className="space-y-1">
-            <label className="text-xs text-fg-muted" htmlFor="kb-endpoint">
-              Endpoint
-            </label>
-            <Input
-              id="kb-endpoint"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="http://localhost:8421/api/mcp/call"
-              className="font-mono text-xs"
-              aria-label="pixl-kb MCP endpoint"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-fg-muted" htmlFor="kb-token">
-              Bearer token
-            </label>
-            <Input
-              id="kb-token"
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="sk-…"
-              className="font-mono text-xs"
-              aria-label="pixl-kb bearer token"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-fg-muted" htmlFor="kb-workspace">
-              Workspace ID
-            </label>
-            <Input
-              id="kb-workspace"
-              value={workspace}
-              onChange={(e) => setWorkspace(e.target.value)}
-              placeholder="42e3f37a-bfe2-41e2-9ea2-e05b24586b46"
-              className="font-mono text-xs"
-              aria-label="pixl-kb workspace ID"
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-line px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={save}>
-            Save
-          </Button>
-        </div>
-      </div>
-    </div>
+    <Link
+      to="/settings/knowledge"
+      className="text-xs text-fg-muted hover:text-teal-500 transition-colors"
+    >
+      Connection settings →
+    </Link>
   );
 }
 
@@ -129,7 +56,6 @@ function ConfigPanel({
 function SearchTab() {
   const [query, setQuery] = useState("overview");
   const [state, setState] = useState<AsyncState<SearchResult[]>>({ kind: "idle" });
-  const [configOpen, setConfigOpen] = useState(false);
 
   const search = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -159,8 +85,6 @@ function SearchTab() {
 
   return (
     <>
-      <ConfigPanel open={configOpen} onClose={() => setConfigOpen(false)} />
-
       <div className="flex items-center gap-2">
         <Input
           value={query}
@@ -178,15 +102,9 @@ function SearchTab() {
         >
           {state.kind === "loading" ? "Searching…" : "Search"}
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setConfigOpen(true)}
-          aria-label="Open KB connection config"
-          title="Connection settings"
-        >
-          <Settings2 className="size-4" />
-        </Button>
+      </div>
+      <div className="mt-2 flex justify-end">
+        <ConnectionLink />
       </div>
 
       <div className="mt-4">
@@ -279,9 +197,10 @@ interface DocGroup {
   expanded: boolean;
 }
 
-function DocumentsTab() {
+function DocumentsTab({ active }: { active: boolean }) {
   const [state, setState] = useState<AsyncState<DocGroup[]>>({ kind: "idle" });
   const [groups, setGroups] = useState<DocGroup[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -321,9 +240,13 @@ function DocumentsTab() {
     }
   }, []);
 
+  // Lazy-load: only trigger when the tab becomes active, and only once
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (active && !loaded) {
+      setLoaded(true);
+      void load();
+    }
+  }, [active, loaded, load]);
 
   function toggleExpand(source: string) {
     setGroups((prev) =>
@@ -333,7 +256,9 @@ function DocumentsTab() {
     );
   }
 
-  if (state.kind === "loading") {
+  if (state.kind === "loading" || (state.kind === "idle" && loaded)) {
+    // Show skeleton while loading (loaded=true means load() was triggered, state transitions
+    // to "loading" synchronously, so the skeleton renders before the first await)
     return (
       <div className="space-y-3">
         {[...Array(4)].map((_, i) => (
@@ -345,6 +270,10 @@ function DocumentsTab() {
       </div>
     );
   }
+  if (state.kind === "idle") {
+    // Tab not yet activated — render nothing (avoids loading on mount)
+    return null;
+  }
   if (state.kind === "error") {
     const detail = state.status
       ? `HTTP ${state.status}: ${state.message}`
@@ -353,7 +282,9 @@ function DocumentsTab() {
       <ErrorState
         title="Could not load documents"
         description={`${detail} — ${KB_ERROR_HINT}`}
-        onRetry={() => void load()}
+        onRetry={() => {
+          setLoaded(false);
+        }}
       />
     );
   }
@@ -364,9 +295,6 @@ function DocumentsTab() {
         description="The knowledge base is empty or the connection is not configured."
       />
     );
-  }
-  if (state.kind === "idle") {
-    return null;
   }
 
   return (
@@ -433,40 +361,37 @@ function DocGroupCard({
 
 // ── Graph tab ──
 
-interface GraphEntity {
-  name: string;
+interface GraphRelation {
+  relation_type?: string;
+  related_entity?: string;
+  entity?: string;
   type?: string;
-  related?: string[];
-  description?: string;
+  [key: string]: unknown;
+}
+
+interface GraphResult {
+  relations?: GraphRelation[];
+  entities?: GraphRelation[];
+  [key: string]: unknown;
 }
 
 function GraphTab() {
-  const [query, setQuery] = useState("overview");
-  const [state, setState] = useState<AsyncState<GraphEntity[]>>({ kind: "idle" });
+  const [entityName, setEntityName] = useState("");
+  const [state, setState] = useState<AsyncState<GraphResult>>({ kind: "idle" });
 
-  const search = useCallback(async (q: string) => {
-    const trimmed = q.trim();
+  const query = useCallback(async (name: string) => {
+    const trimmed = name.trim();
     if (!trimmed) return;
     setState({ kind: "loading" });
     try {
-      const raw = await kbCall<unknown>("pixl_kg_query", { query: trimmed });
-      let entities: GraphEntity[] = [];
-      if (Array.isArray(raw)) {
-        entities = raw.filter(
-          (x): x is GraphEntity =>
-            x !== null && typeof x === "object" && "name" in x,
-        );
-      } else if (raw && typeof raw === "object") {
-        // Some responses may wrap in { entities: [...] }
-        const asRecord = raw as Record<string, unknown>;
-        if (Array.isArray(asRecord.entities)) {
-          entities = (asRecord.entities as unknown[]).filter(
-            (x): x is GraphEntity =>
-              x !== null && typeof x === "object" && "name" in (x as object),
-          );
-        }
-      }
-      setState({ kind: "data", value: entities });
+      const raw = await kbCall<unknown>("pixl_kg_query", {
+        entity_name: trimmed,
+        direction: "both",
+      });
+      // Accept whatever shape the server returns
+      const result: GraphResult =
+        raw !== null && typeof raw === "object" ? (raw as GraphResult) : {};
+      setState({ kind: "data", value: result });
     } catch (err) {
       if (err instanceof KbError) {
         setState({ kind: "error", message: err.message, status: err.status });
@@ -477,28 +402,31 @@ function GraphTab() {
   }, []);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") void search(query);
+    if (e.key === "Enter") void query(entityName);
   }
 
   return (
     <>
       <div className="flex items-center gap-2">
         <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          value={entityName}
+          onChange={(e) => setEntityName(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Query knowledge graph…"
+          placeholder="e.g. a person, project, or concept"
           className="flex-1"
-          aria-label="Knowledge graph query"
+          aria-label="Entity name to query"
         />
         <Button
           variant="outline"
           size="md"
-          onClick={() => void search(query)}
-          disabled={state.kind === "loading"}
+          onClick={() => void query(entityName)}
+          disabled={state.kind === "loading" || !entityName.trim()}
         >
           {state.kind === "loading" ? "Querying…" : "Query"}
         </Button>
+      </div>
+      <div className="mt-2 flex justify-end">
+        <ConnectionLink />
       </div>
 
       <div className="mt-4">
@@ -508,12 +436,12 @@ function GraphTab() {
   );
 }
 
-function GraphResults({ state }: { state: AsyncState<GraphEntity[]> }) {
+function GraphResults({ state }: { state: AsyncState<GraphResult> }) {
   if (state.kind === "idle") {
     return (
       <EmptyState
-        title="Query the knowledge graph"
-        description="Enter a concept and press Enter or click Query."
+        title="Explore the knowledge graph"
+        description="Enter an entity name to explore its relations in the knowledge graph."
       />
     );
   }
@@ -540,47 +468,59 @@ function GraphResults({ state }: { state: AsyncState<GraphEntity[]> }) {
       />
     );
   }
-  if (state.value.length === 0) {
+
+  // Render relations from the result — defensive about shape
+  const result = state.value;
+  const items: GraphRelation[] = Array.isArray(result.relations)
+    ? result.relations
+    : Array.isArray(result.entities)
+      ? result.entities
+      : Array.isArray(result)
+        ? (result as unknown as GraphRelation[])
+        : [];
+
+  if (items.length === 0) {
+    // Try to render the raw object if items is empty but result has content
+    const hasContent = Object.keys(result).length > 0;
+    if (hasContent) {
+      return (
+        <div className="border border-line bg-panel p-4">
+          <p className="text-xs text-fg-muted mb-2">Raw graph result</p>
+          <pre className="text-xs text-fg-2 overflow-auto whitespace-pre-wrap">
+            {JSON.stringify(result, null, 2)}
+          </pre>
+        </div>
+      );
+    }
     return (
       <EmptyState
-        title="No entities found"
-        description="The graph returned no results for this query."
+        title="No relations found"
+        description="The graph returned no results for this entity."
       />
     );
   }
+
   return (
     <div className="space-y-3">
-      {state.value.map((entity, i) => (
-        <GraphEntityCard key={`${entity.name}-${i}`} entity={entity} />
+      {items.map((rel, i) => (
+        <GraphRelationCard key={i} relation={rel} />
       ))}
     </div>
   );
 }
 
-function GraphEntityCard({ entity }: { entity: GraphEntity }) {
+function GraphRelationCard({ relation }: { relation: GraphRelation }) {
+  const relationType = relation.relation_type ?? relation.type ?? "relation";
+  const relatedEntity = relation.related_entity ?? relation.entity;
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
-          <CardTitle>{entity.name}</CardTitle>
-          {entity.type && (
-            <Badge variant="primary" className="shrink-0">{entity.type}</Badge>
-          )}
+          <CardTitle>{relatedEntity ?? "Unknown entity"}</CardTitle>
+          <Badge variant="primary" className="shrink-0">{relationType}</Badge>
         </div>
-        {entity.description && (
-          <CardDescription>{entity.description}</CardDescription>
-        )}
       </CardHeader>
-      {entity.related && entity.related.length > 0 && (
-        <CardContent>
-          <p className="text-xs text-fg-muted mb-1.5">Related</p>
-          <div className="flex flex-wrap gap-1.5">
-            {entity.related.map((rel) => (
-              <Badge key={rel} variant="outline">{rel}</Badge>
-            ))}
-          </div>
-        </CardContent>
-      )}
     </Card>
   );
 }
@@ -588,6 +528,8 @@ function GraphEntityCard({ entity }: { entity: GraphEntity }) {
 // ── Page ──
 
 export default function Knowledge() {
+  const [activeTab, setActiveTab] = useState("search");
+
   return (
     <div className="space-y-4">
       <div>
@@ -597,7 +539,7 @@ export default function Knowledge() {
         </p>
       </div>
       <Separator />
-      <Tabs defaultValue="search">
+      <Tabs defaultValue="search" onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="search">Search</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -609,7 +551,7 @@ export default function Knowledge() {
         </TabsContent>
 
         <TabsContent value="documents">
-          <DocumentsTab />
+          <DocumentsTab active={activeTab === "documents"} />
         </TabsContent>
 
         <TabsContent value="graph">

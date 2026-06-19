@@ -52,6 +52,7 @@ import * as SettingsMonitoring from "./routes/settings-monitoring";
 import * as SettingsSecurity from "./routes/settings-security";
 import * as SettingsStorage from "./routes/settings-storage";
 import * as SettingsLiveEvents from "./routes/settings-live-events";
+import * as SettingsKnowledge from "./routes/settings-knowledge";
 import * as Profile from "./routes/profile";
 import * as ProfileOverview from "./routes/profile-overview";
 import * as ProfileSessions from "./routes/profile-sessions";
@@ -167,6 +168,7 @@ export const routes: RouteObject[] = [
               route("storage", SettingsStorage),
               route("monitoring", SettingsMonitoring),
               route("live-events", SettingsLiveEvents),
+              route("knowledge", SettingsKnowledge),
             ],
           }),
           route("profile", Profile, {
