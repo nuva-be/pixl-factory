@@ -95,12 +95,15 @@ mod tests {
     use crate::event::{Emitter, StageScope};
 
     #[test]
-    fn router_uses_api_by_default() {
+    fn router_uses_acp_by_default() {
+        // pixl-factory: a bare agent (work) node defaults to the Claude
+        // subscription via ACP — free, no API key — rather than a paid API
+        // provider. See routing::select_run_backend.
         let node = Node::new("test");
 
         assert_eq!(
             BackendRouter::select_backend(&node).unwrap(),
-            AgentBackend::Api
+            AgentBackend::Acp
         );
     }
 
@@ -149,7 +152,9 @@ mod tests {
 
     #[test]
     fn router_delegates_effective_request_controls_to_api_backend() {
-        let node = Node::new("test");
+        let mut node = Node::new("test");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("api".to_string()));
         let router = BackendRouter::new(Box::new(StubBackend), AgentAcpBackend::new());
 
         let controls = router.effective_request_controls(&node).unwrap();

@@ -6,7 +6,13 @@ use crate::error::Error;
 
 pub(crate) fn select_run_backend(node: &Node) -> Result<AgentBackend, Error> {
     match node.agent_backend() {
-        None => Ok(AgentBackend::Api),
+        // pixl-factory default: a bare agent (work) node runs on the Claude
+        // subscription via ACP — free, no API key — instead of a paid API
+        // provider. This stops a node authored without an explicit `backend=`
+        // (e.g. from the visual builder) from silently billing OpenRouter or
+        // Anthropic. Cheap single-shot decide/judge/prompt nodes stay API-only
+        // (see `select_one_shot_backend`), since ACP cannot do one-shot.
+        None => Ok(AgentBackend::Acp),
         Some(Ok(backend)) => Ok(backend),
         Some(Err(_)) => Err(unsupported_backend_error(
             node.backend().unwrap_or_default(),
