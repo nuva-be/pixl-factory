@@ -381,7 +381,20 @@ fn acp_process_error_to_workflow(error: AcpCommandError) -> Error {
     }
 }
 
+/// Default ACP process for an agent node that selects (or defaults to)
+/// backend="acp" without naming a process: drive Claude Code on the host's
+/// Claude subscription via the standard ACP adapter. Lets a bare agent node run
+/// free with the full pixl-crew instead of erroring for a missing acp.command.
+const DEFAULT_ACP_COMMAND: &str = "npx --yes @zed-industries/claude-code-acp";
+
 fn resolve_acp_process_spec(node: &Node) -> Result<AcpProcessSpec, Error> {
+    if node.legacy_acp_command_attr().is_none()
+        && node.acp_command_attr().is_none()
+        && node.acp_config_attr().is_none()
+    {
+        return AcpProcessSpec::from_command_attr(DEFAULT_ACP_COMMAND)
+            .map_err(acp_process_error_to_workflow);
+    }
     AcpProcessSpec::from_attrs(
         node.legacy_acp_command_attr(),
         node.acp_command_attr(),
@@ -796,46 +809,20 @@ mod tests {
         assert!(!command.contains("secret-key"));
     }
 
-    #[tokio::test]
-    async fn acp_backend_requires_explicit_process_attr() {
-        let sandbox = MockSandbox::linux();
-        let sandbox = Arc::new(sandbox);
-        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
-
+    #[test]
+    fn acp_backend_defaults_to_subscription_command() {
+        // pixl-factory: backend="acp" with no explicit acp.command/acp.config
+        // defaults to driving Claude Code on the subscription via the standard
+        // ACP adapter, so a bare agent node runs free instead of erroring.
         let mut node = Node::new("work");
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
 
-        let backend = AgentAcpBackend::new();
-        let emitter = Arc::new(Emitter::default());
-        let context = Context::new();
-        let result = backend
-            .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox_dyn,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
-                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
-            })
-            .await;
-        let Err(err) = result else {
-            panic!("ACP without process attr should fail");
-        };
+        let spec = super::resolve_acp_process_spec(&node)
+            .expect("bare acp node should default its process spec");
         assert!(
-            err.to_string()
-                .contains("requires exactly one of acp.command or acp.config")
-        );
-        assert!(
-            sandbox
-                .captured_env_vars
-                .lock()
-                .expect("captured env lock poisoned")
-                .is_none(),
-            "ACP process should not launch when process attr is missing"
+            format!("{spec:?}").contains("claude-code-acp"),
+            "expected the default claude-code-acp adapter, got {spec:?}"
         );
     }
 
