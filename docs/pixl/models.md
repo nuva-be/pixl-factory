@@ -34,12 +34,17 @@ disabled by default) with Claude Opus 4.7 / Sonnet 4.6 / Haiku 4.5, GPT-5.4, and
 **Verified (2026-06-19):** OpenRouter configured, 17 models, default `anthropic/claude-sonnet-4-6`.
 A `backend="api"` node ran through OpenRouter and returned output in ~1s ($0.03).
 
-## Durability note
+## Durability
 
-Passing `OPENROUTER_API_KEY` (and the kb `PIXL_KB_TOKEN`) as **server env vars** works
-for the running process but does not survive a restart. For a persistent / deployed
-setup, store them as **vault secrets** (Settings → Secrets) so the server picks them up
-on every boot. This is a Phase-1 polish item.
+`OPENROUTER_API_KEY` is stored as a **vault secret** (`fabro secret set OPENROUTER_API_KEY
+--value-stdin`), so the provider stays configured across restarts — **no env var needed**.
+Verified 2026-06-19: server restarted with no `OPENROUTER_API_KEY` env and OpenRouter
+stayed `configured` (17 models); an `api` node still completed on it.
+
+Remaining (minor): the native `backend="kb"` node reads `PIXL_KB_TOKEN` from the process
+env. For a deployed setup, either pass it on the server, set `kb.token` per node, or
+(follow-up) have `kb.rs` read a vault secret. The UI's Knowledge/Memory tabs keep their
+token in browser localStorage, which is already durable client-side.
 
 ## Recommendation
 
