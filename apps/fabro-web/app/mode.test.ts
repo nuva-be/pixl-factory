@@ -42,7 +42,7 @@ describe("consumeInstallGithubErrorFromUrl", () => {
         "https://fabro.example.com/install/github?error=github-app-manifest-conversion-failed&step=github",
       ),
     ).toEqual({
-      error: "GitHub App setup failed before Fabro could save the app credentials. Continue again to retry the callback.",
+      error: "GitHub App setup failed before pixl-factory could save the app credentials. Continue again to retry the callback.",
       sanitizedUrl: "https://fabro.example.com/install/github?step=github",
     });
   });

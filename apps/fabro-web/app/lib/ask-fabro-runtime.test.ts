@@ -208,7 +208,7 @@ describe("createAskFabroAdapter", () => {
     }
 
     expect(createCount).toBe(1);
-    expect(lastCreateBody).toEqual({ title: "Ask Fabro", model: "claude-haiku-4-5" });
+    expect(lastCreateBody).toEqual({ title: "Ask pixl-factory", model: "claude-haiku-4-5" });
     expect(store["r_1"]).toBe("ses_new");
   });
 

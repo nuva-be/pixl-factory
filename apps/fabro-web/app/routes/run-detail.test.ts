@@ -143,7 +143,7 @@ mock.module("../components/chats/ask-fabro-sidebar", () => ({
     width: number;
   }) =>
     createElement("aside", {
-      "aria-label":         "Ask Fabro",
+      "aria-label":         "Ask pixl-factory",
       "aria-hidden":        !isOpen,
       "data-run-id":        runId,
       "data-default-model": defaultModel,
@@ -366,7 +366,7 @@ function tabCountBadges(renderer: TestRenderer.ReactTestRenderer) {
 
 function askFabroButtons(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAll(
-    (node) => node.type === "button" && node.children.includes("Ask Fabro"),
+    (node) => node.type === "button" && node.children.includes("Ask pixl-factory"),
   );
 }
 
@@ -899,7 +899,7 @@ describe("RunDetail full-height child routes", () => {
     expect(router.state.location.pathname).toBe("/runs");
   });
 
-  test("disables Ask Fabro trigger when the run reports an unavailable reason", async () => {
+  test("disables Ask pixl-factory trigger when the run reports an unavailable reason", async () => {
     const renderer = await renderRunDetail({
       initialEntry: "/runs/run_1",
       askFabro: {
@@ -914,12 +914,12 @@ describe("RunDetail full-height child routes", () => {
     expect(buttons[0].props.disabled).toBe(true);
     expect(
       renderer.root.findAll(
-        (node) => node.type === "aside" && node.props["aria-label"] === "Ask Fabro",
+        (node) => node.type === "aside" && node.props["aria-label"] === "Ask pixl-factory",
       ),
     ).toHaveLength(0);
   });
 
-  test("mounts the Ask Fabro sidebar and opens it from the trigger when available", async () => {
+  test("mounts the Ask pixl-factory sidebar and opens it from the trigger when available", async () => {
     const renderer = await renderRunDetail({
       initialEntry: "/runs/run_1",
       askFabro: {
@@ -934,7 +934,7 @@ describe("RunDetail full-height child routes", () => {
     expect(buttons[0].props.disabled).toBe(false);
 
     let sidebars = renderer.root.findAll(
-      (node) => node.type === "aside" && node.props["aria-label"] === "Ask Fabro",
+      (node) => node.type === "aside" && node.props["aria-label"] === "Ask pixl-factory",
     );
     expect(sidebars).toHaveLength(1);
     expect(sidebars[0].props["aria-hidden"]).toBe(true);
@@ -946,7 +946,7 @@ describe("RunDetail full-height child routes", () => {
     });
 
     sidebars = renderer.root.findAll(
-      (node) => node.type === "aside" && node.props["aria-label"] === "Ask Fabro",
+      (node) => node.type === "aside" && node.props["aria-label"] === "Ask pixl-factory",
     );
     expect(sidebars[0].props["aria-hidden"]).toBe(false);
   });

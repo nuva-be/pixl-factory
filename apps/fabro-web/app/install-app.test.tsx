@@ -8,7 +8,7 @@ import InstallApp from "./install-app";
 import { generatedAxios } from "./lib/api-client";
 
 const INSTALL_ERROR_MESSAGE =
-  "GitHub App setup failed before Fabro could save the app credentials. Continue again to retry the callback.";
+  "GitHub App setup failed before pixl-factory could save the app credentials. Continue again to retry the callback.";
 const INSTALL_PREFILL = {
   canonical_url: "https://fabro.example.com",
   object_store_local_root: "/home/test/.fabro/storage/objects",

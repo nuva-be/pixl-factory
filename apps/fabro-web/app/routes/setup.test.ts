@@ -13,7 +13,7 @@ describe("setupContentForSearch", () => {
       "GitHub finished installing the app",
     );
     expect(content.steps.map((step) => step.title)).toEqual([
-      "Return to Fabro",
+      "Return to pixl-factory",
       "Use the new installation",
     ]);
   });

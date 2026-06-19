@@ -25,9 +25,9 @@ describe("renderReadme", () => {
     expect(md).toContain("fabro run release_notes");
   });
 
-  test("includes the Fabro blurb and learn-more link", () => {
+  test("includes the pixl-factory blurb and learn-more link", () => {
     const md = renderReadme(createInitialDraft());
-    expect(md).toContain("Fabro turns a Graphviz file");
-    expect(md).toContain("https://fabro.sh");
+    expect(md).toContain("pixl-factory turns a Graphviz file");
+    expect(md).toContain("https://github.com/nuva-be/pixl-factory");
   });
 });
