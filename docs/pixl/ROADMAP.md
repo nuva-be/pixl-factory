@@ -27,7 +27,7 @@ phases by priority.
 The core ask: drive real project work in the UI, not just watch runs.
 
 - ▶ **Knowledge polish** (in flight): kb connection config moved to **Settings → Knowledge Base**; Graph tab fixed to query by `entity_name`; Documents lazy-loads.
-- ⏳ **Wire chat on the subscription**: the playground/chat path needs a model. Route it through ACP (Claude Code subscription) so chat works with no API key — or an OpenRouter/API-key fallback. *Acceptance: open `/chats`, send a message, get a streamed reply with no API key configured.*
+- ✅ **Chat models wired** (via OpenRouter): the subscription only powers `acp` nodes, so chat/`api` use OpenRouter (built-in provider, enabled in settings + key). Verified: an `api` node ran on Claude Sonnet 4.6 through OpenRouter. See `docs/pixl/models.md`. *Remaining polish: store keys as vault secrets (durable), model picker in `/chats`.*
 - ⏳ **One-click run from the UI**: a "New run" flow that picks a workflow (or repo + goal) and launches it; surface the live DAG + outputs inline. *Acceptance: launch a `.fabro` from `/start` without touching the CLI.*
 - ⏳ **Workflow library**: ship the `examples/pixl/*` (kb-node, acp-subscription, connectors) as in-UI templates you can run or clone. *Acceptance: a template gallery on `/start`.*
 - ⏳ **Files-first run view**: make "see what changed" a first-class, fast view (diff + file tree) per run.
