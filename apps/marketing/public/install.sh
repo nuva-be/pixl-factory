@@ -27,7 +27,7 @@ success() { printf "  ${GREEN}✔${RESET} %b\n" "$1" >&2; }
 error()   { printf "  ${RED}✗ %b${RESET}\n" "$1" >&2; exit 1; }
 
 # --- Header ---
-printf "\n  ⚒️  ${BOLD}Fabro Install${RESET}\n\n" >&2
+printf "\n  ⚒️  ${BOLD}pixl-factory Install${RESET}\n\n" >&2
 
 # --- Require gh CLI ---
 if ! command -v gh >/dev/null 2>&1; then

@@ -117,7 +117,7 @@ export const routes: RouteObject[] = [
               route(":chatId", ChatsDetail),
             ],
           }),
-          route("ask-fabro", AskFabro),
+          route("ask", AskFabro),
           route("playground", Playground),
           route("automations", Automations),
           route("automations/new", AutomationsNew),

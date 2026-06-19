@@ -39,7 +39,7 @@ export function renderReadme(draft: WorkflowDraft): string {
     "",
     FABRO_BLURB,
     "",
-    "Learn more: https://fabro.sh",
+    "Learn more: https://github.com/nuva-be/pixl-factory",
     "",
   ].join("\n");
 }

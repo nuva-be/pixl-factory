@@ -1,12 +1,12 @@
-# fabro
+# pixl-factory
 
-> AI-powered workflow orchestration platform. Workflows are defined as Graphviz graphs and executed by the Fabro engine.
+> AI-powered workflow orchestration platform. Workflows are defined as Graphviz graphs and executed by the pixl-factory engine.
 
-I want you to install Fabro for me. Execute the steps below autonomously.
+I want you to install pixl-factory for me. Execute the steps below autonomously.
 
-OBJECTIVE: Install the Fabro binary, then start the server so the user can finish setup in a web wizard, then restart the server in configured mode.
+OBJECTIVE: Install the pixl-factory binary, then start the server so the user can finish setup in a web wizard, then restart the server in configured mode.
 
-DONE WHEN: The Fabro server has been restarted after the wizard and is running in configured (non-install) mode.
+DONE WHEN: The pixl-factory server has been restarted after the wizard and is running in configured (non-install) mode.
 
 ## 1. Install the binary
 
@@ -46,7 +46,7 @@ fabro server start
 
 The server will:
 
-- Detect that Fabro is unconfigured and enter **install mode**
+- Detect that pixl-factory is unconfigured and enter **install mode**
 - Print a URL that looks like `http://127.0.0.1:<port>/install?token=…`
 - Attempt to open that URL in the user's default browser
 
@@ -54,7 +54,7 @@ Your job:
 
 - Read the server's stderr and find the `http://…/install?token=…` line
 - Open that URL in the user's default browser yourself as a safety net (the server also tries). Use `open` on macOS, `xdg-open` on Linux, or `start` on Windows. Duplicate opens are harmless.
-- Tell the user: "The Fabro install wizard is open in your browser. Complete it there; I'll restart the server when you're done."
+- Tell the user: "The pixl-factory install wizard is open in your browser. Complete it there; I'll restart the server when you're done."
 - Keep the `fabro server start` process running and watch for it to exit. The server exits on its own a moment after the user finishes the wizard.
 
 ## 4. Restart the server in configured mode
